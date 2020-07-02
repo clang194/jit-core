@@ -1,0 +1,107 @@
+const std = @import("std");
+const bits = @import("bits.zig");
+const arm_state = @import("arm_state.zig");
+
+pub const TextError = error{
+    UnknownInstruction,
+    NoSpaceLeft,
+};
+
+pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
+    const cond = @intCast(u4, word >> 28);
+    if (cond == 0xf and ((word >> 25) & 0x7) == 0x5) {
+        return formatBranchExchangeImmediate(buf, word);
+    }
+
+    const branch_reg = word & 0x0ffffff0;
+    if (branch_reg == 0x012fff10 or branch_reg == 0x012fff20 or branch_reg == 0x012fff30) {
+        const rm = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+        const suffix = condName(cond);
+        if (branch_reg == 0x012fff10) {
+            return std.fmt.bufPrint(buf, "bx{} {}", .{ suffix, arm_state.regName(rm) }) catch error.NoSpaceLeft;
+        }
+        if (branch_reg == 0x012fff20) {
+            return std.fmt.bufPrint(buf, "bxj{} {}", .{ suffix, arm_state.regName(rm) }) catch error.NoSpaceLeft;
+        }
+        if (branch_reg == 0x012fff30) {
+            return std.fmt.bufPrint(buf, "blx{} {}", .{ suffix, arm_state.regName(rm) }) catch error.NoSpaceLeft;
+        }
+    }
+
+    if (((word >> 25) & 0x7) == 0x5) {
+        return formatBranchImmediate(buf, word, cond);
+    }
+
+    if (((word >> 26) & 0x3) == 0 and bits.getBit32(word, 25)) {
+        const code = @intCast(u4, (word >> 21) & 0xf);
+        if (code == 0x4) {
+            const rd = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+            const rn = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+            const imm = word & 0xff;
+            return std.fmt.bufPrint(buf, "add{} {}, {}, #{}", .{
+                condName(cond),
+                arm_state.regName(rd),
+                arm_state.regName(rn),
+                imm,
+            }) catch error.NoSpaceLeft;
+        }
+    }
+
+    return error.UnknownInstruction;
+}
+
+fn formatBranchImmediate(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const link = bits.getBit32(word, 24);
+    const imm = word & 0x00ffffff;
+    const offset = bits.signExtend32(imm << 2, 26) + 8;
+    const op: []const u8 = if (link) "bl" else "b";
+    return std.fmt.bufPrint(buf, "{}{} {}#{}", .{
+        op,
+        condName(cond),
+        signText(offset),
+        abs32(offset),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatBranchExchangeImmediate(buf: []u8, word: u32) TextError![]u8 {
+    const high = @as(u32, @boolToInt(bits.getBit32(word, 24)));
+    const imm = word & 0x00ffffff;
+    const offset = bits.signExtend32((imm << 2) | (high << 1), 26) + 8;
+    return std.fmt.bufPrint(buf, "blx {}#{}", .{ signText(offset), abs32(offset) }) catch error.NoSpaceLeft;
+}
+
+fn condName(cond: u4) []const u8 {
+    return switch (cond) {
+        0x0 => "eq",
+        0x1 => "ne",
+        0x2 => "cs",
+        0x3 => "cc",
+        0x4 => "mi",
+        0x5 => "pl",
+        0x6 => "vs",
+        0x7 => "vc",
+        0x8 => "hi",
+        0x9 => "ls",
+        0xa => "ge",
+        0xb => "lt",
+        0xc => "gt",
+        0xd => "le",
+        0xe => "",
+        else => "",
+    };
+}
+
+fn signText(value: i32) []const u8 {
+    if (value < 0) {
+        return "-";
+    }
+    return "+";
+}
+
+fn abs32(value: i32) u32 {
+    if (value < 0) {
+        return @intCast(u32, -value);
+    }
+    return @intCast(u32, value);
+}
+
