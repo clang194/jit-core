@@ -5,6 +5,7 @@ const trace = @import("trace.zig");
 pub const RunError = error{
     UnknownInstruction,
     Full,
+    MissingRead,
 };
 
 pub const ShiftResult = struct {
@@ -12,7 +13,38 @@ pub const ShiftResult = struct {
     carry: bool,
 };
 
+pub const ThumbWord = struct {
+    word: u16,
+    size: u8,
+};
+
+pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
+    if (hooks.read32 == null) {
+        return error.MissingRead;
+    }
+
+    var first = hooks.read32.?(pc & 0xfffffffc);
+    if ((pc & 2) != 0) {
+        first >>= 16;
+    }
+
+    const word = @intCast(u16, first & 0xffff);
+    if ((word & 0xf800) != 0xe800 and (word & 0xf000) != 0xf000) {
+        return ThumbWord{ .word = word, .size = 2 };
+    }
+
+    return error.UnknownInstruction;
+}
+
+pub fn isStop(word: u16) bool {
+    return (word & 0xff00) == 0xde00;
+}
+
 pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
+    if (isStop(word)) {
+        return;
+    }
+
     if ((word & 0xf800) == 0x0000) {
         const amount = @intCast(u8, (word >> 6) & 0x1f);
         const source = try tape.literalReg(arm_state.lowReg(word >> 3));
@@ -119,6 +151,10 @@ pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
 }
 
 pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
+    if (isStop(word)) {
+        return;
+    }
+
     if ((word & 0xf800) == 0x0000) {
         const amount = @intCast(u8, (word >> 6) & 0x1f);
         const source = arm_state.lowReg(word >> 3);

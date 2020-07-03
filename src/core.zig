@@ -5,6 +5,7 @@ pub const CoreError = error{
     Busy,
     UnknownInstruction,
     Full,
+    MissingRead,
 };
 
 pub const Core = struct {
@@ -33,6 +34,34 @@ pub const Core = struct {
         var used: usize = 0;
         while (used < budget and !self.halt) : (used += 1) {
             try thumb_exec.runThumb(word, &self.state);
+        }
+        return used;
+    }
+
+    pub fn run(self: *Core, budget: usize) CoreError!usize {
+        if (self.active) {
+            return error.Busy;
+        }
+        self.active = true;
+        defer self.active = false;
+
+        self.halt = false;
+        var used: usize = 0;
+        while (used < budget and !self.halt) {
+            if (!self.state.thumb()) {
+                return error.UnknownInstruction;
+            }
+
+            const pc = self.state.read(.pc);
+            const fetched = try thumb_exec.readThumbWord(self.hooks, pc);
+            if (thumb_exec.isStop(fetched.word)) {
+                self.halt = true;
+                break;
+            }
+
+            try thumb_exec.runThumb(fetched.word, &self.state);
+            self.state.write(.pc, pc + fetched.size);
+            used += 1;
         }
         return used;
     }

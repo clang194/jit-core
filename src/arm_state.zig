@@ -72,6 +72,14 @@ pub const MachineState = struct {
         return bits.getBit32(self.cpsr, 29);
     }
 
+    pub fn thumb(self: *const MachineState) bool {
+        return bits.getBit32(self.cpsr, 5);
+    }
+
+    pub fn setThumb(self: *MachineState, enabled: bool) void {
+        self.cpsr = bits.setBit32(self.cpsr, 5, enabled);
+    }
+
     pub fn setNegative(self: *MachineState, enabled: bool) void {
         self.cpsr = bits.setBit32(self.cpsr, 31, enabled);
     }
