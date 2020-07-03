@@ -28,6 +28,7 @@ pub const HostHooks = struct {
     write16: ?fn (u32, u16) void,
     write32: ?fn (u32, u32) void,
     write64: ?fn (u32, u64) void,
+    readOnly: ?fn (u32) bool,
     fallback: ?fn (u32, *MachineState) void,
     trap: ?fn (u32) bool,
 
@@ -41,6 +42,7 @@ pub const HostHooks = struct {
             .write16 = null,
             .write32 = null,
             .write64 = null,
+            .readOnly = null,
             .fallback = null,
             .trap = null,
         };
