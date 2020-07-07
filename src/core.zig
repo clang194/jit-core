@@ -53,17 +53,47 @@ pub const Core = struct {
             }
 
             const pc = self.state.read(.pc);
-            const fetched = try thumb_exec.readThumbWord(self.hooks, pc);
+            const fetched = thumb_exec.readThumbWord(self.hooks, pc) catch |err| switch (err) {
+                error.UnknownInstruction => {
+                    try self.interpretOne(pc);
+                    used += 1;
+                    continue;
+                },
+                else => return err,
+            };
+
             if (thumb_exec.isStop(fetched.word)) {
-                self.halt = true;
-                break;
+                try self.interpretOne(pc);
+                used += 1;
+                continue;
             }
 
-            try thumb_exec.runThumb(fetched.word, &self.state);
+            if (thumb_exec.branchTarget(fetched.word, pc)) |target| {
+                self.state.write(.pc, target);
+                used += 1;
+                continue;
+            }
+
+            thumb_exec.runThumb(fetched.word, &self.state) catch |err| switch (err) {
+                error.UnknownInstruction => {
+                    try self.interpretOne(pc);
+                    used += 1;
+                    continue;
+                },
+                else => return err,
+            };
             self.state.write(.pc, pc + fetched.size);
             used += 1;
         }
         return used;
+    }
+
+    fn interpretOne(self: *Core, pc: u32) CoreError!void {
+        if (self.hooks.fallback) |callback| {
+            callback(pc, &self.state);
+            return;
+        }
+        return error.UnknownInstruction;
     }
 
     pub fn clearTranslatedState(self: *Core) void {

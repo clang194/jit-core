@@ -29,7 +29,7 @@ pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
     }
 
     const word = @intCast(u16, first & 0xffff);
-    if ((word & 0xf800) != 0xe800 and (word & 0xf000) != 0xf000) {
+    if ((word & 0xf800) <= 0xe800) {
         return ThumbWord{ .word = word, .size = 2 };
     }
 
@@ -38,6 +38,15 @@ pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
 
 pub fn isStop(word: u16) bool {
     return (word & 0xff00) == 0xde00;
+}
+
+pub fn branchTarget(word: u16, pc: u32) ?u32 {
+    if ((word & 0xf800) != 0xe000) {
+        return null;
+    }
+    const imm = @as(u32, word & 0x07ff) << 1;
+    const offset = bits.signExtend32(imm, 12);
+    return @intCast(u32, @intCast(i32, pc + 4) + offset);
 }
 
 pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
