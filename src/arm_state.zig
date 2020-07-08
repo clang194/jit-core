@@ -101,6 +101,10 @@ pub fn lowReg(value: u16) ArmReg {
     return @intToEnum(ArmReg, @intCast(u8, value & 7));
 }
 
+pub fn reg4(value: u16) ArmReg {
+    return @intToEnum(ArmReg, @intCast(u8, value & 15));
+}
+
 pub fn regName(reg: ArmReg) []const u8 {
     return switch (reg) {
         .r0 => "r0",

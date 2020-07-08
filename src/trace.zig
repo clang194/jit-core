@@ -23,13 +23,16 @@ pub const EventKind = enum(u8) {
     store_negative,
     store_zero,
     store_carry,
+    store_overflow,
     low_byte,
     high_bit,
     equal_zero,
     shift_left,
     shift_right,
     shift_arithmetic_right,
+    add_carrying,
     carry_result,
+    overflow_result,
 };
 
 pub const Value = union(ValueKind) {
@@ -79,6 +82,14 @@ pub const Tape = struct {
         return self.push(.literal_byte, Value{ .byte = value }, 0, 0, 0);
     }
 
+    pub fn literalBit(self: *Tape, value: bool) TraceError!usize {
+        return self.push(.literal_bit, Value{ .bit = value }, 0, 0, 0);
+    }
+
+    pub fn literalWord(self: *Tape, value: u32) TraceError!usize {
+        return self.push(.literal_word, Value{ .word = value }, 0, 0, 0);
+    }
+
     pub fn literalReg(self: *Tape, value: arm_state.ArmReg) TraceError!usize {
         return self.push(.literal_reg, Value{ .reg = value }, 0, 0, 0);
     }
@@ -107,6 +118,10 @@ pub const Tape = struct {
         return self.push(.store_carry, Value{ .none = {} }, value, 0, 0);
     }
 
+    pub fn storeOverflow(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.store_overflow, Value{ .none = {} }, value, 0, 0);
+    }
+
     pub fn lowByte(self: *Tape, value: usize) TraceError!usize {
         return self.push(.low_byte, Value{ .none = {} }, value, 0, 0);
     }
@@ -131,8 +146,16 @@ pub const Tape = struct {
         return self.push(.shift_arithmetic_right, Value{ .none = {} }, value, amount, carry);
     }
 
+    pub fn addCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {
+        return self.push(.add_carrying, Value{ .none = {} }, left, right, carry);
+    }
+
     pub fn carryResult(self: *Tape, value: usize) TraceError!usize {
         return self.push(.carry_result, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn overflowResult(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.overflow_result, Value{ .none = {} }, value, 0, 0);
     }
 };
 

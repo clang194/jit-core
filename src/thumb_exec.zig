@@ -4,6 +4,7 @@ const trace = @import("trace.zig");
 
 pub const RunError = error{
     UnknownInstruction,
+    Unpredictable,
     Full,
     MissingRead,
 };
@@ -11,6 +12,12 @@ pub const RunError = error{
 pub const ShiftResult = struct {
     word: u32,
     carry: bool,
+};
+
+pub const AddResult = struct {
+    word: u32,
+    carry: bool,
+    overflow: bool,
 };
 
 pub const ThumbWord = struct {
@@ -50,6 +57,10 @@ pub fn branchTarget(word: u16, pc: u32) ?u32 {
 }
 
 pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
+    return buildThumbTraceAt(word, 0, tape);
+}
+
+pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
     if (isStop(word)) {
         return;
     }
@@ -108,6 +119,24 @@ pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xfe00) == 0x1800) {
+        const addend_reg = try tape.literalReg(arm_state.lowReg(word >> 6));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const carry_in = try tape.literalBit(false);
+        const base = try tape.loadReg(base_reg);
+        const addend = try tape.loadReg(addend_reg);
+        const result = try tape.addCarrying(base, addend, carry_in);
+        const carry_out = try tape.carryResult(result);
+        const overflow = try tape.overflowResult(result);
+        _ = try tape.storeReg(dest, result);
+        _ = try tape.storeNegative(try tape.highBit(result));
+        _ = try tape.storeZero(try tape.equalZero(result));
+        _ = try tape.storeCarry(carry_out);
+        _ = try tape.storeOverflow(overflow);
+        return;
+    }
+
     if ((word & 0xffc0) == 0x4080) {
         const source = try tape.literalReg(arm_state.lowReg(word >> 3));
         const dest = try tape.literalReg(arm_state.lowReg(word));
@@ -153,6 +182,21 @@ pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
         _ = try tape.storeNegative(try tape.highBit(result));
         _ = try tape.storeZero(try tape.equalZero(result));
         _ = try tape.storeCarry(carry_out);
+        return;
+    }
+
+    if ((word & 0xff00) == 0x4400) {
+        const dest_reg = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const addend_reg = arm_state.reg4(word >> 3);
+        if (dest_reg == .pc and addend_reg == .pc) {
+            return error.Unpredictable;
+        }
+        const dest = try tape.literalReg(dest_reg);
+        const left = try traceOperand(tape, dest_reg, pc);
+        const right = try traceOperand(tape, addend_reg, pc);
+        const carry_in = try tape.literalBit(false);
+        const result = try tape.addCarrying(left, right, carry_in);
+        _ = try tape.storeReg(dest, result);
         return;
     }
 
@@ -203,6 +247,18 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         return;
     }
 
+    if ((word & 0xfe00) == 0x1800) {
+        const addend = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        const result = addWithCarry(state.read(base), state.read(addend), false);
+        state.write(dest, result.word);
+        updateNz(state, result.word);
+        state.setCarry(result.carry);
+        state.setOverflow(result.overflow);
+        return;
+    }
+
     if ((word & 0xffc0) == 0x4080) {
         const source = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
@@ -233,6 +289,20 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         state.write(dest, result.word);
         updateNz(state, result.word);
         state.setCarry(result.carry);
+        return;
+    }
+
+    if ((word & 0xff00) == 0x4400) {
+        const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const addend = arm_state.reg4(word >> 3);
+        if (dest == .pc and addend == .pc) {
+            return error.Unpredictable;
+        }
+        const pc = state.read(.pc);
+        const left = readOperand(state, dest, pc);
+        const right = readOperand(state, addend, pc);
+        const result = addWithCarry(left, right, false);
+        state.write(dest, result.word);
         return;
     }
 
@@ -287,6 +357,33 @@ pub fn arithmeticRight(value: u32, amount: u8, carry_in: bool) ShiftResult {
         return ShiftResult{ .word = 0xffffffff, .carry = true };
     }
     return ShiftResult{ .word = 0, .carry = false };
+}
+
+pub fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
+    const carry: u64 = if (carry_in) 1 else 0;
+    const wide = @as(u64, left) + @as(u64, right) + carry;
+    const result = @intCast(u32, wide & 0xffffffff);
+    const overflow = ((~(left ^ right) & (left ^ result)) & 0x80000000) != 0;
+    return AddResult{
+        .word = result,
+        .carry = wide > 0xffffffff,
+        .overflow = overflow,
+    };
+}
+
+fn readOperand(state: *const arm_state.MachineState, reg: arm_state.ArmReg, pc: u32) u32 {
+    if (reg == .pc) {
+        return pc + 4;
+    }
+    return state.read(reg);
+}
+
+fn traceOperand(tape: *trace.Tape, reg: arm_state.ArmReg, pc: u32) RunError!usize {
+    if (reg == .pc) {
+        return tape.literalWord(pc + 4);
+    }
+    const stored_reg = try tape.literalReg(reg);
+    return tape.loadReg(stored_reg);
 }
 
 fn updateNz(state: *arm_state.MachineState, value: u32) void {

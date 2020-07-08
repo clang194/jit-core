@@ -60,6 +60,16 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xf800) == 0x1000) {
         return formatThumbShiftImm(buf, "asrs", word);
     }
+    if ((word & 0xfe00) == 0x1800) {
+        const addend = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        return std.fmt.bufPrint(buf, "adds {}, {}, {}", .{
+            arm_state.regName(dest),
+            arm_state.regName(base),
+            arm_state.regName(addend),
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xffc0) == 0x4080) {
         return formatThumbShiftReg(buf, "lsls", word);
     }
@@ -68,6 +78,14 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     }
     if ((word & 0xffc0) == 0x4100) {
         return formatThumbShiftReg(buf, "asrs", word);
+    }
+    if ((word & 0xff00) == 0x4400) {
+        const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const addend = arm_state.reg4(word >> 3);
+        return std.fmt.bufPrint(buf, "add {}, {}", .{
+            arm_state.regName(dest),
+            arm_state.regName(addend),
+        }) catch error.NoSpaceLeft;
     }
     if ((word & 0xff00) == 0xde00) {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;

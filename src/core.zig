@@ -4,6 +4,7 @@ const thumb_exec = @import("thumb_exec.zig");
 pub const CoreError = error{
     Busy,
     UnknownInstruction,
+    Unpredictable,
     Full,
     MissingRead,
 };
@@ -82,7 +83,9 @@ pub const Core = struct {
                 },
                 else => return err,
             };
-            self.state.write(.pc, pc + fetched.size);
+            if (self.state.read(.pc) == pc) {
+                self.state.write(.pc, pc + fetched.size);
+            }
             used += 1;
         }
         return used;
