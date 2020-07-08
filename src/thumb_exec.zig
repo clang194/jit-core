@@ -229,6 +229,22 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xf800) == 0x3800) {
+        const dest = try tape.literalReg(arm_state.lowReg(word >> 8));
+        const amount = try tape.literalWord(@intCast(u32, word & 0xff));
+        const carry_in = try tape.literalBit(true);
+        const source = try tape.loadReg(dest);
+        const result = try tape.subCarrying(source, amount, carry_in);
+        const carry_out = try tape.carryResult(result);
+        const overflow = try tape.overflowResult(result);
+        _ = try tape.storeReg(dest, result);
+        _ = try tape.storeNegative(try tape.highBit(result));
+        _ = try tape.storeZero(try tape.equalZero(result));
+        _ = try tape.storeCarry(carry_out);
+        _ = try tape.storeOverflow(overflow);
+        return;
+    }
+
     if ((word & 0xffc0) == 0x4000) {
         const source = try tape.literalReg(arm_state.lowReg(word >> 3));
         const dest = try tape.literalReg(arm_state.lowReg(word));
@@ -433,6 +449,17 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         const dest = arm_state.lowReg(word >> 8);
         const amount = @intCast(u32, word & 0xff);
         const result = addWithCarry(state.read(dest), amount, false);
+        state.write(dest, result.word);
+        updateNz(state, result.word);
+        state.setCarry(result.carry);
+        state.setOverflow(result.overflow);
+        return;
+    }
+
+    if ((word & 0xf800) == 0x3800) {
+        const dest = arm_state.lowReg(word >> 8);
+        const amount = @intCast(u32, word & 0xff);
+        const result = subWithCarry(state.read(dest), amount, true);
         state.write(dest, result.word);
         updateNz(state, result.word);
         state.setCarry(result.carry);
