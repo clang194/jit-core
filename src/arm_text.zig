@@ -70,6 +70,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             arm_state.regName(addend),
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xffc0) == 0x4000) {
+        return formatThumbBitReg(buf, "ands", word);
+    }
     if ((word & 0xffc0) == 0x4080) {
         return formatThumbShiftReg(buf, "lsls", word);
     }
@@ -102,6 +105,16 @@ fn formatThumbShiftImm(buf: []u8, comptime op: []const u8, word: u16) TextError!
         arm_state.regName(dest),
         arm_state.regName(source),
         amount,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatThumbBitReg(buf: []u8, comptime op: []const u8, word: u16) TextError![]u8 {
+    const source = arm_state.lowReg(word >> 3);
+    const dest = arm_state.lowReg(word);
+    return std.fmt.bufPrint(buf, "{} {}, {}", .{
+        op,
+        arm_state.regName(dest),
+        arm_state.regName(source),
     }) catch error.NoSpaceLeft;
 }
 

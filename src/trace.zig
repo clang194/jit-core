@@ -30,6 +30,7 @@ pub const EventKind = enum(u8) {
     shift_left,
     shift_right,
     shift_arithmetic_right,
+    bitwise_and,
     add_carrying,
     carry_result,
     overflow_result,
@@ -144,6 +145,10 @@ pub const Tape = struct {
 
     pub fn shiftArithmeticRight(self: *Tape, value: usize, amount: usize, carry: usize) TraceError!usize {
         return self.push(.shift_arithmetic_right, Value{ .none = {} }, value, amount, carry);
+    }
+
+    pub fn bitwiseAnd(self: *Tape, left: usize, right: usize) TraceError!usize {
+        return self.push(.bitwise_and, Value{ .none = {} }, left, right, 0);
     }
 
     pub fn addCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {
