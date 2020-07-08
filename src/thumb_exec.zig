@@ -137,6 +137,24 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xfe00) == 0x1a00) {
+        const subtrahend_reg = try tape.literalReg(arm_state.lowReg(word >> 6));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const carry_in = try tape.literalBit(true);
+        const base = try tape.loadReg(base_reg);
+        const subtrahend = try tape.loadReg(subtrahend_reg);
+        const result = try tape.subCarrying(base, subtrahend, carry_in);
+        const carry_out = try tape.carryResult(result);
+        const overflow = try tape.overflowResult(result);
+        _ = try tape.storeReg(dest, result);
+        _ = try tape.storeNegative(try tape.highBit(result));
+        _ = try tape.storeZero(try tape.equalZero(result));
+        _ = try tape.storeCarry(carry_out);
+        _ = try tape.storeOverflow(overflow);
+        return;
+    }
+
     if ((word & 0xffc0) == 0x4000) {
         const source = try tape.literalReg(arm_state.lowReg(word >> 3));
         const dest = try tape.literalReg(arm_state.lowReg(word));
@@ -283,6 +301,18 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         return;
     }
 
+    if ((word & 0xfe00) == 0x1a00) {
+        const subtrahend = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        const result = subWithCarry(state.read(base), state.read(subtrahend), true);
+        state.write(dest, result.word);
+        updateNz(state, result.word);
+        state.setCarry(result.carry);
+        state.setOverflow(result.overflow);
+        return;
+    }
+
     if ((word & 0xffc0) == 0x4000) {
         const source = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
@@ -411,6 +441,10 @@ pub fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
         .carry = wide > 0xffffffff,
         .overflow = overflow,
     };
+}
+
+pub fn subWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
+    return addWithCarry(left, ~right, carry_in);
 }
 
 fn readOperand(state: *const arm_state.MachineState, reg: arm_state.ArmReg, pc: u32) u32 {

@@ -70,6 +70,16 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             arm_state.regName(addend),
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xfe00) == 0x1a00) {
+        const subtrahend = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        return std.fmt.bufPrint(buf, "subs {}, {}, {}", .{
+            arm_state.regName(dest),
+            arm_state.regName(base),
+            arm_state.regName(subtrahend),
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xffc0) == 0x4000) {
         return formatThumbBitReg(buf, "ands", word);
     }

@@ -33,6 +33,7 @@ pub const EventKind = enum(u8) {
     bitwise_and,
     bitwise_xor,
     add_carrying,
+    sub_carrying,
     carry_result,
     overflow_result,
 };
@@ -158,6 +159,10 @@ pub const Tape = struct {
 
     pub fn addCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {
         return self.push(.add_carrying, Value{ .none = {} }, left, right, carry);
+    }
+
+    pub fn subCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {
+        return self.push(.sub_carrying, Value{ .none = {} }, left, right, carry);
     }
 
     pub fn carryResult(self: *Tape, value: usize) TraceError!usize {
