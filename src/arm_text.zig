@@ -108,6 +108,14 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             imm,
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xf800) == 0x2800) {
+        const source = arm_state.lowReg(word >> 8);
+        const imm = @intCast(u8, word & 0xff);
+        return std.fmt.bufPrint(buf, "cmp {}, #{}", .{
+            arm_state.regName(source),
+            imm,
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xffc0) == 0x4000) {
         return formatThumbBitReg(buf, "ands", word);
     }
