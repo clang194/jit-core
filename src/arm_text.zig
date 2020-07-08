@@ -50,6 +50,53 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     return error.UnknownInstruction;
 }
 
+pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
+    if ((word & 0xf800) == 0x0000) {
+        return formatThumbShiftImm(buf, "lsls", word);
+    }
+    if ((word & 0xf800) == 0x0800) {
+        return formatThumbShiftImm(buf, "lsrs", word);
+    }
+    if ((word & 0xf800) == 0x1000) {
+        return formatThumbShiftImm(buf, "asrs", word);
+    }
+    if ((word & 0xffc0) == 0x4080) {
+        return formatThumbShiftReg(buf, "lsls", word);
+    }
+    if ((word & 0xffc0) == 0x40c0) {
+        return formatThumbShiftReg(buf, "lsrs", word);
+    }
+    if ((word & 0xffc0) == 0x4100) {
+        return formatThumbShiftReg(buf, "asrs", word);
+    }
+    if ((word & 0xff00) == 0xde00) {
+        return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
+}
+
+fn formatThumbShiftImm(buf: []u8, comptime op: []const u8, word: u16) TextError![]u8 {
+    const amount = @intCast(u8, (word >> 6) & 0x1f);
+    const source = arm_state.lowReg(word >> 3);
+    const dest = arm_state.lowReg(word);
+    return std.fmt.bufPrint(buf, "{} {}, {}, #{}", .{
+        op,
+        arm_state.regName(dest),
+        arm_state.regName(source),
+        amount,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatThumbShiftReg(buf: []u8, comptime op: []const u8, word: u16) TextError![]u8 {
+    const source = arm_state.lowReg(word >> 3);
+    const dest = arm_state.lowReg(word);
+    return std.fmt.bufPrint(buf, "{} {}, {}", .{
+        op,
+        arm_state.regName(dest),
+        arm_state.regName(source),
+    }) catch error.NoSpaceLeft;
+}
+
 fn formatBranchImmediate(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     const link = bits.getBit32(word, 24);
     const imm = word & 0x00ffffff;
