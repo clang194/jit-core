@@ -73,6 +73,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xffc0) == 0x4000) {
         return formatThumbBitReg(buf, "ands", word);
     }
+    if ((word & 0xffc0) == 0x4040) {
+        return formatThumbBitReg(buf, "eors", word);
+    }
     if ((word & 0xffc0) == 0x4080) {
         return formatThumbShiftReg(buf, "lsls", word);
     }
