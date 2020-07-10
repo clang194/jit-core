@@ -190,6 +190,14 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             arm_state.regName(addend),
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xff00) == 0x4500) {
+        const left = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const right = arm_state.reg4(word >> 3);
+        return std.fmt.bufPrint(buf, "cmp {}, {}", .{
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xff00) == 0xde00) {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }

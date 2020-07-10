@@ -478,6 +478,25 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xff00) == 0x4500) {
+        const left_reg = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const right_reg = arm_state.reg4(word >> 3);
+        if ((@enumToInt(left_reg) < 8 and @enumToInt(right_reg) < 8) or left_reg == .pc or right_reg == .pc) {
+            return error.Unpredictable;
+        }
+        const left = try traceOperand(tape, left_reg, pc);
+        const right = try traceOperand(tape, right_reg, pc);
+        const carry_in = try tape.literalBit(true);
+        const result = try tape.subCarrying(left, right, carry_in);
+        const carry_out = try tape.carryResult(result);
+        const overflow = try tape.overflowResult(result);
+        _ = try tape.storeNegative(try tape.highBit(result));
+        _ = try tape.storeZero(try tape.equalZero(result));
+        _ = try tape.storeCarry(carry_out);
+        _ = try tape.storeOverflow(overflow);
+        return;
+    }
+
     return error.UnknownInstruction;
 }
 
@@ -773,6 +792,19 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         const right = readOperand(state, addend, pc);
         const result = addWithCarry(left, right, false);
         state.write(dest, result.word);
+        return;
+    }
+
+    if ((word & 0xff00) == 0x4500) {
+        const left_reg = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const right_reg = arm_state.reg4(word >> 3);
+        if ((@enumToInt(left_reg) < 8 and @enumToInt(right_reg) < 8) or left_reg == .pc or right_reg == .pc) {
+            return error.Unpredictable;
+        }
+        const result = subWithCarry(state.read(left_reg), state.read(right_reg), true);
+        updateNz(state, result.word);
+        state.setCarry(result.carry);
+        state.setOverflow(result.overflow);
         return;
     }
 
