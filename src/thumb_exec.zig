@@ -351,6 +351,22 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xffc0) == 0x41c0) {
+        const source = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const carry_in = try tape.loadCarry();
+        const amount_word = try tape.loadReg(source);
+        const amount = try tape.lowByte(amount_word);
+        const read = try tape.loadReg(dest);
+        const result = try tape.rotateRight(read, amount, carry_in);
+        const carry_out = try tape.carryResult(result);
+        _ = try tape.storeReg(dest, result);
+        _ = try tape.storeNegative(try tape.highBit(result));
+        _ = try tape.storeZero(try tape.equalZero(result));
+        _ = try tape.storeCarry(carry_out);
+        return;
+    }
+
     if ((word & 0xff00) == 0x4400) {
         const dest_reg = arm_state.reg4(((word >> 4) & 8) | (word & 7));
         const addend_reg = arm_state.reg4(word >> 3);
@@ -574,6 +590,17 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         return;
     }
 
+    if ((word & 0xffc0) == 0x41c0) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        const amount = bits.lowByte(state.read(source));
+        const result = rotateRight(state.read(dest), amount, state.carry());
+        state.write(dest, result.word);
+        updateNz(state, result.word);
+        state.setCarry(result.carry);
+        return;
+    }
+
     if ((word & 0xff00) == 0x4400) {
         const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
         const addend = arm_state.reg4(word >> 3);
@@ -639,6 +666,18 @@ pub fn arithmeticRight(value: u32, amount: u8, carry_in: bool) ShiftResult {
         return ShiftResult{ .word = 0xffffffff, .carry = true };
     }
     return ShiftResult{ .word = 0, .carry = false };
+}
+
+pub fn rotateRight(value: u32, amount: u8, carry_in: bool) ShiftResult {
+    if (amount == 0) {
+        return ShiftResult{ .word = value, .carry = carry_in };
+    }
+    const shift = amount & 31;
+    if (shift == 0) {
+        return ShiftResult{ .word = value, .carry = bits.topBit(value) };
+    }
+    const word = (value >> @intCast(u5, shift)) | (value << @intCast(u5, 32 - shift));
+    return ShiftResult{ .word = word, .carry = bits.topBit(word) };
 }
 
 pub fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
