@@ -34,6 +34,7 @@ pub const EventKind = enum(u8) {
     bitwise_and,
     bitwise_xor,
     bitwise_or,
+    bitwise_not,
     add_carrying,
     sub_carrying,
     carry_result,
@@ -165,6 +166,10 @@ pub const Tape = struct {
 
     pub fn bitwiseOr(self: *Tape, left: usize, right: usize) TraceError!usize {
         return self.push(.bitwise_or, Value{ .none = {} }, left, right, 0);
+    }
+
+    pub fn bitwiseNot(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.bitwise_not, Value{ .none = {} }, value, 0, 0);
     }
 
     pub fn addCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {
