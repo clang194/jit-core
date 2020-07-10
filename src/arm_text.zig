@@ -179,6 +179,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xffc0) == 0x4380) {
         return formatThumbBitReg(buf, "bics", word);
     }
+    if ((word & 0xffc0) == 0x43c0) {
+        return formatThumbBitReg(buf, "mvns", word);
+    }
     if ((word & 0xff00) == 0x4400) {
         const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
         const addend = arm_state.reg4(word >> 3);
