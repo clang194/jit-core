@@ -156,6 +156,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xffc0) == 0x41c0) {
         return formatThumbBitReg(buf, "rors", word);
     }
+    if ((word & 0xffc0) == 0x4200) {
+        return formatThumbBitReg(buf, "tst", word);
+    }
     if ((word & 0xff00) == 0x4400) {
         const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
         const addend = arm_state.reg4(word >> 3);

@@ -367,6 +367,17 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xffc0) == 0x4200) {
+        const source = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const read = try tape.loadReg(dest);
+        const mask = try tape.loadReg(source);
+        const result = try tape.bitwiseAnd(read, mask);
+        _ = try tape.storeNegative(try tape.highBit(result));
+        _ = try tape.storeZero(try tape.equalZero(result));
+        return;
+    }
+
     if ((word & 0xff00) == 0x4400) {
         const dest_reg = arm_state.reg4(((word >> 4) & 8) | (word & 7));
         const addend_reg = arm_state.reg4(word >> 3);
@@ -598,6 +609,13 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         state.write(dest, result.word);
         updateNz(state, result.word);
         state.setCarry(result.carry);
+        return;
+    }
+
+    if ((word & 0xffc0) == 0x4200) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        updateNz(state, state.read(dest) & state.read(source));
         return;
     }
 
