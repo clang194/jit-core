@@ -497,6 +497,15 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xff00) == 0x4600) {
+        const dest_reg = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const source_reg = arm_state.reg4(word >> 3);
+        const dest = try tape.literalReg(dest_reg);
+        const source = try traceOperand(tape, source_reg, pc);
+        _ = try tape.storeReg(dest, source);
+        return;
+    }
+
     return error.UnknownInstruction;
 }
 
@@ -805,6 +814,14 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         updateNz(state, result.word);
         state.setCarry(result.carry);
         state.setOverflow(result.overflow);
+        return;
+    }
+
+    if ((word & 0xff00) == 0x4600) {
+        const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const source = arm_state.reg4(word >> 3);
+        const pc = state.read(.pc);
+        state.write(dest, readOperand(state, source, pc));
         return;
     }
 

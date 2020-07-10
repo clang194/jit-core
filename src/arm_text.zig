@@ -198,6 +198,14 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             arm_state.regName(right),
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xff00) == 0x4600) {
+        const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
+        const source = arm_state.reg4(word >> 3);
+        return std.fmt.bufPrint(buf, "mov {}, {}", .{
+            arm_state.regName(dest),
+            arm_state.regName(source),
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xff00) == 0xde00) {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }
