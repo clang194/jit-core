@@ -25,6 +25,7 @@ pub const EventKind = enum(u8) {
     store_carry,
     store_overflow,
     low_byte,
+    low_half,
     high_bit,
     equal_zero,
     shift_left,
@@ -37,6 +38,9 @@ pub const EventKind = enum(u8) {
     bitwise_not,
     word_add,
     read_word,
+    write_byte,
+    write_half,
+    write_word,
     add_carrying,
     sub_carrying,
     carry_result,
@@ -134,6 +138,10 @@ pub const Tape = struct {
         return self.push(.low_byte, Value{ .none = {} }, value, 0, 0);
     }
 
+    pub fn lowHalf(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.low_half, Value{ .none = {} }, value, 0, 0);
+    }
+
     pub fn highBit(self: *Tape, value: usize) TraceError!usize {
         return self.push(.high_bit, Value{ .none = {} }, value, 0, 0);
     }
@@ -180,6 +188,18 @@ pub const Tape = struct {
 
     pub fn readWord(self: *Tape, address: usize) TraceError!usize {
         return self.push(.read_word, Value{ .none = {} }, address, 0, 0);
+    }
+
+    pub fn writeByte(self: *Tape, address: usize, value: usize) TraceError!usize {
+        return self.push(.write_byte, Value{ .none = {} }, address, value, 0);
+    }
+
+    pub fn writeHalf(self: *Tape, address: usize, value: usize) TraceError!usize {
+        return self.push(.write_half, Value{ .none = {} }, address, value, 0);
+    }
+
+    pub fn writeWord(self: *Tape, address: usize, value: usize) TraceError!usize {
+        return self.push(.write_word, Value{ .none = {} }, address, value, 0);
     }
 
     pub fn addCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {

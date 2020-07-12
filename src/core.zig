@@ -7,6 +7,7 @@ pub const CoreError = error{
     Unpredictable,
     Full,
     MissingRead,
+    MissingWrite,
 };
 
 pub const Core = struct {
