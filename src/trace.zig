@@ -35,6 +35,8 @@ pub const EventKind = enum(u8) {
     bitwise_xor,
     bitwise_or,
     bitwise_not,
+    word_add,
+    read_word,
     add_carrying,
     sub_carrying,
     carry_result,
@@ -172,6 +174,14 @@ pub const Tape = struct {
         return self.push(.bitwise_not, Value{ .none = {} }, value, 0, 0);
     }
 
+    pub fn wordAdd(self: *Tape, left: usize, right: usize) TraceError!usize {
+        return self.push(.word_add, Value{ .none = {} }, left, right, 0);
+    }
+
+    pub fn readWord(self: *Tape, address: usize) TraceError!usize {
+        return self.push(.read_word, Value{ .none = {} }, address, 0, 0);
+    }
+
     pub fn addCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {
         return self.push(.add_carrying, Value{ .none = {} }, left, right, carry);
     }
@@ -198,4 +208,3 @@ fn emptyEvent() Event {
         .arg2 = 0,
     };
 }
-

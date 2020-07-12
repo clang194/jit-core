@@ -34,7 +34,7 @@ pub const Core = struct {
         self.halt = false;
         var used: usize = 0;
         while (used < budget and !self.halt) : (used += 1) {
-            try thumb_exec.runThumb(word, &self.state);
+            try thumb_exec.runThumbWithHooks(word, &self.state, self.hooks);
         }
         return used;
     }
@@ -75,7 +75,7 @@ pub const Core = struct {
                 continue;
             }
 
-            thumb_exec.runThumb(fetched.word, &self.state) catch |err| switch (err) {
+            thumb_exec.runThumbWithHooks(fetched.word, &self.state, self.hooks) catch |err| switch (err) {
                 error.UnknownInstruction => {
                     try self.interpretOne(pc);
                     used += 1;
@@ -127,4 +127,3 @@ pub const Core = struct {
         return self.state.cpsr;
     }
 };
-

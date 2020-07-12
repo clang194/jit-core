@@ -206,6 +206,24 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             arm_state.regName(source),
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xf800) == 0x4800) {
+        const dest = arm_state.lowReg(word >> 8);
+        const offset = @as(u32, word & 0xff) << 2;
+        return std.fmt.bufPrint(buf, "ldr {}, [pc, #{}]", .{
+            arm_state.regName(dest),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xf800) == 0x6800) {
+        const offset = @as(u32, (word >> 6) & 0x1f) << 2;
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        return std.fmt.bufPrint(buf, "ldr {}, [{}, #{}]", .{
+            arm_state.regName(dest),
+            arm_state.regName(base),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xff00) == 0xde00) {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }
@@ -298,4 +316,3 @@ fn abs32(value: i32) u32 {
     }
     return @intCast(u32, value);
 }
-

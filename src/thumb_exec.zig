@@ -506,10 +506,33 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xf800) == 0x4800) {
+        const dest = try tape.literalReg(arm_state.lowReg(word >> 8));
+        const address = try tape.literalWord(alignDown4(pc + 4) + (@as(u32, word & 0xff) << 2));
+        const data = try tape.readWord(address);
+        _ = try tape.storeReg(dest, data);
+        return;
+    }
+
+    if ((word & 0xf800) == 0x6800) {
+        const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f) << 2);
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        const data = try tape.readWord(address);
+        _ = try tape.storeReg(dest, data);
+        return;
+    }
+
     return error.UnknownInstruction;
 }
 
 pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
+    return runThumbWithHooks(word, state, arm_state.HostHooks.empty());
+}
+
+pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!void {
     if (isStop(word)) {
         return;
     }
@@ -825,6 +848,24 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
         return;
     }
 
+    if ((word & 0xf800) == 0x4800) {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        const dest = arm_state.lowReg(word >> 8);
+        const pc = state.read(.pc);
+        const address = alignDown4(pc + 4) + (@as(u32, word & 0xff) << 2);
+        state.write(dest, read32(address));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x6800) {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        const dest = arm_state.lowReg(word);
+        const base = arm_state.lowReg(word >> 3);
+        const offset = @as(u32, (word >> 6) & 0x1f) << 2;
+        state.write(dest, read32(state.read(base) + offset));
+        return;
+    }
+
     return error.UnknownInstruction;
 }
 
@@ -921,8 +962,11 @@ fn traceOperand(tape: *trace.Tape, reg: arm_state.ArmReg, pc: u32) RunError!usiz
     return tape.loadReg(stored_reg);
 }
 
+fn alignDown4(value: u32) u32 {
+    return value & 0xfffffffc;
+}
+
 fn updateNz(state: *arm_state.MachineState, value: u32) void {
     state.setNegative(bits.topBit(value));
     state.setZero(bits.isZero(value));
 }
-
