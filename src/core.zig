@@ -51,7 +51,9 @@ pub const Core = struct {
         var used: usize = 0;
         while (used < budget and !self.halt) {
             if (!self.state.thumb()) {
-                return error.UnknownInstruction;
+                try self.interpretOne(self.state.read(.pc));
+                used += 1;
+                continue;
             }
 
             const pc = self.state.read(.pc);
