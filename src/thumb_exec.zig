@@ -503,7 +503,12 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         const source_reg = arm_state.reg4(word >> 3);
         const dest = try tape.literalReg(dest_reg);
         const source = try traceOperand(tape, source_reg, pc);
-        _ = try tape.storeReg(dest, source);
+        if (dest_reg == .pc) {
+            const mask = try tape.literalWord(0xfffffffe);
+            _ = try tape.storeReg(dest, try tape.bitwiseAnd(source, mask));
+        } else {
+            _ = try tape.storeReg(dest, source);
+        }
         return;
     }
 
@@ -881,7 +886,12 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         const dest = arm_state.reg4(((word >> 4) & 8) | (word & 7));
         const source = arm_state.reg4(word >> 3);
         const pc = state.read(.pc);
-        state.write(dest, readOperand(state, source, pc));
+        const value = readOperand(state, source, pc);
+        if (dest == .pc) {
+            state.write(.pc, thumbPcWrite(value));
+        } else {
+            state.write(dest, value);
+        }
         return;
     }
 
@@ -1028,6 +1038,10 @@ fn traceOperand(tape: *trace.Tape, reg: arm_state.ArmReg, pc: u32) RunError!usiz
 
 fn alignDown4(value: u32) u32 {
     return value & 0xfffffffc;
+}
+
+fn thumbPcWrite(value: u32) u32 {
+    return value & 0xfffffffe;
 }
 
 fn updateNz(state: *arm_state.MachineState, value: u32) void {
