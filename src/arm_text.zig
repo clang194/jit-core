@@ -248,6 +248,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xff00) == 0xde00) {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }
+    if ((word & 0xff00) == 0xdf00) {
+        return std.fmt.bufPrint(buf, "svc #{}", .{word & 0xff}) catch error.NoSpaceLeft;
+    }
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
 }
 

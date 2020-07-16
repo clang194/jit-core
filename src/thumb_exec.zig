@@ -66,6 +66,11 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xff00) == 0xdf00) {
+        _ = try tape.callSupervisor(@intCast(u32, word & 0xff));
+        return;
+    }
+
     if ((word & 0xf800) == 0x0000) {
         const amount = @intCast(u8, (word >> 6) & 0x1f);
         const source = try tape.literalReg(arm_state.lowReg(word >> 3));
@@ -577,6 +582,18 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
 pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!void {
     if (isStop(word)) {
         return;
+    }
+
+    if ((word & 0xff00) == 0xdf00) {
+        if (hooks.supervisor) |callback| {
+            callback(@intCast(u32, word & 0xff), state);
+            return;
+        }
+        if (hooks.fallback) |callback| {
+            callback(state.read(.pc), state);
+            return;
+        }
+        return error.UnknownInstruction;
     }
 
     if ((word & 0xf800) == 0x0000) {

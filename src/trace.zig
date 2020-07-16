@@ -41,6 +41,7 @@ pub const EventKind = enum(u8) {
     write_byte,
     write_half,
     write_word,
+    call_supervisor,
     add_carrying,
     sub_carrying,
     carry_result,
@@ -200,6 +201,10 @@ pub const Tape = struct {
 
     pub fn writeWord(self: *Tape, address: usize, value: usize) TraceError!usize {
         return self.push(.write_word, Value{ .none = {} }, address, value, 0);
+    }
+
+    pub fn callSupervisor(self: *Tape, value: u32) TraceError!usize {
+        return self.push(.call_supervisor, Value{ .word = value }, 0, 0, 0);
     }
 
     pub fn addCarrying(self: *Tape, left: usize, right: usize, carry: usize) TraceError!usize {
