@@ -32,6 +32,18 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatBranchImmediate(buf, word, cond);
     }
 
+    if ((word & 0x0f000000) == 0x0f000000) {
+        const code = arm_state.conditionFromNibble(cond) orelse return error.UnknownInstruction;
+        return std.fmt.bufPrint(buf, "svc{} #{}", .{
+            arm_state.conditionSuffix(code),
+            word & 0x00ffffff,
+        }) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0xfff000f0) == 0xe7f000f0) {
+        return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
+    }
+
     if (((word >> 26) & 0x3) == 0 and bits.getBit32(word, 25)) {
         const code = @intCast(u4, (word >> 21) & 0xf);
         if (code == 0x4) {

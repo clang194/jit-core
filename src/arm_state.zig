@@ -49,6 +49,7 @@ pub const HostHooks = struct {
     readOnly: ?fn (u32) bool,
     fallback: ?fn (u32, *MachineState) void,
     trap: ?fn (u32) bool,
+    supervisor: ?fn (u32, *MachineState) void,
 
     pub fn empty() HostHooks {
         return HostHooks{
@@ -63,6 +64,7 @@ pub const HostHooks = struct {
             .readOnly = null,
             .fallback = null,
             .trap = null,
+            .supervisor = null,
         };
     }
 };
