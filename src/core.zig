@@ -1,4 +1,5 @@
 const arm_state = @import("arm_state.zig");
+const arm_exec = @import("arm_exec.zig");
 const thumb_exec = @import("thumb_exec.zig");
 
 pub const CoreError = error{
@@ -51,7 +52,7 @@ pub const Core = struct {
         var used: usize = 0;
         while (used < budget and !self.halt) {
             if (!self.state.thumb()) {
-                try self.interpretOne(self.state.read(.pc));
+                try arm_exec.runArmWithHooks(&self.state, self.hooks);
                 used += 1;
                 continue;
             }
