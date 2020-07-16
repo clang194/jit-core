@@ -304,24 +304,10 @@ fn formatBranchExchangeImmediate(buf: []u8, word: u32) TextError![]u8 {
 }
 
 fn condName(cond: u4) []const u8 {
-    return switch (cond) {
-        0x0 => "eq",
-        0x1 => "ne",
-        0x2 => "cs",
-        0x3 => "cc",
-        0x4 => "mi",
-        0x5 => "pl",
-        0x6 => "vs",
-        0x7 => "vc",
-        0x8 => "hi",
-        0x9 => "ls",
-        0xa => "ge",
-        0xb => "lt",
-        0xc => "gt",
-        0xd => "le",
-        0xe => "",
-        else => "",
-    };
+    if (arm_state.conditionFromNibble(cond)) |code| {
+        return arm_state.conditionSuffix(code);
+    }
+    return "";
 }
 
 fn signText(value: i32) []const u8 {
