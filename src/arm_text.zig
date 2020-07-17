@@ -1,5 +1,6 @@
 const std = @import("std");
 const bits = @import("bits.zig");
+const arm_exec = @import("arm_exec.zig");
 const arm_state = @import("arm_state.zig");
 
 pub const TextError = error{
@@ -46,6 +47,20 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
 
     if (((word >> 26) & 0x3) == 0 and bits.getBit32(word, 25)) {
         const code = @intCast(u4, (word >> 21) & 0xf);
+        if (code == 0x5) {
+            const rd = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+            const rn = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+            const rotate = @intCast(u8, (word >> 8) & 0xf);
+            const imm = @intCast(u8, word & 0xff);
+            const flags = if (bits.getBit32(word, 20)) "s" else "";
+            return std.fmt.bufPrint(buf, "adc{}{} {}, {}, #{}", .{
+                condName(cond),
+                flags,
+                arm_state.regName(rd),
+                arm_state.regName(rn),
+                arm_exec.expandArmImmediate(rotate, imm),
+            }) catch error.NoSpaceLeft;
+        }
         if (code == 0x4) {
             const rd = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
             const rn = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
@@ -59,7 +74,7 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         }
     }
 
-    return error.UnknownInstruction;
+    return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
 }
 
 pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
