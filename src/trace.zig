@@ -32,6 +32,12 @@ pub const EventKind = enum(u8) {
     shift_right,
     shift_arithmetic_right,
     rotate_right,
+    sign_extend_half,
+    sign_extend_byte,
+    zero_extend_half,
+    zero_extend_byte,
+    byte_reverse_word,
+    byte_reverse_half,
     bitwise_and,
     bitwise_xor,
     bitwise_or,
@@ -165,6 +171,30 @@ pub const Tape = struct {
 
     pub fn rotateRight(self: *Tape, value: usize, amount: usize, carry: usize) TraceError!usize {
         return self.push(.rotate_right, Value{ .none = {} }, value, amount, carry);
+    }
+
+    pub fn signExtendHalf(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.sign_extend_half, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn signExtendByte(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.sign_extend_byte, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn zeroExtendHalf(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.zero_extend_half, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn zeroExtendByte(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.zero_extend_byte, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn byteReverseWord(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.byte_reverse_word, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn byteReverseHalf(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.byte_reverse_half, Value{ .none = {} }, value, 0, 0);
     }
 
     pub fn bitwiseAnd(self: *Tape, left: usize, right: usize) TraceError!usize {

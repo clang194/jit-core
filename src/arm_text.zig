@@ -260,6 +260,27 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             offset,
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xffc0) == 0xb200) {
+        return formatThumbUnaryReg(buf, "sxth", word);
+    }
+    if ((word & 0xffc0) == 0xb240) {
+        return formatThumbUnaryReg(buf, "sxtb", word);
+    }
+    if ((word & 0xffc0) == 0xb280) {
+        return formatThumbUnaryReg(buf, "uxth", word);
+    }
+    if ((word & 0xffc0) == 0xb2c0) {
+        return formatThumbUnaryReg(buf, "uxtb", word);
+    }
+    if ((word & 0xffc0) == 0xba00) {
+        return formatThumbUnaryReg(buf, "rev", word);
+    }
+    if ((word & 0xffc0) == 0xba40) {
+        return formatThumbUnaryReg(buf, "rev16", word);
+    }
+    if ((word & 0xffc0) == 0xbac0) {
+        return formatThumbUnaryReg(buf, "revsh", word);
+    }
     if ((word & 0xff00) == 0xde00) {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }
@@ -310,6 +331,16 @@ fn formatThumbTransferReg(buf: []u8, comptime op: []const u8, word: u16) TextErr
         arm_state.regName(data),
         arm_state.regName(base),
         arm_state.regName(offset),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatThumbUnaryReg(buf: []u8, comptime op: []const u8, word: u16) TextError![]u8 {
+    const source = arm_state.lowReg(word >> 3);
+    const dest = arm_state.lowReg(word);
+    return std.fmt.bufPrint(buf, "{} {}, {}", .{
+        op,
+        arm_state.regName(dest),
+        arm_state.regName(source),
     }) catch error.NoSpaceLeft;
 }
 

@@ -572,6 +572,75 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xffc0) == 0xb200) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        const half = try tape.lowHalf(source);
+        _ = try tape.storeReg(dest, try tape.signExtendHalf(half));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xb240) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        const byte = try tape.lowByte(source);
+        _ = try tape.storeReg(dest, try tape.signExtendByte(byte));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xb280) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        const half = try tape.lowHalf(source);
+        _ = try tape.storeReg(dest, try tape.zeroExtendHalf(half));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xb2c0) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        const byte = try tape.lowByte(source);
+        _ = try tape.storeReg(dest, try tape.zeroExtendByte(byte));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xba00) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        _ = try tape.storeReg(dest, try tape.byteReverseWord(source));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xba40) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        const low = try tape.byteReverseHalf(try tape.lowHalf(source));
+        const shift = try tape.literalByte(16);
+        const carry_in = try tape.literalBit(false);
+        const high_shifted = try tape.shiftRight(source, shift, carry_in);
+        const high = try tape.byteReverseHalf(try tape.lowHalf(high_shifted));
+        const high_word = try tape.zeroExtendHalf(high);
+        const low_word = try tape.zeroExtendHalf(low);
+        const moved_high = try tape.shiftLeft(high_word, shift, carry_in);
+        _ = try tape.storeReg(dest, try tape.bitwiseOr(moved_high, low_word));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xbac0) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        const half = try tape.byteReverseHalf(try tape.lowHalf(source));
+        _ = try tape.storeReg(dest, try tape.signExtendHalf(half));
+        return;
+    }
+
     return error.UnknownInstruction;
 }
 
@@ -957,6 +1026,55 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         return;
     }
 
+    if ((word & 0xffc0) == 0xb200) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, signExtendHalf(state.read(source)));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xb240) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, signExtendByte(state.read(source)));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xb280) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, state.read(source) & 0xffff);
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xb2c0) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, state.read(source) & 0xff);
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xba00) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, byteReverseWord(state.read(source)));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xba40) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, byteReverseHalfwords(state.read(source)));
+        return;
+    }
+
+    if ((word & 0xffc0) == 0xbac0) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, signExtendHalf(byteReverseHalf(state.read(source))));
+        return;
+    }
+
     return error.UnknownInstruction;
 }
 
@@ -1036,6 +1154,29 @@ pub fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
 
 pub fn subWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
     return addWithCarry(left, ~right, carry_in);
+}
+
+pub fn signExtendHalf(value: u32) u32 {
+    return @bitCast(u32, bits.signExtend32(value, 16));
+}
+
+pub fn signExtendByte(value: u32) u32 {
+    return @bitCast(u32, bits.signExtend32(value, 8));
+}
+
+pub fn byteReverseWord(value: u32) u32 {
+    return ((value & 0x000000ff) << 24) |
+        ((value & 0x0000ff00) << 8) |
+        ((value & 0x00ff0000) >> 8) |
+        ((value & 0xff000000) >> 24);
+}
+
+pub fn byteReverseHalf(value: u32) u32 {
+    return ((value & 0xff) << 8) | ((value >> 8) & 0xff);
+}
+
+pub fn byteReverseHalfwords(value: u32) u32 {
+    return ((value & 0x00ff00ff) << 8) | ((value & 0xff00ff00) >> 8);
 }
 
 fn readOperand(state: *const arm_state.MachineState, reg: arm_state.ArmReg, pc: u32) u32 {
