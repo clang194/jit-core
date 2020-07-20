@@ -47,6 +47,16 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
 
     if (((word >> 26) & 0x3) == 0 and bits.getBit32(word, 25)) {
         const code = @intCast(u4, (word >> 21) & 0xf);
+        if (code == 0xa and bits.getBit32(word, 20) and ((word >> 12) & 0xf) == 0) {
+            const rn = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+            const rotate = @intCast(u8, (word >> 8) & 0xf);
+            const imm = @intCast(u8, word & 0xff);
+            return std.fmt.bufPrint(buf, "cmp{} {}, #{}", .{
+                condName(cond),
+                arm_state.regName(rn),
+                arm_exec.expandArmImmediate(rotate, imm),
+            }) catch error.NoSpaceLeft;
+        }
         if (code == 0x5) {
             const rd = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
             const rn = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));

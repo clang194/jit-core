@@ -31,6 +31,10 @@ pub fn isAdcImmediate(word: u32) bool {
     return (word & 0x0fe00000) == 0x02a00000 and armCondition(word) != null;
 }
 
+pub fn isCmpImmediate(word: u32) bool {
+    return (word & 0x0ff0f000) == 0x03500000 and armCondition(word) != null;
+}
+
 pub fn expandArmImmediate(rotate: u8, value: u8) u32 {
     return rotateRightWord(@as(u32, value), rotate * 2);
 }
@@ -39,6 +43,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     const pc = state.read(.pc);
     if (isAdcImmediate(word)) {
         return runAdcImmediate(word, state, pc);
+    }
+
+    if (isCmpImmediate(word)) {
+        return runCmpImmediate(word, state, pc);
     }
 
     if (isSupervisorCall(word)) {
@@ -115,6 +123,25 @@ fn runAdcImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepEr
     state.write(.pc, pc + 4);
 }
 
+fn runCmpImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const base = armReg(word >> 16);
+    const rotate = @intCast(u8, (word >> 8) & 0xf);
+    const imm = @intCast(u8, word & 0xff);
+    const amount = expandArmImmediate(rotate, imm);
+    const result = subWithCarry(readArmOperand(state, base, pc), amount, true);
+    state.setNegative((result.word & 0x80000000) != 0);
+    state.setZero(result.word == 0);
+    state.setCarry(result.carry);
+    state.setOverflow(result.overflow);
+    state.write(.pc, pc + 4);
+}
+
 fn armReg(value: u32) arm_state.ArmReg {
     return @intToEnum(arm_state.ArmReg, @intCast(u8, value & 0xf));
 }
@@ -148,4 +175,8 @@ fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
         .carry = wide > 0xffffffff,
         .overflow = overflow,
     };
+}
+
+fn subWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
+    return addWithCarry(left, ~right, carry_in);
 }
