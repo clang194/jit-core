@@ -35,6 +35,14 @@ pub fn isCmpImmediate(word: u32) bool {
     return (word & 0x0ff0f000) == 0x03500000 and armCondition(word) != null;
 }
 
+pub fn isRev(word: u32) bool {
+    return (word & 0x0fff0ff0) == 0x06bf0f30 and armCondition(word) != null;
+}
+
+pub fn isRevSignedHalf(word: u32) bool {
+    return (word & 0x0fff0ff0) == 0x06ff0fb0 and armCondition(word) != null;
+}
+
 pub fn expandArmImmediate(rotate: u8, value: u8) u32 {
     return rotateRightWord(@as(u32, value), rotate * 2);
 }
@@ -47,6 +55,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isCmpImmediate(word)) {
         return runCmpImmediate(word, state, pc);
+    }
+
+    if (isRev(word)) {
+        return runRev(word, state, pc);
+    }
+
+    if (isRevSignedHalf(word)) {
+        return runRevSignedHalf(word, state, pc);
     }
 
     if (isSupervisorCall(word)) {
@@ -142,6 +158,32 @@ fn runCmpImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepEr
     state.write(.pc, pc + 4);
 }
 
+fn runRev(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(dest, byteReverseWord(state.read(source)));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runRevSignedHalf(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(dest, signExtendHalf(byteReverseHalf(state.read(source))));
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn armReg(value: u32) arm_state.ArmReg {
     return @intToEnum(arm_state.ArmReg, @intCast(u8, value & 0xf));
 }
@@ -163,6 +205,25 @@ fn rotateRightWord(value: u32, amount: u8) u32 {
         return value;
     }
     return (value >> @intCast(u5, shift)) | (value << @intCast(u5, 32 - shift));
+}
+
+fn byteReverseWord(value: u32) u32 {
+    return ((value & 0x000000ff) << 24) |
+        ((value & 0x0000ff00) << 8) |
+        ((value & 0x00ff0000) >> 8) |
+        ((value & 0xff000000) >> 24);
+}
+
+fn byteReverseHalf(value: u32) u32 {
+    return ((value & 0xff) << 8) | ((value >> 8) & 0xff);
+}
+
+fn signExtendHalf(value: u32) u32 {
+    const narrowed = value & 0xffff;
+    if ((narrowed & 0x8000) != 0) {
+        return narrowed | 0xffff0000;
+    }
+    return narrowed;
 }
 
 fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {

@@ -45,6 +45,14 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }
 
+    if ((word & 0x0fff0ff0) == 0x06bf0f30) {
+        return formatArmUnaryReg(buf, "rev", word, cond);
+    }
+
+    if ((word & 0x0fff0ff0) == 0x06ff0fb0) {
+        return formatArmUnaryReg(buf, "revsh", word, cond);
+    }
+
     if (((word >> 26) & 0x3) == 0 and bits.getBit32(word, 25)) {
         const code = @intCast(u4, (word >> 21) & 0xf);
         if (code == 0xa and bits.getBit32(word, 20) and ((word >> 12) & 0xf) == 0) {
@@ -85,6 +93,17 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     }
 
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
+}
+
+fn formatArmUnaryReg(buf: []u8, comptime op: []const u8, word: u32, cond: u4) TextError![]u8 {
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    return std.fmt.bufPrint(buf, "{}{} {}, {}", .{
+        op,
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(source),
+    }) catch error.NoSpaceLeft;
 }
 
 pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
