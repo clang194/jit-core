@@ -270,6 +270,14 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             offset,
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xf800) == 0xa000) {
+        const dest = arm_state.lowReg(word >> 8);
+        const offset = @as(u32, word & 0xff) << 2;
+        return std.fmt.bufPrint(buf, "adr {}, +#{}", .{
+            arm_state.regName(dest),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xffc0) == 0xb200) {
         return formatThumbUnaryReg(buf, "sxth", word);
     }
