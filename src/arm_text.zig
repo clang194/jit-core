@@ -279,6 +279,21 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xfe00) == 0x5400) {
         return formatThumbTransferReg(buf, "strb", word);
     }
+    if ((word & 0xfe00) == 0x5600) {
+        return formatThumbTransferReg(buf, "ldrsb", word);
+    }
+    if ((word & 0xfe00) == 0x5800) {
+        return formatThumbTransferReg(buf, "ldr", word);
+    }
+    if ((word & 0xfe00) == 0x5a00) {
+        return formatThumbTransferReg(buf, "ldrh", word);
+    }
+    if ((word & 0xfe00) == 0x5c00) {
+        return formatThumbTransferReg(buf, "ldrb", word);
+    }
+    if ((word & 0xfe00) == 0x5e00) {
+        return formatThumbTransferReg(buf, "ldrsh", word);
+    }
     if ((word & 0xf800) == 0x6800) {
         const offset = @as(u32, (word >> 6) & 0x1f) << 2;
         const base = arm_state.lowReg(word >> 3);

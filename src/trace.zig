@@ -43,6 +43,8 @@ pub const EventKind = enum(u8) {
     bitwise_or,
     bitwise_not,
     word_add,
+    read_byte,
+    read_half,
     read_word,
     write_byte,
     write_half,
@@ -219,6 +221,14 @@ pub const Tape = struct {
 
     pub fn readWord(self: *Tape, address: usize) TraceError!usize {
         return self.push(.read_word, Value{ .none = {} }, address, 0, 0);
+    }
+
+    pub fn readByte(self: *Tape, address: usize) TraceError!usize {
+        return self.push(.read_byte, Value{ .none = {} }, address, 0, 0);
+    }
+
+    pub fn readHalf(self: *Tape, address: usize) TraceError!usize {
+        return self.push(.read_half, Value{ .none = {} }, address, 0, 0);
     }
 
     pub fn writeByte(self: *Tape, address: usize, value: usize) TraceError!usize {

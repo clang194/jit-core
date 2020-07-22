@@ -561,6 +561,65 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xfe00) == 0x5600) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 6));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const offset = try tape.loadReg(source_reg);
+        const address = try tape.wordAdd(base, offset);
+        const data = try tape.readByte(address);
+        _ = try tape.storeReg(dest, try tape.signExtendByte(data));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5800) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 6));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const offset = try tape.loadReg(source_reg);
+        const address = try tape.wordAdd(base, offset);
+        _ = try tape.storeReg(dest, try tape.readWord(address));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5a00) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 6));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const offset = try tape.loadReg(source_reg);
+        const address = try tape.wordAdd(base, offset);
+        const data = try tape.readHalf(address);
+        _ = try tape.storeReg(dest, try tape.zeroExtendHalf(data));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5c00) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 6));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const offset = try tape.loadReg(source_reg);
+        const address = try tape.wordAdd(base, offset);
+        const data = try tape.readByte(address);
+        _ = try tape.storeReg(dest, try tape.zeroExtendByte(data));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5e00) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word >> 6));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const offset = try tape.loadReg(source_reg);
+        const address = try tape.wordAdd(base, offset);
+        const data = try tape.readHalf(address);
+        _ = try tape.storeReg(dest, try tape.signExtendHalf(data));
+        return;
+    }
+
     if ((word & 0xf800) == 0x6800) {
         const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f) << 2);
         const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
@@ -1096,6 +1155,51 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         const base = arm_state.lowReg(word >> 3);
         const data = arm_state.lowReg(word);
         write8(state.read(base) + state.read(source), bits.lowByte(state.read(data)));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5600) {
+        const read8 = hooks.read8 orelse return error.MissingRead;
+        const source = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, signExtendByte(read8(state.read(base) + state.read(source))));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5800) {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        const source = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, read32(state.read(base) + state.read(source)));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5a00) {
+        const read16 = hooks.read16 orelse return error.MissingRead;
+        const source = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, read16(state.read(base) + state.read(source)));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5c00) {
+        const read8 = hooks.read8 orelse return error.MissingRead;
+        const source = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, read8(state.read(base) + state.read(source)));
+        return;
+    }
+
+    if ((word & 0xfe00) == 0x5e00) {
+        const read16 = hooks.read16 orelse return error.MissingRead;
+        const source = arm_state.lowReg(word >> 6);
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        state.write(dest, signExtendHalf(read16(state.read(base) + state.read(source))));
         return;
     }
 
