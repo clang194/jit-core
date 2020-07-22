@@ -304,6 +304,26 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             offset,
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xf800) == 0x8000) {
+        const offset = @as(u32, (word >> 6) & 0x1f) << 1;
+        const base = arm_state.lowReg(word >> 3);
+        const data = arm_state.lowReg(word);
+        return std.fmt.bufPrint(buf, "strh {}, [{}, #{}]", .{
+            arm_state.regName(data),
+            arm_state.regName(base),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xf800) == 0x8800) {
+        const offset = @as(u32, (word >> 6) & 0x1f) << 1;
+        const base = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        return std.fmt.bufPrint(buf, "ldrh {}, [{}, #{}]", .{
+            arm_state.regName(dest),
+            arm_state.regName(base),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xf800) == 0xa000) {
         const dest = arm_state.lowReg(word >> 8);
         const offset = @as(u32, word & 0xff) << 2;

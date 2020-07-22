@@ -631,6 +631,28 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xf800) == 0x8000) {
+        const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f) << 1);
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const data_reg = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        const data = try tape.lowHalf(try tape.loadReg(data_reg));
+        _ = try tape.writeHalf(address, data);
+        return;
+    }
+
+    if ((word & 0xf800) == 0x8800) {
+        const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f) << 1);
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        const data = try tape.readHalf(address);
+        _ = try tape.storeReg(dest, try tape.zeroExtendHalf(data));
+        return;
+    }
+
     if ((word & 0xf800) == 0xa000) {
         const dest = try tape.literalReg(arm_state.lowReg(word >> 8));
         const base = try tape.literalWord(alignDown4(pc + 4));
@@ -1209,6 +1231,24 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f) << 2;
         state.write(dest, read32(state.read(base) + offset));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x8000) {
+        const write16 = hooks.write16 orelse return error.MissingWrite;
+        const data = arm_state.lowReg(word);
+        const base = arm_state.lowReg(word >> 3);
+        const offset = @as(u32, (word >> 6) & 0x1f) << 1;
+        write16(state.read(base) + offset, @intCast(u16, state.read(data) & 0xffff));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x8800) {
+        const read16 = hooks.read16 orelse return error.MissingRead;
+        const dest = arm_state.lowReg(word);
+        const base = arm_state.lowReg(word >> 3);
+        const offset = @as(u32, (word >> 6) & 0x1f) << 1;
+        state.write(dest, read16(state.read(base) + offset));
         return;
     }
 
