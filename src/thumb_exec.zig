@@ -633,6 +633,27 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xfe00) == 0xbc00) {
+        const mask = popMask(word);
+        const count = bits.countLow16(mask);
+        if (count == 0) {
+            return error.Unpredictable;
+        }
+        const sp_reg = try tape.literalReg(.sp);
+        var address = try tape.loadReg(sp_reg);
+        var index: u8 = 0;
+        while (index < 15) : (index += 1) {
+            if ((mask & (@as(u16, 1) << @intCast(u4, index))) != 0) {
+                const reg = try tape.literalReg(@intToEnum(arm_state.ArmReg, index));
+                const data = try tape.readWord(address);
+                _ = try tape.storeReg(reg, data);
+                address = try tape.wordAdd(address, try tape.literalWord(4));
+            }
+        }
+        _ = try tape.storeReg(sp_reg, address);
+        return;
+    }
+
     if ((word & 0xffc0) == 0xb200) {
         const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
         const dest = try tape.literalReg(arm_state.lowReg(word));
@@ -1136,6 +1157,25 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         return;
     }
 
+    if ((word & 0xfe00) == 0xbc00) {
+        const mask = popMask(word);
+        const count = bits.countLow16(mask);
+        if (count == 0) {
+            return error.Unpredictable;
+        }
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        var address = state.read(.sp);
+        var index: u8 = 0;
+        while (index < 15) : (index += 1) {
+            if ((mask & (@as(u16, 1) << @intCast(u4, index))) != 0) {
+                state.write(@intToEnum(arm_state.ArmReg, index), read32(address));
+                address +%= 4;
+            }
+        }
+        state.write(.sp, address);
+        return;
+    }
+
     if ((word & 0xffc0) == 0xb200) {
         const source = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
@@ -1270,6 +1310,14 @@ fn pushMask(word: u16) u16 {
     var mask = word & 0xff;
     if ((word & 0x0100) != 0) {
         mask |= @as(u16, 1) << 14;
+    }
+    return mask;
+}
+
+fn popMask(word: u16) u16 {
+    var mask = word & 0xff;
+    if ((word & 0x0100) != 0) {
+        mask |= @as(u16, 1) << 15;
     }
     return mask;
 }

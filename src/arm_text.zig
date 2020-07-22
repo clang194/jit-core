@@ -316,6 +316,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xfe00) == 0xb400) {
         return formatThumbPush(buf, word);
     }
+    if ((word & 0xfe00) == 0xbc00) {
+        return formatThumbPop(buf, word);
+    }
     if ((word & 0xffc0) == 0xb200) {
         return formatThumbUnaryReg(buf, "sxth", word);
     }
@@ -419,6 +422,30 @@ fn formatThumbPush(buf: []u8, word: u16) TextError![]u8 {
             try appendText(buf, &used, ", ");
         }
         try appendText(buf, &used, arm_state.regName(.lr));
+    }
+    try appendText(buf, &used, "}");
+    return buf[0..used];
+}
+
+fn formatThumbPop(buf: []u8, word: u16) TextError![]u8 {
+    var used: usize = 0;
+    try appendText(buf, &used, "pop {");
+    var first = true;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        if ((word & (@as(u16, 1) << @intCast(u4, index))) != 0) {
+            if (!first) {
+                try appendText(buf, &used, ", ");
+            }
+            try appendText(buf, &used, arm_state.regName(@intToEnum(arm_state.ArmReg, index)));
+            first = false;
+        }
+    }
+    if ((word & 0x0100) != 0) {
+        if (!first) {
+            try appendText(buf, &used, ", ");
+        }
+        try appendText(buf, &used, arm_state.regName(.pc));
     }
     try appendText(buf, &used, "}");
     return buf[0..used];
