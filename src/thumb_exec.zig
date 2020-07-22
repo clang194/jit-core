@@ -620,6 +620,17 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xf800) == 0x6000) {
+        const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f) << 2);
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const data_reg = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        const data = try tape.loadReg(data_reg);
+        _ = try tape.writeWord(address, data);
+        return;
+    }
+
     if ((word & 0xf800) == 0x6800) {
         const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f) << 2);
         const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
@@ -628,6 +639,28 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         const address = try tape.wordAdd(base, amount);
         const data = try tape.readWord(address);
         _ = try tape.storeReg(dest, data);
+        return;
+    }
+
+    if ((word & 0xf800) == 0x7000) {
+        const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const data_reg = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        const data = try tape.lowByte(try tape.loadReg(data_reg));
+        _ = try tape.writeByte(address, data);
+        return;
+    }
+
+    if ((word & 0xf800) == 0x7800) {
+        const amount = try tape.literalWord(@as(u32, (word >> 6) & 0x1f));
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
+        const dest = try tape.literalReg(arm_state.lowReg(word));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        const data = try tape.readByte(address);
+        _ = try tape.storeReg(dest, try tape.zeroExtendByte(data));
         return;
     }
 
@@ -650,6 +683,27 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         const address = try tape.wordAdd(base, amount);
         const data = try tape.readHalf(address);
         _ = try tape.storeReg(dest, try tape.zeroExtendHalf(data));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x9000) {
+        const amount = try tape.literalWord(@as(u32, word & 0xff) << 2);
+        const base_reg = try tape.literalReg(.sp);
+        const data_reg = try tape.literalReg(arm_state.lowReg(word >> 8));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        const data = try tape.loadReg(data_reg);
+        _ = try tape.writeWord(address, data);
+        return;
+    }
+
+    if ((word & 0xf800) == 0x9800) {
+        const amount = try tape.literalWord(@as(u32, word & 0xff) << 2);
+        const base_reg = try tape.literalReg(.sp);
+        const dest = try tape.literalReg(arm_state.lowReg(word >> 8));
+        const base = try tape.loadReg(base_reg);
+        const address = try tape.wordAdd(base, amount);
+        _ = try tape.storeReg(dest, try tape.readWord(address));
         return;
     }
 
@@ -1225,12 +1279,39 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         return;
     }
 
+    if ((word & 0xf800) == 0x6000) {
+        const write32 = hooks.write32 orelse return error.MissingWrite;
+        const data = arm_state.lowReg(word);
+        const base = arm_state.lowReg(word >> 3);
+        const offset = @as(u32, (word >> 6) & 0x1f) << 2;
+        write32(state.read(base) + offset, state.read(data));
+        return;
+    }
+
     if ((word & 0xf800) == 0x6800) {
         const read32 = hooks.read32 orelse return error.MissingRead;
         const dest = arm_state.lowReg(word);
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f) << 2;
         state.write(dest, read32(state.read(base) + offset));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x7000) {
+        const write8 = hooks.write8 orelse return error.MissingWrite;
+        const data = arm_state.lowReg(word);
+        const base = arm_state.lowReg(word >> 3);
+        const offset = @as(u32, (word >> 6) & 0x1f);
+        write8(state.read(base) + offset, bits.lowByte(state.read(data)));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x7800) {
+        const read8 = hooks.read8 orelse return error.MissingRead;
+        const dest = arm_state.lowReg(word);
+        const base = arm_state.lowReg(word >> 3);
+        const offset = @as(u32, (word >> 6) & 0x1f);
+        state.write(dest, read8(state.read(base) + offset));
         return;
     }
 
@@ -1249,6 +1330,22 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f) << 1;
         state.write(dest, read16(state.read(base) + offset));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x9000) {
+        const write32 = hooks.write32 orelse return error.MissingWrite;
+        const data = arm_state.lowReg(word >> 8);
+        const offset = @as(u32, word & 0xff) << 2;
+        write32(state.read(.sp) + offset, state.read(data));
+        return;
+    }
+
+    if ((word & 0xf800) == 0x9800) {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        const dest = arm_state.lowReg(word >> 8);
+        const offset = @as(u32, word & 0xff) << 2;
+        state.write(dest, read32(state.read(.sp) + offset));
         return;
     }
 

@@ -294,6 +294,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xfe00) == 0x5e00) {
         return formatThumbTransferReg(buf, "ldrsh", word);
     }
+    if ((word & 0xf800) == 0x6000) {
+        return formatThumbTransferImm(buf, "str", word, 2);
+    }
     if ((word & 0xf800) == 0x6800) {
         const offset = @as(u32, (word >> 6) & 0x1f) << 2;
         const base = arm_state.lowReg(word >> 3);
@@ -303,6 +306,12 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             arm_state.regName(base),
             offset,
         }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xf800) == 0x7000) {
+        return formatThumbTransferImm(buf, "strb", word, 0);
+    }
+    if ((word & 0xf800) == 0x7800) {
+        return formatThumbTransferImm(buf, "ldrb", word, 0);
     }
     if ((word & 0xf800) == 0x8000) {
         const offset = @as(u32, (word >> 6) & 0x1f) << 1;
@@ -321,6 +330,22 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
         return std.fmt.bufPrint(buf, "ldrh {}, [{}, #{}]", .{
             arm_state.regName(dest),
             arm_state.regName(base),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xf800) == 0x9000) {
+        const data = arm_state.lowReg(word >> 8);
+        const offset = @as(u32, word & 0xff) << 2;
+        return std.fmt.bufPrint(buf, "str {}, [sp, #{}]", .{
+            arm_state.regName(data),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xf800) == 0x9800) {
+        const dest = arm_state.lowReg(word >> 8);
+        const offset = @as(u32, word & 0xff) << 2;
+        return std.fmt.bufPrint(buf, "ldr {}, [sp, #{}]", .{
+            arm_state.regName(dest),
             offset,
         }) catch error.NoSpaceLeft;
     }
@@ -425,6 +450,18 @@ fn formatThumbTransferReg(buf: []u8, comptime op: []const u8, word: u16) TextErr
         arm_state.regName(data),
         arm_state.regName(base),
         arm_state.regName(offset),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatThumbTransferImm(buf: []u8, comptime op: []const u8, word: u16, comptime scale: u5) TextError![]u8 {
+    const offset = @as(u32, (word >> 6) & 0x1f) << scale;
+    const base = arm_state.lowReg(word >> 3);
+    const data = arm_state.lowReg(word);
+    return std.fmt.bufPrint(buf, "{} {}, [{}, #{}]", .{
+        op,
+        arm_state.regName(data),
+        arm_state.regName(base),
+        offset,
     }) catch error.NoSpaceLeft;
 }
 
