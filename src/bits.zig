@@ -22,6 +22,16 @@ pub fn isZero(value: u32) bool {
     return value == 0;
 }
 
+pub fn countLow16(value: u16) u8 {
+    var remaining = value;
+    var count: u8 = 0;
+    while (remaining != 0) {
+        count += @intCast(u8, remaining & 1);
+        remaining >>= 1;
+    }
+    return count;
+}
+
 pub fn signExtend32(value: u32, comptime width: u5) i32 {
     const high = @as(u32, 1) << (width - 1);
     const mask = (@as(u32, 1) << width) - 1;
@@ -31,4 +41,3 @@ pub fn signExtend32(value: u32, comptime width: u5) i32 {
     }
     return @bitCast(i32, narrowed);
 }
-

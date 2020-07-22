@@ -608,6 +608,31 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xfe00) == 0xb400) {
+        const mask = pushMask(word);
+        const count = bits.countLow16(mask);
+        if (count == 0) {
+            return error.Unpredictable;
+        }
+        const sp_reg = try tape.literalReg(.sp);
+        const old_sp = try tape.loadReg(sp_reg);
+        const amount = try tape.literalWord(@as(u32, count) << 2);
+        const carry_in = try tape.literalBit(true);
+        const final_sp = try tape.subCarrying(old_sp, amount, carry_in);
+        var address = final_sp;
+        var index: u8 = 0;
+        while (index < 16) : (index += 1) {
+            if ((mask & (@as(u16, 1) << @intCast(u4, index))) != 0) {
+                const reg = try tape.literalReg(@intToEnum(arm_state.ArmReg, index));
+                const value = try tape.loadReg(reg);
+                _ = try tape.writeWord(address, value);
+                address = try tape.wordAdd(address, try tape.literalWord(4));
+            }
+        }
+        _ = try tape.storeReg(sp_reg, final_sp);
+        return;
+    }
+
     if ((word & 0xffc0) == 0xb200) {
         const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
         const dest = try tape.literalReg(arm_state.lowReg(word));
@@ -1091,6 +1116,26 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         return;
     }
 
+    if ((word & 0xfe00) == 0xb400) {
+        const mask = pushMask(word);
+        const count = bits.countLow16(mask);
+        if (count == 0) {
+            return error.Unpredictable;
+        }
+        const write32 = hooks.write32 orelse return error.MissingWrite;
+        const final_sp = state.read(.sp) -% (@as(u32, count) << 2);
+        var address = final_sp;
+        var index: u8 = 0;
+        while (index < 16) : (index += 1) {
+            if ((mask & (@as(u16, 1) << @intCast(u4, index))) != 0) {
+                write32(address, state.read(@intToEnum(arm_state.ArmReg, index)));
+                address +%= 4;
+            }
+        }
+        state.write(.sp, final_sp);
+        return;
+    }
+
     if ((word & 0xffc0) == 0xb200) {
         const source = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
@@ -1219,6 +1264,14 @@ pub fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
 
 pub fn subWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
     return addWithCarry(left, ~right, carry_in);
+}
+
+fn pushMask(word: u16) u16 {
+    var mask = word & 0xff;
+    if ((word & 0x0100) != 0) {
+        mask |= @as(u16, 1) << 14;
+    }
+    return mask;
 }
 
 pub fn signExtendHalf(value: u32) u32 {

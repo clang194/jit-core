@@ -313,6 +313,9 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
         const offset = @as(u32, word & 0x7f) << 2;
         return std.fmt.bufPrint(buf, "sub sp, sp, #{}", .{offset}) catch error.NoSpaceLeft;
     }
+    if ((word & 0xfe00) == 0xb400) {
+        return formatThumbPush(buf, word);
+    }
     if ((word & 0xffc0) == 0xb200) {
         return formatThumbUnaryReg(buf, "sxth", word);
     }
@@ -395,6 +398,38 @@ fn formatThumbUnaryReg(buf: []u8, comptime op: []const u8, word: u16) TextError!
         arm_state.regName(dest),
         arm_state.regName(source),
     }) catch error.NoSpaceLeft;
+}
+
+fn formatThumbPush(buf: []u8, word: u16) TextError![]u8 {
+    var used: usize = 0;
+    try appendText(buf, &used, "push {");
+    var first = true;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        if ((word & (@as(u16, 1) << @intCast(u4, index))) != 0) {
+            if (!first) {
+                try appendText(buf, &used, ", ");
+            }
+            try appendText(buf, &used, arm_state.regName(@intToEnum(arm_state.ArmReg, index)));
+            first = false;
+        }
+    }
+    if ((word & 0x0100) != 0) {
+        if (!first) {
+            try appendText(buf, &used, ", ");
+        }
+        try appendText(buf, &used, arm_state.regName(.lr));
+    }
+    try appendText(buf, &used, "}");
+    return buf[0..used];
+}
+
+fn appendText(buf: []u8, used: *usize, text: []const u8) TextError!void {
+    if (used.* + text.len > buf.len) {
+        return error.NoSpaceLeft;
+    }
+    std.mem.copy(u8, buf[used.* .. used.* + text.len], text);
+    used.* += text.len;
 }
 
 fn formatBranchImmediate(buf: []u8, word: u32, cond: u4) TextError![]u8 {
