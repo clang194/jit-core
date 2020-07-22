@@ -580,6 +580,34 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xf800) == 0xa800) {
+        const dest = try tape.literalReg(arm_state.lowReg(word >> 8));
+        const base_reg = try tape.literalReg(.sp);
+        const base = try tape.loadReg(base_reg);
+        const amount = try tape.literalWord(@as(u32, word & 0xff) << 2);
+        const carry_in = try tape.literalBit(false);
+        _ = try tape.storeReg(dest, try tape.addCarrying(base, amount, carry_in));
+        return;
+    }
+
+    if ((word & 0xff80) == 0xb000) {
+        const dest = try tape.literalReg(.sp);
+        const base = try tape.loadReg(dest);
+        const amount = try tape.literalWord(@as(u32, word & 0x7f) << 2);
+        const carry_in = try tape.literalBit(false);
+        _ = try tape.storeReg(dest, try tape.addCarrying(base, amount, carry_in));
+        return;
+    }
+
+    if ((word & 0xff80) == 0xb080) {
+        const dest = try tape.literalReg(.sp);
+        const base = try tape.loadReg(dest);
+        const amount = try tape.literalWord(@as(u32, word & 0x7f) << 2);
+        const carry_in = try tape.literalBit(true);
+        _ = try tape.storeReg(dest, try tape.subCarrying(base, amount, carry_in));
+        return;
+    }
+
     if ((word & 0xffc0) == 0xb200) {
         const source_reg = try tape.literalReg(arm_state.lowReg(word >> 3));
         const dest = try tape.literalReg(arm_state.lowReg(word));
@@ -1038,6 +1066,28 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         const dest = arm_state.lowReg(word >> 8);
         const pc = state.read(.pc);
         state.write(dest, alignDown4(pc + 4) + (@as(u32, word & 0xff) << 2));
+        return;
+    }
+
+    if ((word & 0xf800) == 0xa800) {
+        const dest = arm_state.lowReg(word >> 8);
+        const amount = @as(u32, word & 0xff) << 2;
+        const result = addWithCarry(state.read(.sp), amount, false);
+        state.write(dest, result.word);
+        return;
+    }
+
+    if ((word & 0xff80) == 0xb000) {
+        const amount = @as(u32, word & 0x7f) << 2;
+        const result = addWithCarry(state.read(.sp), amount, false);
+        state.write(.sp, result.word);
+        return;
+    }
+
+    if ((word & 0xff80) == 0xb080) {
+        const amount = @as(u32, word & 0x7f) << 2;
+        const result = subWithCarry(state.read(.sp), amount, true);
+        state.write(.sp, result.word);
         return;
     }
 
