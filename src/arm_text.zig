@@ -400,6 +400,16 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xffc0) == 0xbac0) {
         return formatThumbUnaryReg(buf, "revsh", word);
     }
+    if ((word & 0xf800) == 0xc000) {
+        const base = arm_state.lowReg(word >> 8);
+        return formatThumbMultiple(buf, "stm", base, @intCast(u8, word & 0xff), true);
+    }
+    if ((word & 0xf800) == 0xc800) {
+        const base = arm_state.lowReg(word >> 8);
+        const mask = @intCast(u8, word & 0xff);
+        const write_back = (mask & (@as(u8, 1) << @intCast(u3, @enumToInt(base)))) == 0;
+        return formatThumbMultiple(buf, "ldm", base, mask, write_back);
+    }
     if ((word & 0xff00) == 0xde00) {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }
@@ -518,6 +528,30 @@ fn formatThumbPop(buf: []u8, word: u16) TextError![]u8 {
             try appendText(buf, &used, ", ");
         }
         try appendText(buf, &used, arm_state.regName(.pc));
+    }
+    try appendText(buf, &used, "}");
+    return buf[0..used];
+}
+
+fn formatThumbMultiple(buf: []u8, comptime op: []const u8, base: arm_state.ArmReg, mask: u8, write_back: bool) TextError![]u8 {
+    var used: usize = 0;
+    try appendText(buf, &used, op);
+    try appendText(buf, &used, " ");
+    try appendText(buf, &used, arm_state.regName(base));
+    if (write_back) {
+        try appendText(buf, &used, "!");
+    }
+    try appendText(buf, &used, ", {");
+    var first = true;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
+            if (!first) {
+                try appendText(buf, &used, ", ");
+            }
+            try appendText(buf, &used, arm_state.regName(@intToEnum(arm_state.ArmReg, index)));
+            first = false;
+        }
     }
     try appendText(buf, &used, "}");
     return buf[0..used];

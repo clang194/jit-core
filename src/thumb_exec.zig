@@ -785,7 +785,49 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
                 address = try tape.wordAdd(address, try tape.literalWord(4));
             }
         }
+        if ((mask & (@as(u16, 1) << 15)) != 0) {
+            const data = try tape.readWord(address);
+            _ = try tape.loadPc(data);
+            address = try tape.wordAdd(address, try tape.literalWord(4));
+        }
         _ = try tape.storeReg(sp_reg, address);
+        return;
+    }
+
+    if ((word & 0xf800) == 0xc000) {
+        const base_reg = try tape.literalReg(arm_state.lowReg(word >> 8));
+        var address = try tape.loadReg(base_reg);
+        const mask = @intCast(u8, word & 0xff);
+        var index: u8 = 0;
+        while (index < 8) : (index += 1) {
+            if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
+                const data_reg = try tape.literalReg(@intToEnum(arm_state.ArmReg, index));
+                const data = try tape.loadReg(data_reg);
+                _ = try tape.writeWord(address, data);
+                address = try tape.wordAdd(address, try tape.literalWord(4));
+            }
+        }
+        _ = try tape.storeReg(base_reg, address);
+        return;
+    }
+
+    if ((word & 0xf800) == 0xc800) {
+        const base = arm_state.lowReg(word >> 8);
+        const base_reg = try tape.literalReg(base);
+        var address = try tape.loadReg(base_reg);
+        const mask = @intCast(u8, word & 0xff);
+        var index: u8 = 0;
+        while (index < 8) : (index += 1) {
+            if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
+                const dest = try tape.literalReg(@intToEnum(arm_state.ArmReg, index));
+                const data = try tape.readWord(address);
+                _ = try tape.storeReg(dest, data);
+                address = try tape.wordAdd(address, try tape.literalWord(4));
+            }
+        }
+        if ((mask & (@as(u8, 1) << @intCast(u3, @enumToInt(base)))) == 0) {
+            _ = try tape.storeReg(base_reg, address);
+        }
         return;
     }
 
@@ -1413,7 +1455,45 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
                 address +%= 4;
             }
         }
+        if ((mask & (@as(u16, 1) << 15)) != 0) {
+            loadWritePc(state, read32(address));
+            address +%= 4;
+        }
         state.write(.sp, address);
+        return;
+    }
+
+    if ((word & 0xf800) == 0xc000) {
+        const write32 = hooks.write32 orelse return error.MissingWrite;
+        const base = arm_state.lowReg(word >> 8);
+        const mask = @intCast(u8, word & 0xff);
+        var address = state.read(base);
+        var index: u8 = 0;
+        while (index < 8) : (index += 1) {
+            if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
+                write32(address, state.read(@intToEnum(arm_state.ArmReg, index)));
+                address +%= 4;
+            }
+        }
+        state.write(base, address);
+        return;
+    }
+
+    if ((word & 0xf800) == 0xc800) {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        const base = arm_state.lowReg(word >> 8);
+        const mask = @intCast(u8, word & 0xff);
+        var address = state.read(base);
+        var index: u8 = 0;
+        while (index < 8) : (index += 1) {
+            if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
+                state.write(@intToEnum(arm_state.ArmReg, index), read32(address));
+                address +%= 4;
+            }
+        }
+        if ((mask & (@as(u8, 1) << @intCast(u3, @enumToInt(base)))) == 0) {
+            state.write(base, address);
+        }
         return;
     }
 
@@ -1607,6 +1687,16 @@ fn alignDown4(value: u32) u32 {
 
 fn thumbPcWrite(value: u32) u32 {
     return value & 0xfffffffe;
+}
+
+fn loadWritePc(state: *arm_state.MachineState, value: u32) void {
+    if ((value & 1) != 0) {
+        state.setThumb(true);
+        state.write(.pc, value & 0xfffffffe);
+    } else {
+        state.setThumb(false);
+        state.write(.pc, value & 0xfffffffc);
+    }
 }
 
 fn updateNz(state: *arm_state.MachineState, value: u32) void {
