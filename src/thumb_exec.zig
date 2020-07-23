@@ -73,7 +73,7 @@ pub fn branchLinkTarget(word: u32, pc: u32) ?u32 {
     if ((first & 0xf800) != 0xf000 or (second & 0xf800) != 0xf800) {
         return null;
     }
-    return pc + 4 + thumb32Offset(word);
+    return @bitCast(u32, @intCast(i32, pc + 4) + thumb32Offset(word));
 }
 
 pub fn branchLinkExchangeTarget(word: u32, pc: u32) RunError!?u32 {
@@ -85,7 +85,7 @@ pub fn branchLinkExchangeTarget(word: u32, pc: u32) RunError!?u32 {
     if ((second & 1) != 0) {
         return error.Unpredictable;
     }
-    return alignDown4(pc + 4) + thumb32Offset(word);
+    return @bitCast(u32, @intCast(i32, alignDown4(pc + 4)) + thumb32Offset(word));
 }
 
 pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
@@ -1830,10 +1830,10 @@ fn alignDown4(value: u32) u32 {
     return value & 0xfffffffc;
 }
 
-fn thumb32Offset(word: u32) u32 {
+fn thumb32Offset(word: u32) i32 {
     const first = word & 0x07ff;
     const second = (word >> 16) & 0x07ff;
-    return (first << 12) | (second << 1);
+    return bits.signExtend32((first << 12) | (second << 1), 23);
 }
 
 fn thumbPcWrite(value: u32) u32 {

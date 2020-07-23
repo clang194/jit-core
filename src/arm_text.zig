@@ -449,15 +449,15 @@ pub fn formatThumb32(buf: []u8, word: u32) TextError![]u8 {
     if ((first & 0xf800) == 0xf000 and (second & 0xf800) == 0xf800) {
         const offset = thumb32Offset(word) + 4;
         return std.fmt.bufPrint(buf, "bl {}#{}", .{
-            signText(@intCast(i32, offset)),
-            offset,
+            signText(offset),
+            abs32(offset),
         }) catch error.NoSpaceLeft;
     }
     if ((first & 0xf800) == 0xf000 and (second & 0xf800) == 0xe800 and (second & 1) == 0) {
         const offset = thumb32Offset(word) + 4;
         return std.fmt.bufPrint(buf, "blx {}#{}", .{
-            signText(@intCast(i32, offset)),
-            offset,
+            signText(offset),
+            abs32(offset),
         }) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
@@ -629,10 +629,10 @@ fn formatBranchExchangeImmediate(buf: []u8, word: u32) TextError![]u8 {
     return std.fmt.bufPrint(buf, "blx {}#{}", .{ signText(offset), abs32(offset) }) catch error.NoSpaceLeft;
 }
 
-fn thumb32Offset(word: u32) u32 {
+fn thumb32Offset(word: u32) i32 {
     const first = word & 0x07ff;
     const second = (word >> 16) & 0x07ff;
-    return (first << 12) | (second << 1);
+    return bits.signExtend32((first << 12) | (second << 1), 23);
 }
 
 fn condName(cond: u4) []const u8 {
