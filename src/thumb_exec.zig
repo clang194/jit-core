@@ -22,7 +22,7 @@ pub const AddResult = struct {
 };
 
 pub const ThumbWord = struct {
-    word: u16,
+    word: u32,
     size: u8,
 };
 
@@ -31,7 +31,8 @@ pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
         return error.MissingRead;
     }
 
-    var first = hooks.read32.?(pc & 0xfffffffc);
+    const first_address = pc & 0xfffffffc;
+    var first = hooks.read32.?(first_address);
     if ((pc & 2) != 0) {
         first >>= 16;
     }
@@ -41,7 +42,16 @@ pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
         return ThumbWord{ .word = word, .size = 2 };
     }
 
-    return error.UnknownInstruction;
+    const second_pc = pc + 2;
+    var second = hooks.read32.?(second_pc & 0xfffffffc);
+    if ((second_pc & 2) != 0) {
+        second >>= 16;
+    }
+
+    return ThumbWord{
+        .word = @as(u32, word) | ((second & 0xffff) << 16),
+        .size = 4,
+    };
 }
 
 pub fn isStop(word: u16) bool {
@@ -57,8 +67,57 @@ pub fn branchTarget(word: u16, pc: u32) ?u32 {
     return @intCast(u32, @intCast(i32, pc + 4) + offset);
 }
 
+pub fn branchLinkTarget(word: u32, pc: u32) ?u32 {
+    const first = @intCast(u16, word & 0xffff);
+    const second = @intCast(u16, (word >> 16) & 0xffff);
+    if ((first & 0xf800) != 0xf000 or (second & 0xf800) != 0xf800) {
+        return null;
+    }
+    return pc + 4 + thumb32Offset(word);
+}
+
+pub fn branchLinkExchangeTarget(word: u32, pc: u32) RunError!?u32 {
+    const first = @intCast(u16, word & 0xffff);
+    const second = @intCast(u16, (word >> 16) & 0xffff);
+    if ((first & 0xf800) != 0xf000 or (second & 0xf800) != 0xe800) {
+        return null;
+    }
+    if ((second & 1) != 0) {
+        return error.Unpredictable;
+    }
+    return alignDown4(pc + 4) + thumb32Offset(word);
+}
+
 pub fn buildThumbTrace(word: u16, tape: *trace.Tape) RunError!void {
     return buildThumbTraceAt(word, 0, tape);
+}
+
+pub fn buildThumbPacketTraceAt(packet: ThumbWord, pc: u32, tape: *trace.Tape) RunError!void {
+    if (packet.size == 2) {
+        return buildThumbTraceAt(@intCast(u16, packet.word & 0xffff), pc, tape);
+    }
+    if (packet.size == 4) {
+        return buildThumb32TraceAt(packet.word, pc, tape);
+    }
+    return error.UnknownInstruction;
+}
+
+pub fn buildThumb32TraceAt(word: u32, pc: u32, tape: *trace.Tape) RunError!void {
+    if (branchLinkTarget(word, pc)) |target| {
+        const link = try tape.literalReg(.lr);
+        _ = try tape.storeReg(link, try tape.literalWord((pc + 4) | 1));
+        _ = try tape.jump(try tape.literalWord(target));
+        return;
+    }
+
+    if (try branchLinkExchangeTarget(word, pc)) |target| {
+        const link = try tape.literalReg(.lr);
+        _ = try tape.storeReg(link, try tape.literalWord((pc + 4) | 1));
+        _ = try tape.loadPc(try tape.literalWord(target));
+        return;
+    }
+
+    return error.UnknownInstruction;
 }
 
 pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
@@ -936,6 +995,33 @@ pub fn runThumb(word: u16, state: *arm_state.MachineState) RunError!void {
     return runThumbWithHooks(word, state, arm_state.HostHooks.empty());
 }
 
+pub fn runThumbPacketWithHooks(packet: ThumbWord, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!void {
+    if (packet.size == 2) {
+        return runThumbWithHooks(@intCast(u16, packet.word & 0xffff), state, hooks);
+    }
+    if (packet.size == 4) {
+        return runThumb32WithHooks(packet.word, state, hooks);
+    }
+    return error.UnknownInstruction;
+}
+
+pub fn runThumb32WithHooks(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!void {
+    _ = hooks;
+    const pc = state.read(.pc);
+    if (branchLinkTarget(word, pc)) |target| {
+        state.write(.lr, (pc + 4) | 1);
+        state.write(.pc, target);
+        return;
+    }
+    if (try branchLinkExchangeTarget(word, pc)) |target| {
+        state.write(.lr, (pc + 4) | 1);
+        state.setThumb(false);
+        state.write(.pc, target);
+        return;
+    }
+    return error.UnknownInstruction;
+}
+
 pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!void {
     if (isStop(word)) {
         return;
@@ -1742,6 +1828,12 @@ fn traceOperand(tape: *trace.Tape, reg: arm_state.ArmReg, pc: u32) RunError!usiz
 
 fn alignDown4(value: u32) u32 {
     return value & 0xfffffffc;
+}
+
+fn thumb32Offset(word: u32) u32 {
+    const first = word & 0x07ff;
+    const second = (word >> 16) & 0x07ff;
+    return (first << 12) | (second << 1);
 }
 
 fn thumbPcWrite(value: u32) u32 {

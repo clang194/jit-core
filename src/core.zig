@@ -67,19 +67,21 @@ pub const Core = struct {
                 else => return err,
             };
 
-            if (thumb_exec.isStop(fetched.word)) {
+            if (fetched.size == 2 and thumb_exec.isStop(@intCast(u16, fetched.word & 0xffff))) {
                 try self.interpretOne(pc);
                 used += 1;
                 continue;
             }
 
-            if (thumb_exec.branchTarget(fetched.word, pc)) |target| {
-                self.state.write(.pc, target);
-                used += 1;
-                continue;
+            if (fetched.size == 2) {
+                if (thumb_exec.branchTarget(@intCast(u16, fetched.word & 0xffff), pc)) |target| {
+                    self.state.write(.pc, target);
+                    used += 1;
+                    continue;
+                }
             }
 
-            thumb_exec.runThumbWithHooks(fetched.word, &self.state, self.hooks) catch |err| switch (err) {
+            thumb_exec.runThumbPacketWithHooks(fetched, &self.state, self.hooks) catch |err| switch (err) {
                 error.UnknownInstruction => {
                     try self.interpretOne(pc);
                     used += 1;
