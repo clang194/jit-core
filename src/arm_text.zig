@@ -262,6 +262,14 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
             arm_state.regName(source),
         }) catch error.NoSpaceLeft;
     }
+    if ((word & 0xff87) == 0x4700) {
+        const source = arm_state.reg4(word >> 3);
+        return std.fmt.bufPrint(buf, "bx {}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xff87) == 0x4780) {
+        const source = arm_state.reg4(word >> 3);
+        return std.fmt.bufPrint(buf, "blx {}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
+    }
     if ((word & 0xf800) == 0x4800) {
         const dest = arm_state.lowReg(word >> 8);
         const offset = @as(u32, word & 0xff) << 2;
@@ -415,6 +423,22 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     }
     if ((word & 0xff00) == 0xdf00) {
         return std.fmt.bufPrint(buf, "svc #{}", .{word & 0xff}) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xf000) == 0xd000 and (word & 0x0f00) < 0x0e00) {
+        const code = arm_state.conditionFromNibble(@intCast(u4, (word >> 8) & 0xf)).?;
+        const offset = bits.signExtend32(@as(u32, word & 0xff) << 1, 9) + 4;
+        return std.fmt.bufPrint(buf, "b{} {}#{}", .{
+            arm_state.conditionSuffix(code),
+            signText(offset),
+            abs32(offset),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0xf800) == 0xe000) {
+        const offset = bits.signExtend32(@as(u32, word & 0x7ff) << 1, 12) + 4;
+        return std.fmt.bufPrint(buf, "b {}#{}", .{
+            signText(offset),
+            abs32(offset),
+        }) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
 }

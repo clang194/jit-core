@@ -517,6 +517,20 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xff87) == 0x4700) {
+        const source = try traceOperand(tape, arm_state.reg4(word >> 3), pc);
+        _ = try tape.loadPc(source);
+        return;
+    }
+
+    if ((word & 0xff87) == 0x4780) {
+        const link = try tape.literalReg(.lr);
+        _ = try tape.storeReg(link, try tape.literalWord((pc + 2) | 1));
+        const source = try traceOperand(tape, arm_state.reg4(word >> 3), pc);
+        _ = try tape.loadPc(source);
+        return;
+    }
+
     if ((word & 0xf800) == 0x4800) {
         const dest = try tape.literalReg(arm_state.lowReg(word >> 8));
         const address = try tape.literalWord(alignDown4(pc + 4) + (@as(u32, word & 0xff) << 2));
@@ -900,6 +914,21 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xf000) == 0xd000 and (word & 0x0f00) < 0x0e00) {
+        const cond = try tape.literalByte(@intCast(u8, (word >> 8) & 0xf));
+        const offset = bits.signExtend32(@as(u32, word & 0xff) << 1, 9);
+        const taken = try tape.literalWord(@intCast(u32, @intCast(i32, pc + 4) + offset));
+        const skipped = try tape.literalWord(pc + 2);
+        _ = try tape.branchIf(cond, taken, skipped);
+        return;
+    }
+
+    if ((word & 0xf800) == 0xe000) {
+        const target = try tape.literalWord(branchTarget(word, pc).?);
+        _ = try tape.jump(target);
+        return;
+    }
+
     return error.UnknownInstruction;
 }
 
@@ -1240,6 +1269,21 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         return;
     }
 
+    if ((word & 0xff87) == 0x4700) {
+        const source = arm_state.reg4(word >> 3);
+        const pc = state.read(.pc);
+        loadWritePc(state, readOperand(state, source, pc));
+        return;
+    }
+
+    if ((word & 0xff87) == 0x4780) {
+        const source = arm_state.reg4(word >> 3);
+        const pc = state.read(.pc);
+        state.write(.lr, (pc + 2) | 1);
+        loadWritePc(state, readOperand(state, source, pc));
+        return;
+    }
+
     if ((word & 0xf800) == 0x4800) {
         const read32 = hooks.read32 orelse return error.MissingRead;
         const dest = arm_state.lowReg(word >> 8);
@@ -1543,6 +1587,21 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         const source = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
         state.write(dest, signExtendHalf(byteReverseHalf(state.read(source))));
+        return;
+    }
+
+    if ((word & 0xf000) == 0xd000 and (word & 0x0f00) < 0x0e00) {
+        const code = arm_state.conditionFromNibble(@intCast(u4, (word >> 8) & 0xf)).?;
+        if (state.conditionHolds(code)) {
+            const pc = state.read(.pc);
+            const offset = bits.signExtend32(@as(u32, word & 0xff) << 1, 9);
+            state.write(.pc, @intCast(u32, @intCast(i32, pc + 4) + offset));
+        }
+        return;
+    }
+
+    if ((word & 0xf800) == 0xe000) {
+        state.write(.pc, branchTarget(word, state.read(.pc)).?);
         return;
     }
 

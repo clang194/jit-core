@@ -50,6 +50,8 @@ pub const EventKind = enum(u8) {
     write_half,
     write_word,
     load_pc,
+    jump,
+    branch_if,
     call_supervisor,
     add_carrying,
     sub_carrying,
@@ -246,6 +248,14 @@ pub const Tape = struct {
 
     pub fn loadPc(self: *Tape, value: usize) TraceError!usize {
         return self.push(.load_pc, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn jump(self: *Tape, target: usize) TraceError!usize {
+        return self.push(.jump, Value{ .none = {} }, target, 0, 0);
+    }
+
+    pub fn branchIf(self: *Tape, condition: usize, taken: usize, skipped: usize) TraceError!usize {
+        return self.push(.branch_if, Value{ .none = {} }, condition, taken, skipped);
     }
 
     pub fn callSupervisor(self: *Tape, value: u32) TraceError!usize {
