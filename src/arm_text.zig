@@ -387,6 +387,10 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xfe00) == 0xbc00) {
         return formatThumbPop(buf, word);
     }
+    if ((word & 0xfff7) == 0xb650) {
+        const name = if ((word & 8) != 0) "be" else "le";
+        return std.fmt.bufPrint(buf, "setend {}", .{name}) catch error.NoSpaceLeft;
+    }
     if ((word & 0xffc0) == 0xb200) {
         return formatThumbUnaryReg(buf, "sxth", word);
     }

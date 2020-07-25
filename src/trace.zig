@@ -24,6 +24,7 @@ pub const EventKind = enum(u8) {
     store_zero,
     store_carry,
     store_overflow,
+    store_endian,
     low_byte,
     low_half,
     high_bit,
@@ -144,6 +145,10 @@ pub const Tape = struct {
 
     pub fn storeOverflow(self: *Tape, value: usize) TraceError!usize {
         return self.push(.store_overflow, Value{ .none = {} }, value, 0, 0);
+    }
+
+    pub fn storeEndian(self: *Tape, value: usize) TraceError!usize {
+        return self.push(.store_endian, Value{ .none = {} }, value, 0, 0);
     }
 
     pub fn lowByte(self: *Tape, value: usize) TraceError!usize {

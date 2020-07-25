@@ -867,6 +867,11 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
         return;
     }
 
+    if ((word & 0xfff7) == 0xb650) {
+        _ = try tape.storeEndian(try tape.literalBit((word & 8) != 0));
+        return;
+    }
+
     if ((word & 0xf800) == 0xc000) {
         const base_reg = try tape.literalReg(arm_state.lowReg(word >> 8));
         var address = try tape.loadReg(base_reg);
@@ -1371,29 +1376,26 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xf800) == 0x4800) {
-        const read32 = hooks.read32 orelse return error.MissingRead;
         const dest = arm_state.lowReg(word >> 8);
         const pc = state.read(.pc);
         const address = alignDown4(pc + 4) + (@as(u32, word & 0xff) << 2);
-        state.write(dest, read32(address));
+        state.write(dest, try readMemory32(state, hooks, address));
         return;
     }
 
     if ((word & 0xfe00) == 0x5000) {
-        const write32 = hooks.write32 orelse return error.MissingWrite;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const data = arm_state.lowReg(word);
-        write32(state.read(base) + state.read(source), state.read(data));
+        try writeMemory32(state, hooks, state.read(base) + state.read(source), state.read(data));
         return;
     }
 
     if ((word & 0xfe00) == 0x5200) {
-        const write16 = hooks.write16 orelse return error.MissingWrite;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const data = arm_state.lowReg(word);
-        write16(state.read(base) + state.read(source), @intCast(u16, state.read(data) & 0xffff));
+        try writeMemory16(state, hooks, state.read(base) + state.read(source), @intCast(u16, state.read(data) & 0xffff));
         return;
     }
 
@@ -1416,20 +1418,18 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xfe00) == 0x5800) {
-        const read32 = hooks.read32 orelse return error.MissingRead;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
-        state.write(dest, read32(state.read(base) + state.read(source)));
+        state.write(dest, try readMemory32(state, hooks, state.read(base) + state.read(source)));
         return;
     }
 
     if ((word & 0xfe00) == 0x5a00) {
-        const read16 = hooks.read16 orelse return error.MissingRead;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
-        state.write(dest, read16(state.read(base) + state.read(source)));
+        state.write(dest, try readMemory16(state, hooks, state.read(base) + state.read(source)));
         return;
     }
 
@@ -1443,29 +1443,26 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xfe00) == 0x5e00) {
-        const read16 = hooks.read16 orelse return error.MissingRead;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
-        state.write(dest, signExtendHalf(read16(state.read(base) + state.read(source))));
+        state.write(dest, signExtendHalf(try readMemory16(state, hooks, state.read(base) + state.read(source))));
         return;
     }
 
     if ((word & 0xf800) == 0x6000) {
-        const write32 = hooks.write32 orelse return error.MissingWrite;
         const data = arm_state.lowReg(word);
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f) << 2;
-        write32(state.read(base) + offset, state.read(data));
+        try writeMemory32(state, hooks, state.read(base) + offset, state.read(data));
         return;
     }
 
     if ((word & 0xf800) == 0x6800) {
-        const read32 = hooks.read32 orelse return error.MissingRead;
         const dest = arm_state.lowReg(word);
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f) << 2;
-        state.write(dest, read32(state.read(base) + offset));
+        state.write(dest, try readMemory32(state, hooks, state.read(base) + offset));
         return;
     }
 
@@ -1488,36 +1485,32 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xf800) == 0x8000) {
-        const write16 = hooks.write16 orelse return error.MissingWrite;
         const data = arm_state.lowReg(word);
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f) << 1;
-        write16(state.read(base) + offset, @intCast(u16, state.read(data) & 0xffff));
+        try writeMemory16(state, hooks, state.read(base) + offset, @intCast(u16, state.read(data) & 0xffff));
         return;
     }
 
     if ((word & 0xf800) == 0x8800) {
-        const read16 = hooks.read16 orelse return error.MissingRead;
         const dest = arm_state.lowReg(word);
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f) << 1;
-        state.write(dest, read16(state.read(base) + offset));
+        state.write(dest, try readMemory16(state, hooks, state.read(base) + offset));
         return;
     }
 
     if ((word & 0xf800) == 0x9000) {
-        const write32 = hooks.write32 orelse return error.MissingWrite;
         const data = arm_state.lowReg(word >> 8);
         const offset = @as(u32, word & 0xff) << 2;
-        write32(state.read(.sp) + offset, state.read(data));
+        try writeMemory32(state, hooks, state.read(.sp) + offset, state.read(data));
         return;
     }
 
     if ((word & 0xf800) == 0x9800) {
-        const read32 = hooks.read32 orelse return error.MissingRead;
         const dest = arm_state.lowReg(word >> 8);
         const offset = @as(u32, word & 0xff) << 2;
-        state.write(dest, read32(state.read(.sp) + offset));
+        state.write(dest, try readMemory32(state, hooks, state.read(.sp) + offset));
         return;
     }
 
@@ -1556,13 +1549,12 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         if (count == 0) {
             return error.Unpredictable;
         }
-        const write32 = hooks.write32 orelse return error.MissingWrite;
         const final_sp = state.read(.sp) -% (@as(u32, count) << 2);
         var address = final_sp;
         var index: u8 = 0;
         while (index < 16) : (index += 1) {
             if ((mask & (@as(u16, 1) << @intCast(u4, index))) != 0) {
-                write32(address, state.read(@intToEnum(arm_state.ArmReg, index)));
+                try writeMemory32(state, hooks, address, state.read(@intToEnum(arm_state.ArmReg, index)));
                 address +%= 4;
             }
         }
@@ -1576,32 +1568,35 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         if (count == 0) {
             return error.Unpredictable;
         }
-        const read32 = hooks.read32 orelse return error.MissingRead;
         var address = state.read(.sp);
         var index: u8 = 0;
         while (index < 15) : (index += 1) {
             if ((mask & (@as(u16, 1) << @intCast(u4, index))) != 0) {
-                state.write(@intToEnum(arm_state.ArmReg, index), read32(address));
+                state.write(@intToEnum(arm_state.ArmReg, index), try readMemory32(state, hooks, address));
                 address +%= 4;
             }
         }
         if ((mask & (@as(u16, 1) << 15)) != 0) {
-            loadWritePc(state, read32(address));
+            loadWritePc(state, try readMemory32(state, hooks, address));
             address +%= 4;
         }
         state.write(.sp, address);
         return;
     }
 
+    if ((word & 0xfff7) == 0xb650) {
+        state.setBigEndian((word & 8) != 0);
+        return;
+    }
+
     if ((word & 0xf800) == 0xc000) {
-        const write32 = hooks.write32 orelse return error.MissingWrite;
         const base = arm_state.lowReg(word >> 8);
         const mask = @intCast(u8, word & 0xff);
         var address = state.read(base);
         var index: u8 = 0;
         while (index < 8) : (index += 1) {
             if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
-                write32(address, state.read(@intToEnum(arm_state.ArmReg, index)));
+                try writeMemory32(state, hooks, address, state.read(@intToEnum(arm_state.ArmReg, index)));
                 address +%= 4;
             }
         }
@@ -1610,14 +1605,13 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xf800) == 0xc800) {
-        const read32 = hooks.read32 orelse return error.MissingRead;
         const base = arm_state.lowReg(word >> 8);
         const mask = @intCast(u8, word & 0xff);
         var address = state.read(base);
         var index: u8 = 0;
         while (index < 8) : (index += 1) {
             if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
-                state.write(@intToEnum(arm_state.ArmReg, index), read32(address));
+                state.write(@intToEnum(arm_state.ArmReg, index), try readMemory32(state, hooks, address));
                 address +%= 4;
             }
         }
@@ -1809,6 +1803,42 @@ pub fn byteReverseHalf(value: u32) u32 {
 
 pub fn byteReverseHalfwords(value: u32) u32 {
     return ((value & 0x00ff00ff) << 8) | ((value & 0xff00ff00) >> 8);
+}
+
+fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) RunError!u16 {
+    const read16 = hooks.read16 orelse return error.MissingRead;
+    var value = read16(address);
+    if (state.bigEndian()) {
+        value = @intCast(u16, byteReverseHalf(value));
+    }
+    return value;
+}
+
+fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) RunError!u32 {
+    const read32 = hooks.read32 orelse return error.MissingRead;
+    var value = read32(address);
+    if (state.bigEndian()) {
+        value = byteReverseWord(value);
+    }
+    return value;
+}
+
+fn writeMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u16) RunError!void {
+    const write16 = hooks.write16 orelse return error.MissingWrite;
+    var data = value;
+    if (state.bigEndian()) {
+        data = @intCast(u16, byteReverseHalf(data));
+    }
+    write16(address, data);
+}
+
+fn writeMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u32) RunError!void {
+    const write32 = hooks.write32 orelse return error.MissingWrite;
+    var data = value;
+    if (state.bigEndian()) {
+        data = byteReverseWord(data);
+    }
+    write32(address, data);
 }
 
 fn readOperand(state: *const arm_state.MachineState, reg: arm_state.ArmReg, pc: u32) u32 {

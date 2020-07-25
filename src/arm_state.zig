@@ -132,8 +132,16 @@ pub const MachineState = struct {
         return bits.getBit32(self.cpsr, 5);
     }
 
+    pub fn bigEndian(self: *const MachineState) bool {
+        return bits.getBit32(self.cpsr, 9);
+    }
+
     pub fn setThumb(self: *MachineState, enabled: bool) void {
         self.cpsr = bits.setBit32(self.cpsr, 5, enabled);
+    }
+
+    pub fn setBigEndian(self: *MachineState, enabled: bool) void {
+        self.cpsr = bits.setBit32(self.cpsr, 9, enabled);
     }
 
     pub fn setNegative(self: *MachineState, enabled: bool) void {
