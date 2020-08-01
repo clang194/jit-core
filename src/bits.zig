@@ -22,6 +22,19 @@ pub fn isZero(value: u32) bool {
     return value == 0;
 }
 
+pub const CarryWord = struct {
+    word: u32,
+    carry: bool,
+};
+
+pub fn rotateRightThroughCarry(value: u32, carry_in: bool) CarryWord {
+    const high = if (carry_in) @as(u32, 0x80000000) else @as(u32, 0);
+    return CarryWord{
+        .word = (value >> 1) | high,
+        .carry = getBit32(value, 0),
+    };
+}
+
 pub fn countLow16(value: u16) u8 {
     var remaining = value;
     var count: u8 = 0;

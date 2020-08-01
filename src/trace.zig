@@ -33,6 +33,7 @@ pub const EventKind = enum(u8) {
     shift_right,
     shift_arithmetic_right,
     rotate_right,
+    rotate_right_carry,
     sign_extend_half,
     sign_extend_byte,
     zero_extend_half,
@@ -181,6 +182,10 @@ pub const Tape = struct {
 
     pub fn rotateRight(self: *Tape, value: usize, amount: usize, carry: usize) TraceError!usize {
         return self.push(.rotate_right, Value{ .none = {} }, value, amount, carry);
+    }
+
+    pub fn rotateRightCarry(self: *Tape, value: usize, carry: usize) TraceError!usize {
+        return self.push(.rotate_right_carry, Value{ .none = {} }, value, carry, 0);
     }
 
     pub fn signExtendHalf(self: *Tape, value: usize) TraceError!usize {
