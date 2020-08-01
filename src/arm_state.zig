@@ -72,11 +72,13 @@ pub const HostHooks = struct {
 pub const MachineState = struct {
     regs: [16]u32,
     cpsr: u32,
+    fpscr: u32,
 
     pub fn zeroed() MachineState {
         return MachineState{
             .regs = [_]u32{0} ** 16,
             .cpsr = 0,
+            .fpscr = 0,
         };
     }
 

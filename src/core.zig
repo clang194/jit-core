@@ -132,4 +132,12 @@ pub const Core = struct {
     pub fn statusCopy(self: *const Core) u32 {
         return self.state.cpsr;
     }
+
+    pub fn floatStatus(self: *Core) *u32 {
+        return &self.state.fpscr;
+    }
+
+    pub fn floatStatusCopy(self: *const Core) u32 {
+        return self.state.fpscr;
+    }
 };
