@@ -1,4 +1,5 @@
 const arm_state = @import("arm_state.zig");
+const bits = @import("bits.zig");
 
 pub const ArmStepError = error{
     UnknownInstruction,
@@ -10,6 +11,37 @@ pub const AddResult = struct {
     word: u32,
     carry: bool,
     overflow: bool,
+};
+
+pub const ShiftResult = struct {
+    word: u32,
+    carry: bool,
+};
+
+const DataOp = enum(u4) {
+    bit_and = 0x0,
+    bit_xor = 0x1,
+    sub = 0x2,
+    reverse_sub = 0x3,
+    add = 0x4,
+    add_carry = 0x5,
+    sub_carry = 0x6,
+    reverse_sub_carry = 0x7,
+    test_and = 0x8,
+    test_xor = 0x9,
+    compare = 0xa,
+    compare_negative = 0xb,
+    bit_or = 0xc,
+    move = 0xd,
+    bit_clear = 0xe,
+    move_not = 0xf,
+};
+
+const ShiftMode = enum(u2) {
+    left,
+    right,
+    signed_right,
+    rotate_right,
 };
 
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
@@ -25,6 +57,10 @@ pub fn isSupervisorCall(word: u32) bool {
 
 pub fn supervisorImmediate(word: u32) u32 {
     return word & 0x00ffffff;
+}
+
+pub fn isDataProcessing(word: u32) bool {
+    return dataOp(word) != null;
 }
 
 pub fn isAdcImmediate(word: u32) bool {
@@ -49,6 +85,10 @@ pub fn expandArmImmediate(rotate: u8, value: u8) u32 {
 
 pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks) ArmStepError!void {
     const pc = state.read(.pc);
+    if (isDataProcessing(word)) {
+        return runDataProcessing(word, state, pc);
+    }
+
     if (isAdcImmediate(word)) {
         return runAdcImmediate(word, state, pc);
     }
@@ -104,6 +144,185 @@ pub fn runArmWithHooks(state: *arm_state.MachineState, hooks: arm_state.HostHook
 
 fn armCondition(word: u32) ?arm_state.ConditionCode {
     return arm_state.conditionFromNibble(@intCast(u4, word >> 28));
+}
+
+fn dataOp(word: u32) ?DataOp {
+    if (armCondition(word) == null) {
+        return null;
+    }
+    if ((word & 0x0c000000) != 0) {
+        return null;
+    }
+    const immediate = bits.getBit32(word, 25);
+    if (!immediate and bits.getBit32(word, 4) and bits.getBit32(word, 7)) {
+        return null;
+    }
+    const op = @intToEnum(DataOp, @intCast(u4, (word >> 21) & 0xf));
+    const set_flags = bits.getBit32(word, 20);
+    const base = (word >> 16) & 0xf;
+    const dest = (word >> 12) & 0xf;
+    return switch (op) {
+        .reverse_sub => null,
+        .test_and, .test_xor, .compare, .compare_negative => if (set_flags and dest == 0) op else null,
+        .move, .move_not => if (base == 0) op else null,
+        else => op,
+    };
+}
+
+fn runDataProcessing(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const op = dataOp(word).?;
+    try rejectBadRegisterShift(word, op);
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const set_flags = bits.getBit32(word, 20);
+    const base = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const operand = dataOperand(word, state, pc);
+    const left = readArmOperand(state, base, pc);
+
+    switch (op) {
+        .bit_and => try writeLogicalResult(state, pc, dest, left & operand.word, operand.carry, set_flags),
+        .bit_xor => try writeLogicalResult(state, pc, dest, left ^ operand.word, operand.carry, set_flags),
+        .sub => try writeMathResult(state, pc, dest, subWithCarry(left, operand.word, true), set_flags),
+        .add => try writeMathResult(state, pc, dest, addWithCarry(left, operand.word, false), set_flags),
+        .add_carry => try writeMathResult(state, pc, dest, addWithCarry(left, operand.word, state.carry()), set_flags),
+        .sub_carry => try writeMathResult(state, pc, dest, subWithCarry(left, operand.word, state.carry()), set_flags),
+        .reverse_sub_carry => try writeMathResult(state, pc, dest, subWithCarry(operand.word, left, state.carry()), set_flags),
+        .test_and => writeLogicalFlags(state, left & operand.word, operand.carry),
+        .test_xor => writeLogicalFlags(state, left ^ operand.word, operand.carry),
+        .compare => writeMathFlags(state, subWithCarry(left, operand.word, true)),
+        .compare_negative => writeMathFlags(state, addWithCarry(left, operand.word, false)),
+        .bit_or => try writeLogicalResult(state, pc, dest, left | operand.word, operand.carry, set_flags),
+        .move => try writeLogicalResult(state, pc, dest, operand.word, operand.carry, set_flags),
+        .bit_clear => try writeLogicalResult(state, pc, dest, left & ~operand.word, operand.carry, set_flags),
+        .move_not => try writeLogicalResult(state, pc, dest, ~operand.word, operand.carry, set_flags),
+        .reverse_sub => unreachable,
+    }
+
+    switch (op) {
+        .test_and, .test_xor, .compare, .compare_negative => state.write(.pc, pc + 4),
+        else => {},
+    }
+}
+
+fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
+    if (bits.getBit32(word, 25) or !bits.getBit32(word, 4)) {
+        return;
+    }
+    const base = armReg(word >> 16);
+    const source = armReg(word);
+    const amount = armReg(word >> 8);
+    switch (op) {
+        .compare, .compare_negative => return,
+        .move, .move_not => {
+            if (source == .pc or amount == .pc) {
+                return error.Unpredictable;
+            }
+        },
+        else => {
+            if (base == .pc or source == .pc or amount == .pc) {
+                return error.Unpredictable;
+            }
+        },
+    }
+}
+
+fn dataOperand(word: u32, state: *const arm_state.MachineState, pc: u32) ShiftResult {
+    if (bits.getBit32(word, 25)) {
+        const rotate = @intCast(u8, (word >> 8) & 0xf);
+        const value = @intCast(u8, word & 0xff);
+        const expanded = expandArmImmediate(rotate, value);
+        return ShiftResult{
+            .word = expanded,
+            .carry = if (rotate == 0) state.carry() else bits.topBit(expanded),
+        };
+    }
+
+    const source = armReg(word);
+    const mode = @intToEnum(ShiftMode, @intCast(u2, (word >> 5) & 0x3));
+    const value = readArmOperand(state, source, pc);
+    if (bits.getBit32(word, 4)) {
+        const amount_reg = armReg(word >> 8);
+        const amount = @intCast(u8, readArmOperand(state, amount_reg, pc) & 0xff);
+        return shiftByRegister(value, mode, amount, state.carry());
+    }
+
+    const amount = @intCast(u8, (word >> 7) & 0x1f);
+    return shiftByImmediate(value, mode, amount, state.carry());
+}
+
+fn shiftByImmediate(value: u32, mode: ShiftMode, amount: u8, carry_in: bool) ShiftResult {
+    return switch (mode) {
+        .left => logicalLeft(value, amount, carry_in),
+        .right => logicalRight(value, if (amount == 0) 32 else amount, carry_in),
+        .signed_right => arithmeticRight(value, if (amount == 0) 32 else amount, carry_in),
+        .rotate_right => if (amount == 0) carryRotate(value, carry_in) else rotateRight(value, amount, carry_in),
+    };
+}
+
+fn shiftByRegister(value: u32, mode: ShiftMode, amount: u8, carry_in: bool) ShiftResult {
+    return switch (mode) {
+        .left => logicalLeft(value, amount, carry_in),
+        .right => logicalRight(value, amount, carry_in),
+        .signed_right => arithmeticRight(value, amount, carry_in),
+        .rotate_right => rotateRight(value, amount, carry_in),
+    };
+}
+
+fn carryRotate(value: u32, carry_in: bool) ShiftResult {
+    const result = bits.rotateRightThroughCarry(value, carry_in);
+    return ShiftResult{
+        .word = result.word,
+        .carry = result.carry,
+    };
+}
+
+fn writeLogicalResult(state: *arm_state.MachineState, pc: u32, dest: arm_state.ArmReg, value: u32, carry: bool, set_flags: bool) ArmStepError!void {
+    if (dest == .pc) {
+        if (set_flags) {
+            return error.Unpredictable;
+        }
+        writeArmAluPc(state, value);
+        return;
+    }
+    state.write(dest, value);
+    if (set_flags) {
+        writeLogicalFlags(state, value, carry);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn writeMathResult(state: *arm_state.MachineState, pc: u32, dest: arm_state.ArmReg, result: AddResult, set_flags: bool) ArmStepError!void {
+    if (dest == .pc) {
+        if (set_flags) {
+            return error.Unpredictable;
+        }
+        writeArmAluPc(state, result.word);
+        return;
+    }
+    state.write(dest, result.word);
+    if (set_flags) {
+        writeMathFlags(state, result);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn writeLogicalFlags(state: *arm_state.MachineState, value: u32, carry: bool) void {
+    state.setNegative(bits.topBit(value));
+    state.setZero(value == 0);
+    state.setCarry(carry);
+}
+
+fn writeMathFlags(state: *arm_state.MachineState, result: AddResult) void {
+    state.setNegative(bits.topBit(result.word));
+    state.setZero(result.word == 0);
+    state.setCarry(result.carry);
+    state.setOverflow(result.overflow);
 }
 
 fn runAdcImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
@@ -205,6 +424,68 @@ fn rotateRightWord(value: u32, amount: u8) u32 {
         return value;
     }
     return (value >> @intCast(u5, shift)) | (value << @intCast(u5, 32 - shift));
+}
+
+fn logicalLeft(value: u32, amount: u8, carry_in: bool) ShiftResult {
+    if (amount == 0) {
+        return ShiftResult{ .word = value, .carry = carry_in };
+    }
+    if (amount < 32) {
+        return ShiftResult{
+            .word = value << @intCast(u5, amount),
+            .carry = bits.getBit32(value, @intCast(u5, 32 - amount)),
+        };
+    }
+    if (amount == 32) {
+        return ShiftResult{ .word = 0, .carry = bits.getBit32(value, 0) };
+    }
+    return ShiftResult{ .word = 0, .carry = false };
+}
+
+fn logicalRight(value: u32, amount: u8, carry_in: bool) ShiftResult {
+    if (amount == 0) {
+        return ShiftResult{ .word = value, .carry = carry_in };
+    }
+    if (amount < 32) {
+        return ShiftResult{
+            .word = value >> @intCast(u5, amount),
+            .carry = bits.getBit32(value, @intCast(u5, amount - 1)),
+        };
+    }
+    if (amount == 32) {
+        return ShiftResult{ .word = 0, .carry = bits.getBit32(value, 31) };
+    }
+    return ShiftResult{ .word = 0, .carry = false };
+}
+
+fn arithmeticRight(value: u32, amount: u8, carry_in: bool) ShiftResult {
+    if (amount == 0) {
+        return ShiftResult{ .word = value, .carry = carry_in };
+    }
+    if (amount < 32) {
+        const shift = @intCast(u5, amount);
+        const fill = if (bits.topBit(value)) ~(@as(u32, 0xffffffff) >> shift) else @as(u32, 0);
+        return ShiftResult{
+            .word = (value >> shift) | fill,
+            .carry = bits.getBit32(value, @intCast(u5, amount - 1)),
+        };
+    }
+    if (bits.topBit(value)) {
+        return ShiftResult{ .word = 0xffffffff, .carry = true };
+    }
+    return ShiftResult{ .word = 0, .carry = false };
+}
+
+fn rotateRight(value: u32, amount: u8, carry_in: bool) ShiftResult {
+    if (amount == 0) {
+        return ShiftResult{ .word = value, .carry = carry_in };
+    }
+    const shift = amount & 31;
+    if (shift == 0) {
+        return ShiftResult{ .word = value, .carry = bits.topBit(value) };
+    }
+    const word = (value >> @intCast(u5, shift)) | (value << @intCast(u5, 32 - shift));
+    return ShiftResult{ .word = word, .carry = bits.topBit(word) };
 }
 
 fn byteReverseWord(value: u32) u32 {
