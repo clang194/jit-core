@@ -70,6 +70,14 @@ pub fn supervisorImmediate(word: u32) u32 {
     return word & 0x00ffffff;
 }
 
+pub fn isBranchImmediate(word: u32) bool {
+    return (word & 0x0e000000) == 0x0a000000 and armCondition(word) != null;
+}
+
+pub fn isBranchExchange(word: u32) bool {
+    return (word & 0x0ffffff0) == 0x012fff10 and armCondition(word) != null;
+}
+
 pub fn isDataProcessing(word: u32) bool {
     return dataOp(word) != null;
 }
@@ -100,6 +108,14 @@ pub fn expandArmImmediate(rotate: u8, value: u8) u32 {
 
 pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks) ArmStepError!void {
     const pc = state.read(.pc);
+    if (isBranchImmediate(word)) {
+        return runBranchImmediate(word, state, pc);
+    }
+
+    if (isBranchExchange(word)) {
+        return runBranchExchange(word, state, pc);
+    }
+
     if (isDataProcessing(word)) {
         return runDataProcessing(word, state, pc);
     }
@@ -167,6 +183,31 @@ pub fn runArmWithHooks(state: *arm_state.MachineState, hooks: arm_state.HostHook
 
 fn armCondition(word: u32) ?arm_state.ConditionCode {
     return arm_state.conditionFromNibble(@intCast(u4, word >> 28));
+}
+
+fn runBranchImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const offset = bits.signExtend32((word & 0x00ffffff) << 2, 26) + 8;
+    if (bits.getBit32(word, 24)) {
+        state.write(.lr, pc + 4);
+    }
+    state.write(.pc, addSigned(pc, offset));
+}
+
+fn runBranchExchange(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const source = armReg(word);
+    loadWritePc(state, readArmOperand(state, source, pc));
 }
 
 fn dataOp(word: u32) ?DataOp {
@@ -513,6 +554,23 @@ fn readArmOperand(state: *const arm_state.MachineState, reg: arm_state.ArmReg, p
 
 fn writeArmAluPc(state: *arm_state.MachineState, value: u32) void {
     state.write(.pc, value & 0xfffffffc);
+}
+
+fn loadWritePc(state: *arm_state.MachineState, value: u32) void {
+    if ((value & 1) != 0) {
+        state.setThumb(true);
+        state.write(.pc, value & 0xfffffffe);
+    } else {
+        state.setThumb(false);
+        state.write(.pc, value & 0xfffffffc);
+    }
+}
+
+fn addSigned(value: u32, offset: i32) u32 {
+    if (offset < 0) {
+        return value -% @intCast(u32, -offset);
+    }
+    return value +% @intCast(u32, offset);
 }
 
 fn rotateRightWord(value: u32, amount: u8) u32 {
