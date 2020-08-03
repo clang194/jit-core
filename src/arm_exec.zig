@@ -44,6 +44,17 @@ const ShiftMode = enum(u2) {
     rotate_right,
 };
 
+const ExtendOp = enum(u4) {
+    signed_byte_add,
+    signed_half_add,
+    signed_byte,
+    signed_half,
+    unsigned_byte_add,
+    unsigned_half_add,
+    unsigned_byte,
+    unsigned_half,
+};
+
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
     if (hooks.read32 == null) {
         return error.MissingRead;
@@ -75,6 +86,10 @@ pub fn isRev(word: u32) bool {
     return (word & 0x0fff0ff0) == 0x06bf0f30 and armCondition(word) != null;
 }
 
+pub fn isRevHalfwords(word: u32) bool {
+    return (word & 0x0fff0ff0) == 0x06bf0fb0 and armCondition(word) != null;
+}
+
 pub fn isRevSignedHalf(word: u32) bool {
     return (word & 0x0fff0ff0) == 0x06ff0fb0 and armCondition(word) != null;
 }
@@ -101,8 +116,16 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runRev(word, state, pc);
     }
 
+    if (isRevHalfwords(word)) {
+        return runRevHalfwords(word, state, pc);
+    }
+
     if (isRevSignedHalf(word)) {
         return runRevSignedHalf(word, state, pc);
+    }
+
+    if (extendOp(word)) |_| {
+        return runExtend(word, state, pc);
     }
 
     if (isSupervisorCall(word)) {
@@ -169,6 +192,37 @@ fn dataOp(word: u32) ?DataOp {
     };
 }
 
+fn extendOp(word: u32) ?ExtendOp {
+    if (armCondition(word) == null) {
+        return null;
+    }
+    if ((word & 0x0fff03f0) == 0x06af0070) {
+        return .signed_byte;
+    }
+    if ((word & 0x0fff03f0) == 0x06bf0070) {
+        return .signed_half;
+    }
+    if ((word & 0x0fff03f0) == 0x06ef0070) {
+        return .unsigned_byte;
+    }
+    if ((word & 0x0fff03f0) == 0x06ff0070) {
+        return .unsigned_half;
+    }
+    if ((word & 0x0ff003f0) == 0x06a00070) {
+        return .signed_byte_add;
+    }
+    if ((word & 0x0ff003f0) == 0x06b00070) {
+        return .signed_half_add;
+    }
+    if ((word & 0x0ff003f0) == 0x06e00070) {
+        return .unsigned_byte_add;
+    }
+    if ((word & 0x0ff003f0) == 0x06f00070) {
+        return .unsigned_half_add;
+    }
+    return null;
+}
+
 fn runDataProcessing(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const op = dataOp(word).?;
     try rejectBadRegisterShift(word, op);
@@ -208,6 +262,36 @@ fn runDataProcessing(word: u32, state: *arm_state.MachineState, pc: u32) ArmStep
         .test_and, .test_xor, .compare, .compare_negative => state.write(.pc, pc + 4),
         else => {},
     }
+}
+
+fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const op = extendOp(word).?;
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const rotated = rotateRightWord(state.read(source), @intCast(u8, ((word >> 10) & 0x3) * 8));
+    const base = readArmOperand(state, armReg(word >> 16), pc);
+    const result = switch (op) {
+        .signed_byte_add => base +% signExtendByte(rotated),
+        .signed_half_add => base +% signExtendHalf(rotated),
+        .signed_byte => signExtendByte(rotated),
+        .signed_half => signExtendHalf(rotated),
+        .unsigned_byte_add => base +% (rotated & 0xff),
+        .unsigned_half_add => base +% (rotated & 0xffff),
+        .unsigned_byte => rotated & 0xff,
+        .unsigned_half => rotated & 0xffff,
+    };
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
 }
 
 fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
@@ -390,6 +474,19 @@ fn runRev(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void 
     state.write(.pc, pc + 4);
 }
 
+fn runRevHalfwords(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(dest, byteReverseHalfwords(state.read(source)));
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn runRevSignedHalf(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const dest = armReg(word >> 12);
     const source = armReg(word);
@@ -497,6 +594,18 @@ fn byteReverseWord(value: u32) u32 {
 
 fn byteReverseHalf(value: u32) u32 {
     return ((value & 0xff) << 8) | ((value >> 8) & 0xff);
+}
+
+fn byteReverseHalfwords(value: u32) u32 {
+    return ((value & 0x00ff00ff) << 8) | ((value & 0xff00ff00) >> 8);
+}
+
+fn signExtendByte(value: u32) u32 {
+    const narrowed = value & 0xff;
+    if ((narrowed & 0x80) != 0) {
+        return narrowed | 0xffffff00;
+    }
+    return narrowed;
 }
 
 fn signExtendHalf(value: u32) u32 {

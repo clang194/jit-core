@@ -45,12 +45,29 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return std.fmt.bufPrint(buf, "udf", .{}) catch error.NoSpaceLeft;
     }
 
+    if ((word & 0x0ff000f0) == 0x01200070) {
+        const value = (((word >> 8) & 0xfff) << 4) | (word & 0xf);
+        return std.fmt.bufPrint(buf, "bkpt #{}", .{value}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0x0fffffff) == 0x0320f000) {
+        return std.fmt.bufPrint(buf, "nop", .{}) catch error.NoSpaceLeft;
+    }
+
     if ((word & 0x0fff0ff0) == 0x06bf0f30) {
         return formatArmUnaryReg(buf, "rev", word, cond);
     }
 
+    if (arm_exec.isRevHalfwords(word)) {
+        return formatArmUnaryReg(buf, "rev16", word, cond);
+    }
+
     if ((word & 0x0fff0ff0) == 0x06ff0fb0) {
         return formatArmUnaryReg(buf, "revsh", word, cond);
+    }
+
+    if (armExtendText(word)) |info| {
+        return formatArmExtend(buf, word, info);
     }
 
     if (arm_exec.isDataProcessing(word)) {
@@ -58,6 +75,86 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     }
 
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
+}
+
+const ArmExtendText = struct {
+    name: []const u8,
+    base: bool,
+};
+
+fn formatArmExtend(buf: []u8, word: u32, info: ArmExtendText) TextError![]u8 {
+    const cond = @intCast(u4, word >> 28);
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    var source_buf: [32]u8 = undefined;
+    const source = try formatExtendSource(source_buf[0..], word);
+    if (info.base) {
+        const base = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+        return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
+            info.name,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(base),
+            source,
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "{}{} {}, {}", .{
+        info.name,
+        condName(cond),
+        arm_state.regName(dest),
+        source,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatExtendSource(buf: []u8, word: u32) TextError![]u8 {
+    const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    const rotate = @intCast(u8, ((word >> 10) & 0x3) * 8);
+    if (rotate == 0) {
+        return std.fmt.bufPrint(buf, "{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "{}, ror #{}", .{ arm_state.regName(source), rotate }) catch error.NoSpaceLeft;
+}
+
+fn armExtendText(word: u32) ?ArmExtendText {
+    if (arm_state.conditionFromNibble(@intCast(u4, word >> 28)) == null) {
+        return null;
+    }
+    if ((word & 0x0fff03f0) == 0x068f0070) {
+        return ArmExtendText{ .name = "sxtb16", .base = false };
+    }
+    if ((word & 0x0fff03f0) == 0x06af0070) {
+        return ArmExtendText{ .name = "sxtb", .base = false };
+    }
+    if ((word & 0x0fff03f0) == 0x06bf0070) {
+        return ArmExtendText{ .name = "sxth", .base = false };
+    }
+    if ((word & 0x0fff03f0) == 0x06cf0070) {
+        return ArmExtendText{ .name = "uxtb16", .base = false };
+    }
+    if ((word & 0x0fff03f0) == 0x06ef0070) {
+        return ArmExtendText{ .name = "uxtb", .base = false };
+    }
+    if ((word & 0x0fff03f0) == 0x06ff0070) {
+        return ArmExtendText{ .name = "uxth", .base = false };
+    }
+    if ((word & 0x0ff003f0) == 0x06800070) {
+        return ArmExtendText{ .name = "sxtab16", .base = true };
+    }
+    if ((word & 0x0ff003f0) == 0x06a00070) {
+        return ArmExtendText{ .name = "sxtab", .base = true };
+    }
+    if ((word & 0x0ff003f0) == 0x06b00070) {
+        return ArmExtendText{ .name = "sxtah", .base = true };
+    }
+    if ((word & 0x0ff003f0) == 0x06c00070) {
+        return ArmExtendText{ .name = "uxtab16", .base = true };
+    }
+    if ((word & 0x0ff003f0) == 0x06e00070) {
+        return ArmExtendText{ .name = "uxtab", .base = true };
+    }
+    if ((word & 0x0ff003f0) == 0x06f00070) {
+        return ArmExtendText{ .name = "uxtah", .base = true };
+    }
+    return null;
 }
 
 fn formatArmData(buf: []u8, word: u32) TextError![]u8 {
