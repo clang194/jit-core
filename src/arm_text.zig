@@ -321,7 +321,7 @@ fn dataName(op: u4) ?[]const u8 {
         0x0 => "and",
         0x1 => "eor",
         0x2 => "sub",
-        0x3 => null,
+        0x3 => "rsb",
         0x4 => "add",
         0x5 => "adc",
         0x6 => "sbc",

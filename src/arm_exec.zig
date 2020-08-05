@@ -244,7 +244,6 @@ fn dataOp(word: u32) ?DataOp {
     const base = (word >> 16) & 0xf;
     const dest = (word >> 12) & 0xf;
     return switch (op) {
-        .reverse_sub => null,
         .test_and, .test_xor, .compare, .compare_negative => if (set_flags and dest == 0) op else null,
         .move, .move_not => if (base == 0) op else null,
         else => op,
@@ -330,6 +329,7 @@ fn runDataProcessing(word: u32, state: *arm_state.MachineState, pc: u32) ArmStep
         .bit_and => try writeLogicalResult(state, pc, dest, left & operand.word, operand.carry, set_flags),
         .bit_xor => try writeLogicalResult(state, pc, dest, left ^ operand.word, operand.carry, set_flags),
         .sub => try writeMathResult(state, pc, dest, subWithCarry(left, operand.word, true), set_flags),
+        .reverse_sub => try writeMathResult(state, pc, dest, subWithCarry(operand.word, left, true), set_flags),
         .add => try writeMathResult(state, pc, dest, addWithCarry(left, operand.word, false), set_flags),
         .add_carry => try writeMathResult(state, pc, dest, addWithCarry(left, operand.word, state.carry()), set_flags),
         .sub_carry => try writeMathResult(state, pc, dest, subWithCarry(left, operand.word, state.carry()), set_flags),
@@ -342,7 +342,6 @@ fn runDataProcessing(word: u32, state: *arm_state.MachineState, pc: u32) ArmStep
         .move => try writeLogicalResult(state, pc, dest, operand.word, operand.carry, set_flags),
         .bit_clear => try writeLogicalResult(state, pc, dest, left & ~operand.word, operand.carry, set_flags),
         .move_not => try writeLogicalResult(state, pc, dest, ~operand.word, operand.carry, set_flags),
-        .reverse_sub => unreachable,
     }
 
     switch (op) {
