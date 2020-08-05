@@ -55,6 +55,16 @@ const ExtendOp = enum(u4) {
     unsigned_half,
 };
 
+const MultiplyOp = enum(u4) {
+    multiply,
+    multiply_add,
+    unsigned_long,
+    unsigned_long_add,
+    unsigned_accumulate,
+    signed_long,
+    signed_long_add,
+};
+
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
     if (hooks.read32 == null) {
         return error.MissingRead;
@@ -76,6 +86,10 @@ pub fn isBranchImmediate(word: u32) bool {
 
 pub fn isBranchExchange(word: u32) bool {
     return (word & 0x0ffffff0) == 0x012fff10 and armCondition(word) != null;
+}
+
+pub fn isMultiply(word: u32) bool {
+    return multiplyOp(word) != null;
 }
 
 pub fn isDataProcessing(word: u32) bool {
@@ -118,6 +132,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isDataProcessing(word)) {
         return runDataProcessing(word, state, pc);
+    }
+
+    if (isMultiply(word)) {
+        return runMultiply(word, state, pc);
     }
 
     if (isAdcImmediate(word)) {
@@ -264,6 +282,34 @@ fn extendOp(word: u32) ?ExtendOp {
     return null;
 }
 
+fn multiplyOp(word: u32) ?MultiplyOp {
+    if (armCondition(word) == null) {
+        return null;
+    }
+    if ((word & 0x0fe0f0f0) == 0x00000090) {
+        return .multiply;
+    }
+    if ((word & 0x0fe000f0) == 0x00200090) {
+        return .multiply_add;
+    }
+    if ((word & 0x0fe000f0) == 0x00800090) {
+        return .unsigned_long;
+    }
+    if ((word & 0x0fe000f0) == 0x00a00090) {
+        return .unsigned_long_add;
+    }
+    if ((word & 0x0ff000f0) == 0x00400090) {
+        return .unsigned_accumulate;
+    }
+    if ((word & 0x0fe000f0) == 0x00c00090) {
+        return .signed_long;
+    }
+    if ((word & 0x0fe000f0) == 0x00e00090) {
+        return .signed_long_add;
+    }
+    return null;
+}
+
 fn runDataProcessing(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const op = dataOp(word).?;
     try rejectBadRegisterShift(word, op);
@@ -303,6 +349,85 @@ fn runDataProcessing(word: u32, state: *arm_state.MachineState, pc: u32) ArmStep
         .test_and, .test_xor, .compare, .compare_negative => state.write(.pc, pc + 4),
         else => {},
     }
+}
+
+fn runMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const op = multiplyOp(word).?;
+    const code = armCondition(word).?;
+    const set_flags = bits.getBit32(word, 20);
+    const high = armReg(word >> 16);
+    const low = armReg(word >> 12);
+    const left = armReg(word);
+    const right = armReg(word >> 8);
+
+    if (high == .pc or left == .pc or right == .pc) {
+        return error.Unpredictable;
+    }
+    switch (op) {
+        .multiply_add => {},
+        .multiply => {},
+        else => {
+            if (low == .pc or low == high) {
+                return error.Unpredictable;
+            }
+        },
+    }
+
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    switch (op) {
+        .multiply => {
+            const result = state.read(left) *% state.read(right);
+            state.write(high, result);
+            if (set_flags) {
+                writeMultiplyFlags(state, result);
+            }
+        },
+        .multiply_add => {
+            const addend = readArmOperand(state, low, pc);
+            const result = (state.read(left) *% state.read(right)) +% addend;
+            state.write(high, result);
+            if (set_flags) {
+                writeMultiplyFlags(state, result);
+            }
+        },
+        .unsigned_long => {
+            const result = @as(u64, state.read(left)) * @as(u64, state.read(right));
+            writeLongResult(state, high, low, result);
+            if (set_flags) {
+                writeLongMultiplyFlags(state, result);
+            }
+        },
+        .unsigned_long_add => {
+            const result = (@as(u64, state.read(left)) * @as(u64, state.read(right))) +% readLong(state, high, low);
+            writeLongResult(state, high, low, result);
+            if (set_flags) {
+                writeLongMultiplyFlags(state, result);
+            }
+        },
+        .unsigned_accumulate => {
+            const result = (@as(u64, state.read(left)) * @as(u64, state.read(right))) +% @as(u64, state.read(high)) +% @as(u64, state.read(low));
+            writeLongResult(state, high, low, result);
+        },
+        .signed_long => {
+            const result = signedProduct(state.read(left), state.read(right));
+            writeLongResult(state, high, low, result);
+            if (set_flags) {
+                writeLongMultiplyFlags(state, result);
+            }
+        },
+        .signed_long_add => {
+            const result = signedProduct(state.read(left), state.read(right)) +% readLong(state, high, low);
+            writeLongResult(state, high, low, result);
+            if (set_flags) {
+                writeLongMultiplyFlags(state, result);
+            }
+        },
+    }
+    state.write(.pc, pc + 4);
 }
 
 fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
@@ -450,6 +575,16 @@ fn writeMathFlags(state: *arm_state.MachineState, result: AddResult) void {
     state.setOverflow(result.overflow);
 }
 
+fn writeMultiplyFlags(state: *arm_state.MachineState, value: u32) void {
+    state.setNegative(bits.topBit(value));
+    state.setZero(value == 0);
+}
+
+fn writeLongMultiplyFlags(state: *arm_state.MachineState, value: u64) void {
+    state.setNegative((value & 0x8000000000000000) != 0);
+    state.setZero(value == 0);
+}
+
 fn runAdcImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -571,6 +706,21 @@ fn addSigned(value: u32, offset: i32) u32 {
         return value -% @intCast(u32, -offset);
     }
     return value +% @intCast(u32, offset);
+}
+
+fn readLong(state: *const arm_state.MachineState, high: arm_state.ArmReg, low: arm_state.ArmReg) u64 {
+    return (@as(u64, state.read(high)) << 32) | @as(u64, state.read(low));
+}
+
+fn writeLongResult(state: *arm_state.MachineState, high: arm_state.ArmReg, low: arm_state.ArmReg, value: u64) void {
+    state.write(low, @intCast(u32, value & 0xffffffff));
+    state.write(high, @intCast(u32, value >> 32));
+}
+
+fn signedProduct(left: u32, right: u32) u64 {
+    const wide_left = @as(i64, @bitCast(i32, left));
+    const wide_right = @as(i64, @bitCast(i32, right));
+    return @bitCast(u64, wide_left * wide_right);
 }
 
 fn rotateRightWord(value: u32, amount: u8) u32 {
