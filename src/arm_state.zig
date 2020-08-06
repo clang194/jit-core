@@ -37,6 +37,76 @@ pub const ConditionCode = enum(u4) {
     al = 0xe,
 };
 
+pub const FloatWordReg = enum(u5) {
+    s0,
+    s1,
+    s2,
+    s3,
+    s4,
+    s5,
+    s6,
+    s7,
+    s8,
+    s9,
+    s10,
+    s11,
+    s12,
+    s13,
+    s14,
+    s15,
+    s16,
+    s17,
+    s18,
+    s19,
+    s20,
+    s21,
+    s22,
+    s23,
+    s24,
+    s25,
+    s26,
+    s27,
+    s28,
+    s29,
+    s30,
+    s31,
+};
+
+pub const FloatPairReg = enum(u5) {
+    d0,
+    d1,
+    d2,
+    d3,
+    d4,
+    d5,
+    d6,
+    d7,
+    d8,
+    d9,
+    d10,
+    d11,
+    d12,
+    d13,
+    d14,
+    d15,
+    d16,
+    d17,
+    d18,
+    d19,
+    d20,
+    d21,
+    d22,
+    d23,
+    d24,
+    d25,
+    d26,
+    d27,
+    d28,
+    d29,
+    d30,
+    d31,
+};
+
 pub const HostHooks = struct {
     read8: ?fn (u32) u8,
     read16: ?fn (u32) u16,
@@ -71,12 +141,14 @@ pub const HostHooks = struct {
 
 pub const MachineState = struct {
     regs: [16]u32,
+    float_regs: [64]u32,
     cpsr: u32,
     fpscr: u32,
 
     pub fn zeroed() MachineState {
         return MachineState{
             .regs = [_]u32{0} ** 16,
+            .float_regs = [_]u32{0} ** 64,
             .cpsr = 0,
             .fpscr = 0,
         };
@@ -88,6 +160,25 @@ pub const MachineState = struct {
 
     pub fn write(self: *MachineState, reg: ArmReg, value: u32) void {
         self.regs[@enumToInt(reg)] = value;
+    }
+
+    pub fn readFloatWord(self: *const MachineState, reg: FloatWordReg) u32 {
+        return self.float_regs[@enumToInt(reg)];
+    }
+
+    pub fn writeFloatWord(self: *MachineState, reg: FloatWordReg, value: u32) void {
+        self.float_regs[@enumToInt(reg)] = value;
+    }
+
+    pub fn readFloatPair(self: *const MachineState, reg: FloatPairReg) u64 {
+        const index = @as(usize, @enumToInt(reg)) * 2;
+        return @as(u64, self.float_regs[index]) | (@as(u64, self.float_regs[index + 1]) << 32);
+    }
+
+    pub fn writeFloatPair(self: *MachineState, reg: FloatPairReg, value: u64) void {
+        const index = @as(usize, @enumToInt(reg)) * 2;
+        self.float_regs[index] = @intCast(u32, value & 0xffffffff);
+        self.float_regs[index + 1] = @intCast(u32, value >> 32);
     }
 
     pub fn carry(self: *const MachineState) bool {

@@ -125,6 +125,14 @@ pub const Core = struct {
         return self.state.regs;
     }
 
+    pub fn floatRegs(self: *Core) *[64]u32 {
+        return &self.state.float_regs;
+    }
+
+    pub fn floatRegsCopy(self: *const Core) [64]u32 {
+        return self.state.float_regs;
+    }
+
     pub fn status(self: *Core) *u32 {
         return &self.state.cpsr;
     }
@@ -139,5 +147,9 @@ pub const Core = struct {
 
     pub fn floatStatusCopy(self: *const Core) u32 {
         return self.state.fpscr;
+    }
+
+    pub fn writeFloatStatus(self: *Core, value: u32) void {
+        self.state.fpscr = value;
     }
 };
