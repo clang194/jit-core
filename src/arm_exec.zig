@@ -92,6 +92,16 @@ pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
 
+pub fn isLoadWord(word: u32) bool {
+    if (armCondition(word) == null) {
+        return false;
+    }
+    if ((word & 0x0e500000) == 0x04100000) {
+        return true;
+    }
+    return (word & 0x0e500010) == 0x06100000;
+}
+
 pub fn isDataProcessing(word: u32) bool {
     return dataOp(word) != null;
 }
@@ -136,6 +146,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isMultiply(word)) {
         return runMultiply(word, state, pc);
+    }
+
+    if (isLoadWord(word)) {
+        return runLoadWord(word, state, hooks, pc);
     }
 
     if (isAdcImmediate(word)) {
@@ -459,6 +473,39 @@ fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!vo
     state.write(.pc, pc + 4);
 }
 
+fn runLoadWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const pre_index = bits.getBit32(word, 24);
+    const increase = bits.getBit32(word, 23);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const base_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const base = readArmOperand(state, base_reg, pc);
+    const offset = loadWordOffset(word, state, pc);
+    const changed = offsetAddress(base, offset, increase);
+    const address = if (pre_index) changed else base;
+
+    if (writeback) {
+        if (base_reg == .pc) {
+            return error.Unpredictable;
+        }
+        state.write(base_reg, changed);
+    }
+
+    const data = try readMemory32(state, hooks, address);
+    if (dest == .pc) {
+        loadWritePc(state, data);
+        return;
+    }
+    state.write(dest, data);
+    state.write(.pc, pc + 4);
+}
+
 fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
     if (bits.getBit32(word, 25) or !bits.getBit32(word, 4)) {
         return;
@@ -479,6 +526,23 @@ fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
             }
         },
     }
+}
+
+fn loadWordOffset(word: u32, state: *const arm_state.MachineState, pc: u32) u32 {
+    if (!bits.getBit32(word, 25)) {
+        return word & 0xfff;
+    }
+    const source = armReg(word);
+    const mode = @intToEnum(ShiftMode, @intCast(u2, (word >> 5) & 0x3));
+    const amount = @intCast(u8, (word >> 7) & 0x1f);
+    return shiftByImmediate(readArmOperand(state, source, pc), mode, amount, state.carry()).word;
+}
+
+fn offsetAddress(base: u32, offset: u32, increase: bool) u32 {
+    if (increase) {
+        return base +% offset;
+    }
+    return base -% offset;
 }
 
 fn dataOperand(word: u32, state: *const arm_state.MachineState, pc: u32) ShiftResult {
@@ -698,6 +762,15 @@ fn loadWritePc(state: *arm_state.MachineState, value: u32) void {
         state.setThumb(false);
         state.write(.pc, value & 0xfffffffc);
     }
+}
+
+fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) ArmStepError!u32 {
+    const read32 = hooks.read32 orelse return error.MissingRead;
+    var value = read32(address);
+    if (state.bigEndian()) {
+        value = byteReverseWord(value);
+    }
+    return value;
 }
 
 fn addSigned(value: u32, offset: i32) u32 {
