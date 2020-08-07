@@ -86,6 +86,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmTransferWord(buf, "strb", word);
     }
 
+    if (arm_exec.isStoreHalf(word)) {
+        return formatArmTransferHalf(buf, "strh", word);
+    }
+
     if (arm_exec.isDataProcessing(word)) {
         return formatArmData(buf, word);
     }
@@ -333,6 +337,73 @@ fn formatArmLoadOffset(buf: []u8, word: u32) TextError![]u8 {
         shiftName(mode),
         amount,
     }) catch error.NoSpaceLeft;
+}
+
+fn formatArmTransferHalf(buf: []u8, comptime op: []const u8, word: u32) TextError![]u8 {
+    const cond = @intCast(u4, word >> 28);
+    const pre_index = bits.getBit32(word, 24);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const base = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+    const bang: []const u8 = if (writeback) "!" else "";
+    var offset_buf: [48]u8 = undefined;
+    const offset = try formatArmHalfOffset(offset_buf[0..], word);
+
+    if (pre_index) {
+        if (offset.len == 0) {
+            return std.fmt.bufPrint(buf, "{}{} {}, [{}]{}", .{
+                op,
+                condName(cond),
+                arm_state.regName(dest),
+                arm_state.regName(base),
+                bang,
+            }) catch error.NoSpaceLeft;
+        }
+        return std.fmt.bufPrint(buf, "{}{} {}, [{}, {}]{}", .{
+            op,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(base),
+            offset,
+            bang,
+        }) catch error.NoSpaceLeft;
+    }
+
+    if (offset.len == 0) {
+        return std.fmt.bufPrint(buf, "{}{} {}, [{}], #0", .{
+            op,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "{}{} {}, [{}], {}", .{
+        op,
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(base),
+        offset,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatArmHalfOffset(buf: []u8, word: u32) TextError![]u8 {
+    const increase = bits.getBit32(word, 23);
+    if (bits.getBit32(word, 22)) {
+        const offset = ((word >> 4) & 0xf0) | (word & 0xf);
+        if (offset == 0) {
+            return buf[0..0];
+        }
+        if (increase) {
+            return std.fmt.bufPrint(buf, "#{}", .{offset}) catch error.NoSpaceLeft;
+        }
+        return std.fmt.bufPrint(buf, "#-{}", .{offset}) catch error.NoSpaceLeft;
+    }
+
+    const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    if (increase) {
+        return std.fmt.bufPrint(buf, "{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "-{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
 }
 
 fn formatArmData(buf: []u8, word: u32) TextError![]u8 {

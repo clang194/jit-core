@@ -123,6 +123,16 @@ pub fn isStoreByte(word: u32) bool {
     return (word & 0x0e500010) == 0x06400000;
 }
 
+pub fn isStoreHalf(word: u32) bool {
+    if (armCondition(word) == null) {
+        return false;
+    }
+    if ((word & 0x0e5000f0) == 0x004000b0) {
+        return true;
+    }
+    return (word & 0x0e500ff0) == 0x000000b0;
+}
+
 pub fn isDataProcessing(word: u32) bool {
     return dataOp(word) != null;
 }
@@ -179,6 +189,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isStoreByte(word)) {
         return runStoreByte(word, state, hooks, pc);
+    }
+
+    if (isStoreHalf(word)) {
+        return runStoreHalf(word, state, hooks, pc);
     }
 
     if (isAdcImmediate(word)) {
@@ -592,6 +606,35 @@ fn runStoreByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
     state.write(.pc, pc + 4);
 }
 
+fn runStoreHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const pre_index = bits.getBit32(word, 24);
+    const increase = bits.getBit32(word, 23);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const base_reg = armReg(word >> 16);
+    const data_reg = armReg(word >> 12);
+    const base = readArmOperand(state, base_reg, pc);
+    const offset = transferHalfOffset(word, state, pc);
+    const changed = offsetAddress(base, offset, increase);
+    const address = if (pre_index) changed else base;
+
+    if (writeback) {
+        if (base_reg == .pc) {
+            return error.Unpredictable;
+        }
+        state.write(base_reg, changed);
+    }
+
+    const data = if (data_reg == .pc) @intCast(u16, pc & 0xffff) else @intCast(u16, state.read(data_reg) & 0xffff);
+    try writeMemory16(state, hooks, address, data);
+    state.write(.pc, pc + 4);
+}
+
 fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
     if (bits.getBit32(word, 25) or !bits.getBit32(word, 4)) {
         return;
@@ -629,6 +672,13 @@ fn offsetAddress(base: u32, offset: u32, increase: bool) u32 {
         return base +% offset;
     }
     return base -% offset;
+}
+
+fn transferHalfOffset(word: u32, state: *const arm_state.MachineState, pc: u32) u32 {
+    if (bits.getBit32(word, 22)) {
+        return ((word >> 4) & 0xf0) | (word & 0xf);
+    }
+    return readArmOperand(state, armReg(word), pc);
 }
 
 fn dataOperand(word: u32, state: *const arm_state.MachineState, pc: u32) ShiftResult {
@@ -866,6 +916,15 @@ fn writeMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHook
         data = byteReverseWord(data);
     }
     write32(address, data);
+}
+
+fn writeMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u16) ArmStepError!void {
+    const write16 = hooks.write16 orelse return error.MissingWrite;
+    var data = value;
+    if (state.bigEndian()) {
+        data = @intCast(u16, byteReverseHalf(data));
+    }
+    write16(address, data);
 }
 
 fn writeMemory8(hooks: arm_state.HostHooks, address: u32, value: u8) ArmStepError!void {
