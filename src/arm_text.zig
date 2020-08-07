@@ -75,7 +75,11 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     }
 
     if (arm_exec.isLoadWord(word)) {
-        return formatArmLoadWord(buf, word);
+        return formatArmTransferWord(buf, "ldr", word);
+    }
+
+    if (arm_exec.isStoreWord(word)) {
+        return formatArmTransferWord(buf, "str", word);
     }
 
     if (arm_exec.isDataProcessing(word)) {
@@ -243,7 +247,7 @@ fn multiplyText(word: u32) ?MultiplyText {
     return null;
 }
 
-fn formatArmLoadWord(buf: []u8, word: u32) TextError![]u8 {
+fn formatArmTransferWord(buf: []u8, comptime op: []const u8, word: u32) TextError![]u8 {
     const cond = @intCast(u4, word >> 28);
     const pre_index = bits.getBit32(word, 24);
     const writeback = !pre_index or bits.getBit32(word, 21);
@@ -255,14 +259,16 @@ fn formatArmLoadWord(buf: []u8, word: u32) TextError![]u8 {
 
     if (pre_index) {
         if (offset.len == 0) {
-            return std.fmt.bufPrint(buf, "ldr{} {}, [{}]{}", .{
+            return std.fmt.bufPrint(buf, "{}{} {}, [{}]{}", .{
+                op,
                 condName(cond),
                 arm_state.regName(dest),
                 arm_state.regName(base),
                 bang,
             }) catch error.NoSpaceLeft;
         }
-        return std.fmt.bufPrint(buf, "ldr{} {}, [{}, {}]{}", .{
+        return std.fmt.bufPrint(buf, "{}{} {}, [{}, {}]{}", .{
+            op,
             condName(cond),
             arm_state.regName(dest),
             arm_state.regName(base),
@@ -272,13 +278,15 @@ fn formatArmLoadWord(buf: []u8, word: u32) TextError![]u8 {
     }
 
     if (offset.len == 0) {
-        return std.fmt.bufPrint(buf, "ldr{} {}, [{}], #0", .{
+        return std.fmt.bufPrint(buf, "{}{} {}, [{}], #0", .{
+            op,
             condName(cond),
             arm_state.regName(dest),
             arm_state.regName(base),
         }) catch error.NoSpaceLeft;
     }
-    return std.fmt.bufPrint(buf, "ldr{} {}, [{}], {}", .{
+    return std.fmt.bufPrint(buf, "{}{} {}, [{}], {}", .{
+        op,
         condName(cond),
         arm_state.regName(dest),
         arm_state.regName(base),
