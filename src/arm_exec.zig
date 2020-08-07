@@ -133,6 +133,16 @@ pub fn isStoreHalf(word: u32) bool {
     return (word & 0x0e500ff0) == 0x000000b0;
 }
 
+pub fn isStoreDouble(word: u32) bool {
+    if (armCondition(word) == null) {
+        return false;
+    }
+    if ((word & 0x0e5000f0) == 0x004000f0) {
+        return true;
+    }
+    return (word & 0x0e500ff0) == 0x000000f0;
+}
+
 pub fn isDataProcessing(word: u32) bool {
     return dataOp(word) != null;
 }
@@ -193,6 +203,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isStoreHalf(word)) {
         return runStoreHalf(word, state, hooks, pc);
+    }
+
+    if (isStoreDouble(word)) {
+        return runStoreDouble(word, state, hooks, pc);
     }
 
     if (isAdcImmediate(word)) {
@@ -635,6 +649,35 @@ fn runStoreHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
     state.write(.pc, pc + 4);
 }
 
+fn runStoreDouble(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const pre_index = bits.getBit32(word, 24);
+    const increase = bits.getBit32(word, 23);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const base_reg = armReg(word >> 16);
+    const first_reg = armReg(word >> 12);
+    const base = readArmOperand(state, base_reg, pc);
+    const offset = transferHalfOffset(word, state, pc);
+    const changed = offsetAddress(base, offset, increase);
+    const address = if (pre_index) changed else base;
+
+    if (writeback) {
+        if (base_reg == .pc) {
+            return error.Unpredictable;
+        }
+        state.write(base_reg, changed);
+    }
+
+    try writeMemory32(state, hooks, address, readArmOperand(state, first_reg, pc));
+    try writeMemory32(state, hooks, address +% 4, readArmOperand(state, nextArmReg(first_reg), pc));
+    state.write(.pc, pc + 4);
+}
+
 fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
     if (bits.getBit32(word, 25) or !bits.getBit32(word, 4)) {
         return;
@@ -877,6 +920,14 @@ fn runRevSignedHalf(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepE
 
 fn armReg(value: u32) arm_state.ArmReg {
     return @intToEnum(arm_state.ArmReg, @intCast(u8, value & 0xf));
+}
+
+fn nextArmReg(reg: arm_state.ArmReg) arm_state.ArmReg {
+    const next = @enumToInt(reg) + 1;
+    if (next >= 15) {
+        return .pc;
+    }
+    return @intToEnum(arm_state.ArmReg, @intCast(u8, next));
 }
 
 fn readArmOperand(state: *const arm_state.MachineState, reg: arm_state.ArmReg, pc: u32) u32 {

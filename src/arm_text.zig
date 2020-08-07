@@ -90,6 +90,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmTransferHalf(buf, "strh", word);
     }
 
+    if (arm_exec.isStoreDouble(word)) {
+        return formatArmTransferDouble(buf, word);
+    }
+
     if (arm_exec.isDataProcessing(word)) {
         return formatArmData(buf, word);
     }
@@ -404,6 +408,61 @@ fn formatArmHalfOffset(buf: []u8, word: u32) TextError![]u8 {
         return std.fmt.bufPrint(buf, "{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "-{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
+}
+
+fn formatArmTransferDouble(buf: []u8, word: u32) TextError![]u8 {
+    const cond = @intCast(u4, word >> 28);
+    const pre_index = bits.getBit32(word, 24);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const first = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const base = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+    const bang: []const u8 = if (writeback) "!" else "";
+    var offset_buf: [48]u8 = undefined;
+    const offset = try formatArmHalfOffset(offset_buf[0..], word);
+
+    if (pre_index) {
+        if (offset.len == 0) {
+            return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}]{}", .{
+                condName(cond),
+                arm_state.regName(first),
+                arm_state.regName(nextReg(first)),
+                arm_state.regName(base),
+                bang,
+            }) catch error.NoSpaceLeft;
+        }
+        return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}, {}]{}", .{
+            condName(cond),
+            arm_state.regName(first),
+            arm_state.regName(nextReg(first)),
+            arm_state.regName(base),
+            offset,
+            bang,
+        }) catch error.NoSpaceLeft;
+    }
+
+    if (offset.len == 0) {
+        return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}], #0", .{
+            condName(cond),
+            arm_state.regName(first),
+            arm_state.regName(nextReg(first)),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}], {}", .{
+        condName(cond),
+        arm_state.regName(first),
+        arm_state.regName(nextReg(first)),
+        arm_state.regName(base),
+        offset,
+    }) catch error.NoSpaceLeft;
+}
+
+fn nextReg(reg: arm_state.ArmReg) arm_state.ArmReg {
+    const next = @enumToInt(reg) + 1;
+    if (next >= 15) {
+        return .pc;
+    }
+    return @intToEnum(arm_state.ArmReg, @intCast(u8, next));
 }
 
 fn formatArmData(buf: []u8, word: u32) TextError![]u8 {
