@@ -78,6 +78,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmTransferWord(buf, "ldr", word);
     }
 
+    if (arm_exec.isLoadByte(word)) {
+        return formatArmTransferWord(buf, "ldrb", word);
+    }
+
     if (arm_exec.isStoreWord(word)) {
         return formatArmTransferWord(buf, "str", word);
     }

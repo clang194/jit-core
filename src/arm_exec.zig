@@ -103,6 +103,16 @@ pub fn isLoadWord(word: u32) bool {
     return (word & 0x0e500010) == 0x06100000;
 }
 
+pub fn isLoadByte(word: u32) bool {
+    if (armCondition(word) == null) {
+        return false;
+    }
+    if ((word & 0x0e500000) == 0x04500000) {
+        return true;
+    }
+    return (word & 0x0e500010) == 0x06500000;
+}
+
 pub fn isStoreWord(word: u32) bool {
     if (armCondition(word) == null) {
         return false;
@@ -191,6 +201,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isLoadWord(word)) {
         return runLoadWord(word, state, hooks, pc);
+    }
+
+    if (isLoadByte(word)) {
+        return runLoadByte(word, state, hooks, pc);
     }
 
     if (isStoreWord(word)) {
@@ -557,6 +571,39 @@ fn runLoadWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
     const data = try readMemory32(state, hooks, address);
     if (dest == .pc) {
         loadWritePc(state, data);
+        return;
+    }
+    state.write(dest, data);
+    state.write(.pc, pc + 4);
+}
+
+fn runLoadByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const pre_index = bits.getBit32(word, 24);
+    const increase = bits.getBit32(word, 23);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const base_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const base = readArmOperand(state, base_reg, pc);
+    const offset = transferWordOffset(word, state, pc);
+    const changed = offsetAddress(base, offset, increase);
+    const address = if (pre_index) changed else base;
+
+    if (writeback) {
+        if (base_reg == .pc) {
+            return error.Unpredictable;
+        }
+        state.write(base_reg, changed);
+    }
+
+    const data = try readMemory8(hooks, address);
+    if (dest == .pc) {
+        writeArmAluPc(state, data +% 4);
         return;
     }
     state.write(dest, data);
@@ -958,6 +1005,11 @@ fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks
         value = byteReverseWord(value);
     }
     return value;
+}
+
+fn readMemory8(hooks: arm_state.HostHooks, address: u32) ArmStepError!u8 {
+    const read8 = hooks.read8 orelse return error.MissingRead;
+    return read8(address);
 }
 
 fn writeMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u32) ArmStepError!void {
