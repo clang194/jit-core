@@ -35,6 +35,7 @@ pub const ConditionCode = enum(u4) {
     gt = 0xc,
     le = 0xd,
     al = 0xe,
+    nv = 0xf,
 };
 
 pub const FloatWordReg = enum(u5) {
@@ -218,6 +219,7 @@ pub const MachineState = struct {
             .gt => !z and n == v,
             .le => z or n != v,
             .al => true,
+            .nv => false,
         };
     }
 
@@ -284,9 +286,6 @@ pub fn regName(reg: ArmReg) []const u8 {
 }
 
 pub fn conditionFromNibble(value: u4) ?ConditionCode {
-    if (value == 0xf) {
-        return null;
-    }
     return @intToEnum(ConditionCode, value);
 }
 
@@ -307,5 +306,6 @@ pub fn conditionSuffix(code: ConditionCode) []const u8 {
         .gt => "gt",
         .le => "le",
         .al => "",
+        .nv => "nv",
     };
 }
