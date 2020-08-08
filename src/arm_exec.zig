@@ -123,6 +123,16 @@ pub fn isLoadHalf(word: u32) bool {
     return (word & 0x0e500ff0) == 0x001000b0;
 }
 
+pub fn isLoadDouble(word: u32) bool {
+    if (armCondition(word) == null) {
+        return false;
+    }
+    if ((word & 0x0e5000f0) == 0x004000d0) {
+        return true;
+    }
+    return (word & 0x0e500ff0) == 0x000000d0;
+}
+
 pub fn isStoreWord(word: u32) bool {
     if (armCondition(word) == null) {
         return false;
@@ -219,6 +229,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isLoadHalf(word)) {
         return runLoadHalf(word, state, hooks, pc);
+    }
+
+    if (isLoadDouble(word)) {
+        return runLoadDouble(word, state, hooks, pc);
     }
 
     if (isStoreWord(word)) {
@@ -655,6 +669,54 @@ fn runLoadHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
     }
     state.write(dest, data);
     state.write(.pc, pc + 4);
+}
+
+fn runLoadDouble(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const pre_index = bits.getBit32(word, 24);
+    const increase = bits.getBit32(word, 23);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const base_reg = armReg(word >> 16);
+    const first_reg = armReg(word >> 12);
+    const second_reg = nextArmReg(first_reg);
+    const base = readArmOperand(state, base_reg, pc);
+    const offset = transferHalfOffset(word, state, pc);
+    const changed = offsetAddress(base, offset, increase);
+    const address = if (pre_index) changed else base;
+
+    if (writeback) {
+        if (base_reg == .pc) {
+            return error.Unpredictable;
+        }
+        state.write(base_reg, changed);
+    }
+
+    var first = try readMemory32(state, hooks, address);
+    var second = try readMemory32(state, hooks, address +% 4);
+    if (first_reg == .pc) {
+        first +%= 4;
+    } else if (first_reg == .lr) {
+        second +%= 4;
+    }
+
+    if (first_reg == .pc) {
+        writeArmAluPc(state, first);
+    } else {
+        state.write(first_reg, first);
+    }
+    if (second_reg == .pc) {
+        writeArmAluPc(state, second);
+    } else {
+        state.write(second_reg, second);
+    }
+    if (first_reg != .pc and second_reg != .pc) {
+        state.write(.pc, pc + 4);
+    }
 }
 
 fn runStoreWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {

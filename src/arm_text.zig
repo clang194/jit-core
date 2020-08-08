@@ -86,6 +86,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmTransferHalf(buf, "ldrh", word);
     }
 
+    if (arm_exec.isLoadDouble(word)) {
+        return formatArmTransferDouble(buf, "ldrd", word);
+    }
+
     if (arm_exec.isStoreWord(word)) {
         return formatArmTransferWord(buf, "str", word);
     }
@@ -99,7 +103,7 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     }
 
     if (arm_exec.isStoreDouble(word)) {
-        return formatArmTransferDouble(buf, word);
+        return formatArmTransferDouble(buf, "strd", word);
     }
 
     if (arm_exec.isDataProcessing(word)) {
@@ -418,7 +422,7 @@ fn formatArmHalfOffset(buf: []u8, word: u32) TextError![]u8 {
     return std.fmt.bufPrint(buf, "-{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
 }
 
-fn formatArmTransferDouble(buf: []u8, word: u32) TextError![]u8 {
+fn formatArmTransferDouble(buf: []u8, comptime op: []const u8, word: u32) TextError![]u8 {
     const cond = @intCast(u4, word >> 28);
     const pre_index = bits.getBit32(word, 24);
     const writeback = !pre_index or bits.getBit32(word, 21);
@@ -430,7 +434,8 @@ fn formatArmTransferDouble(buf: []u8, word: u32) TextError![]u8 {
 
     if (pre_index) {
         if (offset.len == 0) {
-            return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}]{}", .{
+            return std.fmt.bufPrint(buf, "{}{} {}, {}, [{}]{}", .{
+                op,
                 condName(cond),
                 arm_state.regName(first),
                 arm_state.regName(nextReg(first)),
@@ -438,7 +443,8 @@ fn formatArmTransferDouble(buf: []u8, word: u32) TextError![]u8 {
                 bang,
             }) catch error.NoSpaceLeft;
         }
-        return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}, {}]{}", .{
+        return std.fmt.bufPrint(buf, "{}{} {}, {}, [{}, {}]{}", .{
+            op,
             condName(cond),
             arm_state.regName(first),
             arm_state.regName(nextReg(first)),
@@ -449,14 +455,16 @@ fn formatArmTransferDouble(buf: []u8, word: u32) TextError![]u8 {
     }
 
     if (offset.len == 0) {
-        return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}], #0", .{
+        return std.fmt.bufPrint(buf, "{}{} {}, {}, [{}], #0", .{
+            op,
             condName(cond),
             arm_state.regName(first),
             arm_state.regName(nextReg(first)),
             arm_state.regName(base),
         }) catch error.NoSpaceLeft;
     }
-    return std.fmt.bufPrint(buf, "strd{} {}, {}, [{}], {}", .{
+    return std.fmt.bufPrint(buf, "{}{} {}, {}, [{}], {}", .{
+        op,
         condName(cond),
         arm_state.regName(first),
         arm_state.regName(nextReg(first)),
