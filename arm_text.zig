@@ -74,6 +74,14 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmExtend(buf, word, info);
     }
 
+    if (isPackHalfword(word)) {
+        return formatPackHalfword(buf, word, cond);
+    }
+
+    if (isSignedTopMultiply(word)) {
+        return formatSignedTopMultiply(buf, word, cond);
+    }
+
     if (arm_exec.isMultiply(word)) {
         return formatArmMultiply(buf, word);
     }
@@ -172,6 +180,74 @@ fn floatWordTextIndex(value: u32, high: bool) u32 {
 
 fn floatPairTextIndex(value: u32, high: bool) u32 {
     return (value & 0xf) | (@as(u32, @boolToInt(high)) << 4);
+}
+
+fn isPackHalfword(word: u32) bool {
+    return (word & 0x0ff00070) == 0x06800010 or (word & 0x0ff00070) == 0x06800050;
+}
+
+fn formatPackHalfword(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const top = (word & 0x0ff00070) == 0x06800050;
+    const op = if (top) "pkhtb" else "pkhbt";
+    const mode: u2 = if (top) 2 else 0;
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const base = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+    const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    const amount = @intCast(u8, (word >> 7) & 0x1f);
+    var shift_buf: [24]u8 = undefined;
+    const shift = try formatPackShift(shift_buf[0..], mode, amount);
+    return std.fmt.bufPrint(buf, "{}{} {}, {}, {}{}", .{
+        op,
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(base),
+        arm_state.regName(source),
+        shift,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatPackShift(buf: []u8, mode: u2, amount: u8) TextError![]u8 {
+    if (mode == 0 and amount == 0) {
+        return buf[0..0];
+    }
+    if (mode == 2 and amount == 0) {
+        return std.fmt.bufPrint(buf, ", asr #32", .{}) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, ", {} #{}", .{ shiftName(mode), amount }) catch error.NoSpaceLeft;
+}
+
+fn isSignedTopMultiply(word: u32) bool {
+    return (word & 0x0ff0f0d0) == 0x0750f010 or
+        (word & 0x0ff000d0) == 0x07500010 or
+        (word & 0x0ff000d0) == 0x075000d0;
+}
+
+fn formatSignedTopMultiply(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const rounded = if (bits.getBit32(word, 5)) "r" else "";
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+    const left = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    const right = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 8) & 0xf));
+    if ((word & 0x0ff0f0d0) == 0x0750f010) {
+        return std.fmt.bufPrint(buf, "smmul{}{} {}, {}, {}", .{
+            rounded,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+
+    const addend = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const op = if ((word & 0x0ff000d0) == 0x075000d0) "smmls" else "smmla";
+    return std.fmt.bufPrint(buf, "{}{}{} {}, {}, {}, {}", .{
+        op,
+        rounded,
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(left),
+        arm_state.regName(right),
+        arm_state.regName(addend),
+    }) catch error.NoSpaceLeft;
 }
 
 fn formatExtendSource(buf: []u8, word: u32) TextError![]u8 {
