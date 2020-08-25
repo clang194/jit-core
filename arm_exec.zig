@@ -340,6 +340,10 @@ pub fn expandArmImmediate(rotate: u8, value: u8) u32 {
 
 pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks) ArmStepError!void {
     const pc = state.read(.pc);
+    if (isFloatAdd(word)) {
+        return runFloatAdd(word, state, pc);
+    }
+
     if (usesExternalArmHandler(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
@@ -468,6 +472,129 @@ fn runExternalArmHandler(state: *arm_state.MachineState, hooks: arm_state.HostHo
         return;
     }
     return error.UnknownInstruction;
+}
+
+fn isFloatAdd(word: u32) bool {
+    return (word & 0x0fb00f50) == 0x0e300a00;
+}
+
+fn runFloatAdd(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (bits.getBit32(word, 8)) {
+        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        const result = addFloat64(state, left, right);
+        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
+    } else {
+        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        const result = addFloat32(state, left, right);
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn addFloat32(state: *arm_state.MachineState, left: u32, right: u32) u32 {
+    const left_word = floatInput32(state, left);
+    const right_word = floatInput32(state, right);
+    var result = @bitCast(u32, @bitCast(f32, left_word) + @bitCast(f32, right_word));
+    result = floatOutput32(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan32(result)) {
+        return 0x7fc00000;
+    }
+    return result;
+}
+
+fn addFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
+    const left_word = floatInput64(state, left);
+    const right_word = floatInput64(state, right);
+    var result = @bitCast(u64, @bitCast(f64, left_word) + @bitCast(f64, right_word));
+    result = floatOutput64(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan64(result)) {
+        return 0x7ff8000000000000;
+    }
+    return result;
+}
+
+fn floatInput32(state: *arm_state.MachineState, value: u32) u32 {
+    if (fpscrFlushZero(state.fpscr) and isDenormal32(value)) {
+        state.fpscr |= 1 << 7;
+        return 0;
+    }
+    return value;
+}
+
+fn floatInput64(state: *arm_state.MachineState, value: u64) u64 {
+    if (fpscrFlushZero(state.fpscr) and isDenormal64(value)) {
+        state.fpscr |= 1 << 7;
+        return 0;
+    }
+    return value;
+}
+
+fn floatOutput32(state: *arm_state.MachineState, value: u32) u32 {
+    if (fpscrFlushZero(state.fpscr) and isDenormal32(value)) {
+        state.fpscr |= 1 << 3;
+        return 0;
+    }
+    return value;
+}
+
+fn floatOutput64(state: *arm_state.MachineState, value: u64) u64 {
+    if (fpscrFlushZero(state.fpscr) and isDenormal64(value)) {
+        state.fpscr |= 1 << 3;
+        return 0;
+    }
+    return value;
+}
+
+fn fpscrFlushZero(value: u32) bool {
+    return bits.getBit32(value, 24);
+}
+
+fn fpscrDefaultNaN(value: u32) bool {
+    return bits.getBit32(value, 25);
+}
+
+fn isDenormal32(value: u32) bool {
+    const magnitude = value & 0x7fffffff;
+    return magnitude != 0 and magnitude <= 0x007fffff;
+}
+
+fn isDenormal64(value: u64) bool {
+    const magnitude = value & 0x7fffffffffffffff;
+    return magnitude != 0 and magnitude <= 0x000fffffffffffff;
+}
+
+fn isNan32(value: u32) bool {
+    return (value & 0x7fffffff) > 0x7f800000;
+}
+
+fn isNan64(value: u64) bool {
+    return (value & 0x7fffffffffffffff) > 0x7ff0000000000000;
+}
+
+fn floatWordIndex(value: u32, high: bool) arm_state.FloatWordReg {
+    const index = @intCast(u5, ((value & 0xf) << 1) | @as(u32, @boolToInt(high)));
+    return @intToEnum(arm_state.FloatWordReg, index);
+}
+
+fn floatPairIndex(value: u32, high: bool) arm_state.FloatPairReg {
+    const index = @intCast(u5, (value & 0xf) | (@as(u32, @boolToInt(high)) << 4));
+    return @intToEnum(arm_state.FloatPairReg, index);
+}
+
+fn readFloatPair(state: *const arm_state.MachineState, reg: arm_state.FloatPairReg) u64 {
+    return state.readFloatPair(reg);
+}
+
+fn writeFloatPair(state: *arm_state.MachineState, reg: arm_state.FloatPairReg, value: u64) void {
+    state.writeFloatPair(reg, value);
 }
 
 fn runBranchImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {

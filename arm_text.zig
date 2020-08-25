@@ -10,6 +10,10 @@ pub const TextError = error{
 
 pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     const cond = @intCast(u4, word >> 28);
+    if (isFloatAdd(word)) {
+        return formatFloatAdd(buf, word, cond);
+    }
+
     if (cond == 0xf and ((word >> 25) & 0x7) == 0x5) {
         return formatBranchExchangeImmediate(buf, word);
     }
@@ -139,6 +143,35 @@ fn formatArmExtend(buf: []u8, word: u32, info: ArmExtendText) TextError![]u8 {
         arm_state.regName(dest),
         source,
     }) catch error.NoSpaceLeft;
+}
+
+fn isFloatAdd(word: u32) bool {
+    return (word & 0x0fb00f50) == 0x0e300a00;
+}
+
+fn formatFloatAdd(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vadd{}.f64 d{}, d{}, d{}", .{
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word >> 16, bits.getBit32(word, 7)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vadd{}.f32 s{}, s{}, s{}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn floatWordTextIndex(value: u32, high: bool) u32 {
+    return ((value & 0xf) << 1) | @as(u32, @boolToInt(high));
+}
+
+fn floatPairTextIndex(value: u32, high: bool) u32 {
+    return (value & 0xf) | (@as(u32, @boolToInt(high)) << 4);
 }
 
 fn formatExtendSource(buf: []u8, word: u32) TextError![]u8 {
