@@ -74,6 +74,22 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmExtend(buf, word, info);
     }
 
+    if (isMiscArmFormat(word)) {
+        return formatMiscArm(buf, word, cond);
+    }
+
+    if (isSaturatingArmFormat(word)) {
+        return formatSaturatingArm(buf, word, cond);
+    }
+
+    if (isHalfMultiplyFormat(word)) {
+        return formatHalfMultiply(buf, word, cond);
+    }
+
+    if (isDualMultiplyFormat(word)) {
+        return formatDualMultiply(buf, word, cond);
+    }
+
     if (isPackHalfword(word)) {
         return formatPackHalfword(buf, word, cond);
     }
@@ -180,6 +196,222 @@ fn floatWordTextIndex(value: u32, high: bool) u32 {
 
 fn floatPairTextIndex(value: u32, high: bool) u32 {
     return (value & 0xf) | (@as(u32, @boolToInt(high)) << 4);
+}
+
+fn isMiscArmFormat(word: u32) bool {
+    return (word & 0x0fff0ff0) == 0x016f0f10 or
+        (word & 0x0ff00ff0) == 0x06800fb0 or
+        (word & 0x0ff0f0f0) == 0x0780f010 or
+        (word & 0x0ff000f0) == 0x07800010;
+}
+
+fn formatMiscArm(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+    const target = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const right = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 8) & 0xf));
+    const left = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    if ((word & 0x0fff0ff0) == 0x016f0f10) {
+        return std.fmt.bufPrint(buf, "clz{} {}, {}", .{
+            condName(cond),
+            arm_state.regName(target),
+            arm_state.regName(left),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00ff0) == 0x06800fb0) {
+        return std.fmt.bufPrint(buf, "sel{} {}, {}, {}", .{
+            condName(cond),
+            arm_state.regName(target),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff0f0f0) == 0x0780f010) {
+        return std.fmt.bufPrint(buf, "usad8{} {}, {}, {}", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "usad8a{} {}, {}, {}, {}", .{
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(left),
+        arm_state.regName(right),
+        arm_state.regName(target),
+    }) catch error.NoSpaceLeft;
+}
+
+fn isSaturatingArmFormat(word: u32) bool {
+    return (word & 0x0fe00030) == 0x06a00010 or
+        (word & 0x0ff00ff0) == 0x06a00f30 or
+        (word & 0x0fe00030) == 0x06e00010 or
+        (word & 0x0ff00ff0) == 0x06e00f30;
+}
+
+fn formatSaturatingArm(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const unsigned = (word & 0x00400000) != 0;
+    const half = (word & 0x00000fc0) == 0x00000f00;
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    if (half) {
+        const sat = @intCast(u8, (word >> 16) & 0xf) + if (unsigned) 0 else 1;
+        const op = if (unsigned) "usat16" else "ssat16";
+        return std.fmt.bufPrint(buf, "{}{} {}, #{}, {}", .{
+            op,
+            condName(cond),
+            arm_state.regName(dest),
+            sat,
+            arm_state.regName(source),
+        }) catch error.NoSpaceLeft;
+    }
+
+    const sat = @intCast(u8, (word >> 16) & 0x1f) + if (unsigned) 0 else 1;
+    const mode: u2 = if (bits.getBit32(word, 6)) 2 else 0;
+    const amount = @intCast(u8, (word >> 7) & 0x1f);
+    var shift_buf: [24]u8 = undefined;
+    const shift = try formatPackShift(shift_buf[0..], mode, amount);
+    const op = if (unsigned) "usat" else "ssat";
+    return std.fmt.bufPrint(buf, "{}{} {}, #{}, {}{}", .{
+        op,
+        condName(cond),
+        arm_state.regName(dest),
+        sat,
+        arm_state.regName(source),
+        shift,
+    }) catch error.NoSpaceLeft;
+}
+
+fn isHalfMultiplyFormat(word: u32) bool {
+    return (word & 0x0ff00090) == 0x01400080 or
+        (word & 0x0ff00090) == 0x01000080 or
+        (word & 0x0ff0f090) == 0x01600080 or
+        (word & 0x0ff000b0) == 0x01200080 or
+        (word & 0x0ff0f0b0) == 0x012000a0;
+}
+
+fn formatHalfMultiply(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+    const addend = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const right = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 8) & 0xf));
+    const left = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    const y = if (bits.getBit32(word, 6)) "t" else "b";
+    const x = if (bits.getBit32(word, 5)) "t" else "b";
+    if ((word & 0x0ff00090) == 0x01400080) {
+        return std.fmt.bufPrint(buf, "smlal{}{}{} {}, {}, {}, {}", .{
+            x,
+            y,
+            condName(cond),
+            arm_state.regName(addend),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00090) == 0x01000080) {
+        return std.fmt.bufPrint(buf, "smla{}{}{} {}, {}, {}, {}", .{
+            x,
+            y,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+            arm_state.regName(addend),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff0f090) == 0x01600080) {
+        return std.fmt.bufPrint(buf, "smul{}{}{} {}, {}, {}", .{
+            x,
+            y,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff000b0) == 0x01200080) {
+        return std.fmt.bufPrint(buf, "smlaw{}{} {}, {}, {}, {}", .{
+            y,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+            arm_state.regName(addend),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "smulw{}{} {}, {}, {}", .{
+        y,
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(left),
+        arm_state.regName(right),
+    }) catch error.NoSpaceLeft;
+}
+
+fn isDualMultiplyFormat(word: u32) bool {
+    return (word & 0x0ff000d0) == 0x07000010 or
+        (word & 0x0ff000d0) == 0x07400010 or
+        (word & 0x0ff000d0) == 0x07000050 or
+        (word & 0x0ff000d0) == 0x07400050 or
+        (word & 0x0ff0f0d0) == 0x0700f010 or
+        (word & 0x0ff0f0d0) == 0x0700f050;
+}
+
+fn formatDualMultiply(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 16) & 0xf));
+    const addend = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+    const right = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 8) & 0xf));
+    const left = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+    const exchange = if (bits.getBit32(word, 5)) "x" else "";
+    if ((word & 0x0ff000d0) == 0x07400010) {
+        return std.fmt.bufPrint(buf, "smlald{}{} {}, {}, {}, {}", .{
+            exchange,
+            condName(cond),
+            arm_state.regName(addend),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff000d0) == 0x07400050) {
+        return std.fmt.bufPrint(buf, "smlsld{}{} {}, {}, {}, {}", .{
+            exchange,
+            condName(cond),
+            arm_state.regName(addend),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff0f0d0) == 0x0700f010) {
+        return std.fmt.bufPrint(buf, "smuad{}{} {}, {}, {}", .{
+            exchange,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff0f0d0) == 0x0700f050) {
+        return std.fmt.bufPrint(buf, "smusd{}{} {}, {}, {}", .{
+            exchange,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(left),
+            arm_state.regName(right),
+        }) catch error.NoSpaceLeft;
+    }
+
+    const op = if ((word & 0x0ff000d0) == 0x07000050) "smlsd" else "smlad";
+    return std.fmt.bufPrint(buf, "{}{}{} {}, {}, {}, {}", .{
+        op,
+        exchange,
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(left),
+        arm_state.regName(right),
+        arm_state.regName(addend),
+    }) catch error.NoSpaceLeft;
 }
 
 fn isPackHalfword(word: u32) bool {
