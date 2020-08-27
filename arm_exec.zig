@@ -344,6 +344,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatAdd(word, state, pc);
     }
 
+    if (isSignedTopMultiply(word)) {
+        return runSignedTopMultiply(word, state, pc);
+    }
+
     if (usesExternalArmHandler(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
@@ -496,6 +500,44 @@ fn runFloatAdd(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!
         const result = addFloat32(state, left, right);
         state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
     }
+    state.write(.pc, pc + 4);
+}
+
+fn isSignedTopMultiply(word: u32) bool {
+    return (word & 0x0ff0f0d0) == 0x0750f010 or
+        (word & 0x0ff000d0) == 0x07500010 or
+        (word & 0x0ff000d0) == 0x075000d0;
+}
+
+fn runSignedTopMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 16);
+    const addend = armReg(word >> 12);
+    const right = armReg(word >> 8);
+    const left = armReg(word);
+    const smmul = (word & 0x0ff0f0d0) == 0x0750f010;
+    const subtract = (word & 0x0ff000d0) == 0x075000d0;
+    if (dest == .pc or left == .pc or right == .pc or (subtract and addend == .pc)) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const product = signedProduct(state.read(left), state.read(right));
+    var wide = product;
+    if (!smmul) {
+        const addend_wide = @as(u64, state.read(addend)) << 32;
+        wide = if (subtract) addend_wide -% product else addend_wide +% product;
+    }
+
+    var result = @intCast(u32, wide >> 32);
+    if (bits.getBit32(word, 5) and ((wide & (1 << 31)) != 0)) {
+        result +%= 1;
+    }
+    state.write(dest, result);
     state.write(.pc, pc + 4);
 }
 
