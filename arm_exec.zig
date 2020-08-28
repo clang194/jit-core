@@ -344,6 +344,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatAdd(word, state, hooks, pc);
     }
 
+    if (isFloatAbs(word)) {
+        return runFloatAbs(word, state, hooks, pc);
+    }
+
     if (isSignedTopMultiply(word)) {
         return runSignedTopMultiply(word, state, pc);
     }
@@ -482,6 +486,10 @@ fn isFloatAdd(word: u32) bool {
     return (word & 0x0fb00f50) == 0x0e300a00;
 }
 
+fn isFloatAbs(word: u32) bool {
+    return (word & 0x0fbf0ed0) == 0x0eb00ac0;
+}
+
 fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
         return runExternalArmHandler(state, hooks, pc);
@@ -503,6 +511,27 @@ fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
         const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
         const result = addFloat32(state, left, right);
         state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatAbs(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (bits.getBit32(word, 8)) {
+        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), value & 0x7fffffffffffffff);
+    } else {
+        const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value & 0x7fffffff);
     }
     state.write(.pc, pc + 4);
 }
