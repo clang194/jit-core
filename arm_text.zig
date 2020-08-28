@@ -14,6 +14,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatAdd(buf, word, cond);
     }
 
+    if (isFloatSub(word)) {
+        return formatFloatSub(buf, word, cond);
+    }
+
     if (isFloatAbs(word)) {
         return formatFloatAbs(buf, word, cond);
     }
@@ -177,6 +181,10 @@ fn isFloatAdd(word: u32) bool {
     return (word & 0x0fb00f50) == 0x0e300a00;
 }
 
+fn isFloatSub(word: u32) bool {
+    return (word & 0x0fb00f50) == 0x0e300a40;
+}
+
 fn isFloatAbs(word: u32) bool {
     return (word & 0x0fbf0ed0) == 0x0eb00ac0;
 }
@@ -191,6 +199,23 @@ fn formatFloatAdd(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         }) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "vadd{}.f32 s{}, s{}, s{}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatSub(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vsub{}.f64 d{}, d{}, d{}", .{
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word >> 16, bits.getBit32(word, 7)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vsub{}.f32 s{}, s{}, s{}", .{
         condName(cond),
         floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
         floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
