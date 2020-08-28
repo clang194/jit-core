@@ -341,7 +341,7 @@ pub fn expandArmImmediate(rotate: u8, value: u8) u32 {
 pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks) ArmStepError!void {
     const pc = state.read(.pc);
     if (isFloatAdd(word)) {
-        return runFloatAdd(word, state, pc);
+        return runFloatAdd(word, state, hooks, pc);
     }
 
     if (isSignedTopMultiply(word)) {
@@ -482,7 +482,11 @@ fn isFloatAdd(word: u32) bool {
     return (word & 0x0fb00f50) == 0x0e300a00;
 }
 
-fn runFloatAdd(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -601,6 +605,14 @@ fn fpscrFlushZero(value: u32) bool {
 
 fn fpscrDefaultNaN(value: u32) bool {
     return bits.getBit32(value, 25);
+}
+
+fn fpscrVectorLength(value: u32) u32 {
+    return ((value >> 16) & 0x7) + 1;
+}
+
+fn fpscrVectorStride(value: u32) u32 {
+    return ((value >> 20) & 0x3) + 1;
 }
 
 fn isDenormal32(value: u32) bool {
