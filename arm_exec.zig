@@ -432,6 +432,11 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runSignedTopMultiply(word, state, pc);
     }
 
+    if (isHintNoOp(word)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
     if (usesExternalArmHandler(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
@@ -560,6 +565,14 @@ fn runExternalArmHandler(state: *arm_state.MachineState, hooks: arm_state.HostHo
         return;
     }
     return error.UnknownInstruction;
+}
+
+fn isHintNoOp(word: u32) bool {
+    return (word & 0xfc70f000) == 0xf450f000 or
+        (word & 0x0fffffff) == 0x0320f004 or
+        (word & 0x0fffffff) == 0x0320f002 or
+        (word & 0x0fffffff) == 0x0320f003 or
+        (word & 0x0fffffff) == 0x0320f001;
 }
 
 fn isFloatAdd(word: u32) bool {
