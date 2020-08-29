@@ -384,6 +384,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatNeg(word, state, hooks, pc);
     }
 
+    if (isFloatSqrt(word)) {
+        return runFloatSqrt(word, state, hooks, pc);
+    }
+
     if (isSignedTopMultiply(word)) {
         return runSignedTopMultiply(word, state, pc);
     }
@@ -560,6 +564,10 @@ fn isFloatAbs(word: u32) bool {
 
 fn isFloatNeg(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb10a40;
+}
+
+fn isFloatSqrt(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb10ac0;
 }
 
 fn isVfpCondition(word: u32) bool {
@@ -774,6 +782,27 @@ fn runFloatNeg(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
     state.write(.pc, pc + 4);
 }
 
+fn runFloatSqrt(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (bits.getBit32(word, 8)) {
+        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), sqrtFloat64(state, value));
+    } else {
+        const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), sqrtFloat32(state, value));
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn isSignedTopMultiply(word: u32) bool {
     return (word & 0x0ff0f0d0) == 0x0750f010 or
         (word & 0x0ff000d0) == 0x07500010 or
@@ -860,6 +889,16 @@ fn negFloat32(value: u32) u32 {
     return value ^ 0x80000000;
 }
 
+fn sqrtFloat32(state: *arm_state.MachineState, value: u32) u32 {
+    const input = floatInput32(state, value);
+    var result = @bitCast(u32, @sqrt(@bitCast(f32, input)));
+    result = floatOutput32(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan32(result)) {
+        return 0x7fc00000;
+    }
+    return result;
+}
+
 fn addFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
     const left_word = floatInput64(state, left);
     const right_word = floatInput64(state, right);
@@ -895,6 +934,16 @@ fn mulFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
 
 fn negFloat64(value: u64) u64 {
     return value ^ 0x8000000000000000;
+}
+
+fn sqrtFloat64(state: *arm_state.MachineState, value: u64) u64 {
+    const input = floatInput64(state, value);
+    var result = @bitCast(u64, @sqrt(@bitCast(f64, input)));
+    result = floatOutput64(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan64(result)) {
+        return 0x7ff8000000000000;
+    }
+    return result;
 }
 
 fn subFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {

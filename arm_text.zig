@@ -54,6 +54,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatNeg(buf, word, cond);
     }
 
+    if (isFloatSqrt(word)) {
+        return formatFloatSqrt(buf, word, cond);
+    }
+
     if (cond == 0xf and ((word >> 25) & 0x7) == 0x5) {
         return formatBranchExchangeImmediate(buf, word);
     }
@@ -253,6 +257,10 @@ fn isFloatNeg(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb10a40;
 }
 
+fn isFloatSqrt(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb10ac0;
+}
+
 fn isVfpCondition(word: u32) bool {
     return (word >> 28) != 0xf;
 }
@@ -385,6 +393,21 @@ fn formatFloatNeg(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         }) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "vneg{}.f32 s{}, s{}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatSqrt(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vsqrt{}.f64 d{}, d{}", .{
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vsqrt{}.f32 s{}, s{}", .{
         condName(cond),
         floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
         floatWordTextIndex(word, bits.getBit32(word, 5)),
