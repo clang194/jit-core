@@ -14,6 +14,22 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatAdd(buf, word, cond);
     }
 
+    if (isFloatMulAdd(word)) {
+        return formatFloatThree(buf, word, cond, "vmla");
+    }
+
+    if (isFloatMulSub(word)) {
+        return formatFloatThree(buf, word, cond, "vmls");
+    }
+
+    if (isFloatNegMulAdd(word)) {
+        return formatFloatThree(buf, word, cond, "vnmla");
+    }
+
+    if (isFloatNegMulSub(word)) {
+        return formatFloatThree(buf, word, cond, "vnmls");
+    }
+
     if (isFloatSub(word)) {
         return formatFloatSub(buf, word, cond);
     }
@@ -190,27 +206,47 @@ fn formatArmExtend(buf: []u8, word: u32, info: ArmExtendText) TextError![]u8 {
 }
 
 fn isFloatAdd(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e300a00;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e300a00;
+}
+
+fn isFloatMulAdd(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e000a00;
+}
+
+fn isFloatMulSub(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e000a40;
+}
+
+fn isFloatNegMulSub(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e100a00;
+}
+
+fn isFloatNegMulAdd(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e100a40;
 }
 
 fn isFloatSub(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e300a40;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e300a40;
 }
 
 fn isFloatMul(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e200a00;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e200a00;
 }
 
 fn isFloatNegMul(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e200a40;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e200a40;
 }
 
 fn isFloatDiv(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e800a00;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e800a00;
 }
 
 fn isFloatAbs(word: u32) bool {
-    return (word & 0x0fbf0ed0) == 0x0eb00ac0;
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00ac0;
+}
+
+fn isVfpCondition(word: u32) bool {
+    return (word >> 28) != 0xf;
 }
 
 fn formatFloatAdd(buf: []u8, word: u32, cond: u4) TextError![]u8 {
@@ -223,6 +259,25 @@ fn formatFloatAdd(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         }) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "vadd{}.f32 s{}, s{}, s{}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatThree(buf: []u8, word: u32, cond: u4, name: []const u8) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "{}{}.f64 d{}, d{}, d{}", .{
+            name,
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word >> 16, bits.getBit32(word, 7)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "{}{}.f32 s{}, s{}, s{}", .{
+        name,
         condName(cond),
         floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
         floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),

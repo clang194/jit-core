@@ -344,6 +344,22 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatAdd(word, state, hooks, pc);
     }
 
+    if (isFloatMulAdd(word)) {
+        return runFloatMulAcc(word, state, hooks, pc, false, false);
+    }
+
+    if (isFloatMulSub(word)) {
+        return runFloatMulAcc(word, state, hooks, pc, false, true);
+    }
+
+    if (isFloatNegMulAdd(word)) {
+        return runFloatMulAcc(word, state, hooks, pc, true, true);
+    }
+
+    if (isFloatNegMulSub(word)) {
+        return runFloatMulAcc(word, state, hooks, pc, true, false);
+    }
+
     if (isFloatSub(word)) {
         return runFloatSub(word, state, hooks, pc);
     }
@@ -499,27 +515,47 @@ fn runExternalArmHandler(state: *arm_state.MachineState, hooks: arm_state.HostHo
 }
 
 fn isFloatAdd(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e300a00;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e300a00;
+}
+
+fn isFloatMulAdd(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e000a00;
+}
+
+fn isFloatMulSub(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e000a40;
+}
+
+fn isFloatNegMulSub(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e100a00;
+}
+
+fn isFloatNegMulAdd(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e100a40;
 }
 
 fn isFloatSub(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e300a40;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e300a40;
 }
 
 fn isFloatMul(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e200a00;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e200a00;
 }
 
 fn isFloatNegMul(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e200a40;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e200a40;
 }
 
 fn isFloatDiv(word: u32) bool {
-    return (word & 0x0fb00f50) == 0x0e800a00;
+    return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e800a00;
 }
 
 fn isFloatAbs(word: u32) bool {
-    return (word & 0x0fbf0ed0) == 0x0eb00ac0;
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00ac0;
+}
+
+fn isVfpCondition(word: u32) bool {
+    return (word >> 28) != 0xf;
 }
 
 fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
@@ -542,6 +578,47 @@ fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
         const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
         const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
         const result = addFloat32(state, left, right);
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMulAcc(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32, negate_acc: bool, negate_product: bool) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (bits.getBit32(word, 8)) {
+        var acc = readFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)));
+        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        var product = mulFloat64(state, left, right);
+        if (negate_acc) {
+            acc = negFloat64(acc);
+        }
+        if (negate_product) {
+            product = negFloat64(product);
+        }
+        const result = addFloat64(state, acc, product);
+        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
+    } else {
+        var acc = state.readFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)));
+        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        var product = mulFloat32(state, left, right);
+        if (negate_acc) {
+            acc = negFloat32(acc);
+        }
+        if (negate_product) {
+            product = negFloat32(product);
+        }
+        const result = addFloat32(state, acc, product);
         state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
     }
     state.write(.pc, pc + 4);
