@@ -1370,6 +1370,11 @@ fn runBranchExchange(word: u32, state: *arm_state.MachineState, pc: u32) ArmStep
 }
 
 fn runBranchExchangeRegister(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const source = armReg(word);
+    if ((word & 0x0ffffff0) == 0x012fff30 and source == .pc) {
+        return error.Unpredictable;
+    }
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -1380,7 +1385,6 @@ fn runBranchExchangeRegister(word: u32, state: *arm_state.MachineState, pc: u32)
         state.write(.lr, pc + 4);
     }
 
-    const source = armReg(word);
     loadWritePc(state, readArmOperand(state, source, pc));
 }
 
