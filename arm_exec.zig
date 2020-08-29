@@ -376,6 +376,42 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatDiv(word, state, hooks, pc);
     }
 
+    if (isFloatMoveCoreToPairLow(word)) {
+        return runFloatMoveCoreToPairLow(word, state, pc);
+    }
+
+    if (isFloatMovePairLowToCore(word)) {
+        return runFloatMovePairLowToCore(word, state, pc);
+    }
+
+    if (isFloatMoveCoreToWord(word)) {
+        return runFloatMoveCoreToWord(word, state, pc);
+    }
+
+    if (isFloatMoveWordToCore(word)) {
+        return runFloatMoveWordToCore(word, state, pc);
+    }
+
+    if (isFloatMoveTwoCoreToTwoWord(word)) {
+        return runFloatMoveTwoCoreToTwoWord(word, state, pc);
+    }
+
+    if (isFloatMoveTwoWordToTwoCore(word)) {
+        return runFloatMoveTwoWordToTwoCore(word, state, pc);
+    }
+
+    if (isFloatMoveTwoCoreToPair(word)) {
+        return runFloatMoveTwoCoreToPair(word, state, pc);
+    }
+
+    if (isFloatMovePairToTwoCore(word)) {
+        return runFloatMovePairToTwoCore(word, state, pc);
+    }
+
+    if (isFloatMoveReg(word)) {
+        return runFloatMoveReg(word, state, hooks, pc);
+    }
+
     if (isFloatAbs(word)) {
         return runFloatAbs(word, state, hooks, pc);
     }
@@ -558,6 +594,42 @@ fn isFloatDiv(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e800a00;
 }
 
+fn isFloatMoveCoreToPairLow(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e000b10;
+}
+
+fn isFloatMovePairLowToCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e100b10;
+}
+
+fn isFloatMoveCoreToWord(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e000a10;
+}
+
+fn isFloatMoveWordToCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e100a10;
+}
+
+fn isFloatMoveTwoCoreToTwoWord(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c400a10;
+}
+
+fn isFloatMoveTwoWordToTwoCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c500a10;
+}
+
+fn isFloatMoveTwoCoreToPair(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c400b10;
+}
+
+fn isFloatMovePairToTwoCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c500b10;
+}
+
+fn isFloatMoveReg(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00a40;
+}
+
 fn isFloatAbs(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00ac0;
 }
@@ -736,6 +808,145 @@ fn runFloatDiv(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
         const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
         const result = divFloat32(state, left, right);
         state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMoveCoreToPairLow(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const core = armReg(word >> 12);
+    if (core == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const pair = floatPairIndex(word >> 16, bits.getBit32(word, 7));
+        const value = readFloatPair(state, pair) & 0xffffffff00000000;
+        writeFloatPair(state, pair, value | @as(u64, state.read(core)));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMovePairLowToCore(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const core = armReg(word >> 12);
+    if (core == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const value = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
+        state.write(core, @intCast(u32, value & 0xffffffff));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMoveCoreToWord(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const core = armReg(word >> 12);
+    if (core == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.writeFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)), state.read(core));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMoveWordToCore(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const core = armReg(word >> 12);
+    if (core == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(core, state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7))));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMoveTwoCoreToTwoWord(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const second = armReg(word >> 16);
+    const first = armReg(word >> 12);
+    const dest = floatWordIndex(word, bits.getBit32(word, 5));
+    if (first == .pc or second == .pc or isLastFloatWord(dest)) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.writeFloatWord(dest, state.read(first));
+        state.writeFloatWord(nextFloatWordReg(dest), state.read(second));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMoveTwoWordToTwoCore(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const second = armReg(word >> 16);
+    const first = armReg(word >> 12);
+    const source = floatWordIndex(word, bits.getBit32(word, 5));
+    if (first == .pc or second == .pc or first == second or isLastFloatWord(source)) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(first, state.readFloatWord(source));
+        state.write(second, state.readFloatWord(nextFloatWordReg(source)));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMoveTwoCoreToPair(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const second = armReg(word >> 16);
+    const first = armReg(word >> 12);
+    if (first == .pc or second == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const value = @as(u64, state.read(first)) | (@as(u64, state.read(second)) << 32);
+        writeFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)), value);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMovePairToTwoCore(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const second = armReg(word >> 16);
+    const first = armReg(word >> 12);
+    if (first == .pc or second == .pc or first == second) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        state.write(first, @intCast(u32, value & 0xffffffff));
+        state.write(second, @intCast(u32, value >> 32));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatMoveReg(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (bits.getBit32(word, 8)) {
+        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), value);
+    } else {
+        const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value);
     }
     state.write(.pc, pc + 4);
 }
@@ -1031,6 +1242,14 @@ fn floatWordIndex(value: u32, high: bool) arm_state.FloatWordReg {
 fn floatPairIndex(value: u32, high: bool) arm_state.FloatPairReg {
     const index = @intCast(u5, (value & 0xf) | (@as(u32, @boolToInt(high)) << 4));
     return @intToEnum(arm_state.FloatPairReg, index);
+}
+
+fn isLastFloatWord(reg: arm_state.FloatWordReg) bool {
+    return @enumToInt(reg) == 31;
+}
+
+fn nextFloatWordReg(reg: arm_state.FloatWordReg) arm_state.FloatWordReg {
+    return @intToEnum(arm_state.FloatWordReg, @intCast(u5, @enumToInt(reg) + 1));
 }
 
 fn readFloatPair(state: *const arm_state.MachineState, reg: arm_state.FloatPairReg) u64 {

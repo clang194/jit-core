@@ -46,6 +46,42 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatDiv(buf, word, cond);
     }
 
+    if (isFloatMoveCoreToPairLow(word)) {
+        return formatFloatMoveCoreToPairLow(buf, word, cond);
+    }
+
+    if (isFloatMovePairLowToCore(word)) {
+        return formatFloatMovePairLowToCore(buf, word, cond);
+    }
+
+    if (isFloatMoveCoreToWord(word)) {
+        return formatFloatMoveCoreToWord(buf, word, cond);
+    }
+
+    if (isFloatMoveWordToCore(word)) {
+        return formatFloatMoveWordToCore(buf, word, cond);
+    }
+
+    if (isFloatMoveTwoCoreToTwoWord(word)) {
+        return formatFloatMoveTwoCoreToTwoWord(buf, word, cond);
+    }
+
+    if (isFloatMoveTwoWordToTwoCore(word)) {
+        return formatFloatMoveTwoWordToTwoCore(buf, word, cond);
+    }
+
+    if (isFloatMoveTwoCoreToPair(word)) {
+        return formatFloatMoveTwoCoreToPair(buf, word, cond);
+    }
+
+    if (isFloatMovePairToTwoCore(word)) {
+        return formatFloatMovePairToTwoCore(buf, word, cond);
+    }
+
+    if (isFloatMoveReg(word)) {
+        return formatFloatMoveReg(buf, word, cond);
+    }
+
     if (isFloatAbs(word)) {
         return formatFloatAbs(buf, word, cond);
     }
@@ -249,6 +285,42 @@ fn isFloatDiv(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fb00f50) == 0x0e800a00;
 }
 
+fn isFloatMoveCoreToPairLow(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e000b10;
+}
+
+fn isFloatMovePairLowToCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e100b10;
+}
+
+fn isFloatMoveCoreToWord(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e000a10;
+}
+
+fn isFloatMoveWordToCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00f7f) == 0x0e100a10;
+}
+
+fn isFloatMoveTwoCoreToTwoWord(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c400a10;
+}
+
+fn isFloatMoveTwoWordToTwoCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c500a10;
+}
+
+fn isFloatMoveTwoCoreToPair(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c400b10;
+}
+
+fn isFloatMovePairToTwoCore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0ff00fd0) == 0x0c500b10;
+}
+
+fn isFloatMoveReg(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00a40;
+}
+
 fn isFloatAbs(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00ac0;
 }
@@ -369,6 +441,93 @@ fn formatFloatDiv(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     }) catch error.NoSpaceLeft;
 }
 
+fn formatFloatMoveCoreToPairLow(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "vmov{}.32 d{}, {}", .{
+        condName(cond),
+        floatPairTextIndex(word >> 16, bits.getBit32(word, 7)),
+        arm_state.regName(armReg(word >> 12)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMovePairLowToCore(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "vmov{}.32 {}, d{}", .{
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        floatPairTextIndex(word >> 16, bits.getBit32(word, 7)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMoveCoreToWord(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "vmov{}.32 s{}, {}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
+        arm_state.regName(armReg(word >> 12)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMoveWordToCore(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "vmov{}.32 {}, s{}", .{
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMoveTwoCoreToTwoWord(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const first = floatWordTextIndex(word, bits.getBit32(word, 5));
+    return std.fmt.bufPrint(buf, "vmov{} s{}, s{}, {}, {}", .{
+        condName(cond),
+        first,
+        first + 1,
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word >> 16)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMoveTwoWordToTwoCore(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const first = floatWordTextIndex(word, bits.getBit32(word, 5));
+    return std.fmt.bufPrint(buf, "vmov{} {}, {}, s{}, s{}", .{
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word >> 16)),
+        first,
+        first + 1,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMoveTwoCoreToPair(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "vmov{} d{}, {}, {}", .{
+        condName(cond),
+        floatPairTextIndex(word, bits.getBit32(word, 5)),
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word >> 16)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMovePairToTwoCore(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "vmov{} {}, {}, d{}", .{
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word >> 16)),
+        floatPairTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatMoveReg(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vmov{}.f64 d{}, d{}", .{
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vmov{}.f32 s{}, s{}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
 fn formatFloatAbs(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     if (bits.getBit32(word, 8)) {
         return std.fmt.bufPrint(buf, "vabs{}.f64 d{}, d{}", .{
@@ -420,6 +579,10 @@ fn floatWordTextIndex(value: u32, high: bool) u32 {
 
 fn floatPairTextIndex(value: u32, high: bool) u32 {
     return (value & 0xf) | (@as(u32, @boolToInt(high)) << 4);
+}
+
+fn armReg(value: u32) arm_state.ArmReg {
+    return @intToEnum(arm_state.ArmReg, @intCast(u8, value & 0xf));
 }
 
 fn isMiscArmFormat(word: u32) bool {
