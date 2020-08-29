@@ -226,6 +226,16 @@ pub fn isBranchExchange(word: u32) bool {
     return (word & 0x0ffffff0) == 0x012fff10 and armCondition(word) != null;
 }
 
+fn isBranchExchangeRegister(word: u32) bool {
+    return ((word & 0x0ffffff0) == 0x012fff10 or
+        (word & 0x0ffffff0) == 0x012fff20 or
+        (word & 0x0ffffff0) == 0x012fff30) and armCondition(word) != null;
+}
+
+fn isBranchLinkExchangeImmediate(word: u32) bool {
+    return (word & 0xfe000000) == 0xfa000000;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -440,6 +450,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     if (isArmNoOp(word)) {
         state.write(.pc, pc + 4);
         return;
+    }
+
+    if (isBranchLinkExchangeImmediate(word)) {
+        return runBranchLinkExchangeImmediate(word, state, pc);
+    }
+
+    if (isBranchExchangeRegister(word)) {
+        return runBranchExchangeRegister(word, state, pc);
     }
 
     if (usesExternalArmHandler(word)) {
@@ -1332,11 +1350,34 @@ fn runBranchImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmSte
     state.write(.pc, addSigned(pc, offset));
 }
 
+fn runBranchLinkExchangeImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const high = @as(u32, @boolToInt(bits.getBit32(word, 24)));
+    const offset = bits.signExtend32(((word & 0x00ffffff) << 2) | (high << 1), 26) + 8;
+    state.write(.lr, pc + 4);
+    state.setThumb(true);
+    state.write(.pc, addSigned(pc, offset) & 0xfffffffe);
+}
+
 fn runBranchExchange(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
         return;
+    }
+
+    const source = armReg(word);
+    loadWritePc(state, readArmOperand(state, source, pc));
+}
+
+fn runBranchExchangeRegister(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if ((word & 0x0ffffff0) == 0x012fff30) {
+        state.write(.lr, pc + 4);
     }
 
     const source = armReg(word);
