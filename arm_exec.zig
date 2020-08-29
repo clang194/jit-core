@@ -437,6 +437,11 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return;
     }
 
+    if (isArmNoOp(word)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
     if (usesExternalArmHandler(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
@@ -573,6 +578,10 @@ fn isHintNoOp(word: u32) bool {
         (word & 0x0fffffff) == 0x0320f002 or
         (word & 0x0fffffff) == 0x0320f003 or
         (word & 0x0fffffff) == 0x0320f001;
+}
+
+fn isArmNoOp(word: u32) bool {
+    return (word & 0x0fffffff) == 0x0320f000;
 }
 
 fn isFloatAdd(word: u32) bool {
