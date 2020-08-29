@@ -352,6 +352,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatMul(word, state, hooks, pc);
     }
 
+    if (isFloatNegMul(word)) {
+        return runFloatNegMul(word, state, hooks, pc);
+    }
+
+    if (isFloatDiv(word)) {
+        return runFloatDiv(word, state, hooks, pc);
+    }
+
     if (isFloatAbs(word)) {
         return runFloatAbs(word, state, hooks, pc);
     }
@@ -502,6 +510,14 @@ fn isFloatMul(word: u32) bool {
     return (word & 0x0fb00f50) == 0x0e200a00;
 }
 
+fn isFloatNegMul(word: u32) bool {
+    return (word & 0x0fb00f50) == 0x0e200a40;
+}
+
+fn isFloatDiv(word: u32) bool {
+    return (word & 0x0fb00f50) == 0x0e800a00;
+}
+
 fn isFloatAbs(word: u32) bool {
     return (word & 0x0fbf0ed0) == 0x0eb00ac0;
 }
@@ -581,6 +597,56 @@ fn runFloatMul(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
     state.write(.pc, pc + 4);
 }
 
+fn runFloatNegMul(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (bits.getBit32(word, 8)) {
+        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        const result = negFloat64(mulFloat64(state, left, right));
+        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
+    } else {
+        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        const result = negFloat32(mulFloat32(state, left, right));
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatDiv(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (bits.getBit32(word, 8)) {
+        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+        const result = divFloat64(state, left, right);
+        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
+    } else {
+        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
+        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        const result = divFloat32(state, left, right);
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn runFloatAbs(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
         return runExternalArmHandler(state, hooks, pc);
@@ -651,6 +717,17 @@ fn addFloat32(state: *arm_state.MachineState, left: u32, right: u32) u32 {
     return result;
 }
 
+fn divFloat32(state: *arm_state.MachineState, left: u32, right: u32) u32 {
+    const left_word = floatInput32(state, left);
+    const right_word = floatInput32(state, right);
+    var result = @bitCast(u32, @bitCast(f32, left_word) / @bitCast(f32, right_word));
+    result = floatOutput32(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan32(result)) {
+        return 0x7fc00000;
+    }
+    return result;
+}
+
 fn mulFloat32(state: *arm_state.MachineState, left: u32, right: u32) u32 {
     const left_word = floatInput32(state, left);
     const right_word = floatInput32(state, right);
@@ -673,10 +750,25 @@ fn subFloat32(state: *arm_state.MachineState, left: u32, right: u32) u32 {
     return result;
 }
 
+fn negFloat32(value: u32) u32 {
+    return value ^ 0x80000000;
+}
+
 fn addFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
     const left_word = floatInput64(state, left);
     const right_word = floatInput64(state, right);
     var result = @bitCast(u64, @bitCast(f64, left_word) + @bitCast(f64, right_word));
+    result = floatOutput64(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan64(result)) {
+        return 0x7ff8000000000000;
+    }
+    return result;
+}
+
+fn divFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
+    const left_word = floatInput64(state, left);
+    const right_word = floatInput64(state, right);
+    var result = @bitCast(u64, @bitCast(f64, left_word) / @bitCast(f64, right_word));
     result = floatOutput64(state, result);
     if (fpscrDefaultNaN(state.fpscr) and isNan64(result)) {
         return 0x7ff8000000000000;
@@ -693,6 +785,10 @@ fn mulFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
         return 0x7ff8000000000000;
     }
     return result;
+}
+
+fn negFloat64(value: u64) u64 {
+    return value ^ 0x8000000000000000;
 }
 
 fn subFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {

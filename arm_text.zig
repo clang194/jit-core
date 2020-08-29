@@ -22,6 +22,14 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatMul(buf, word, cond);
     }
 
+    if (isFloatNegMul(word)) {
+        return formatFloatNegMul(buf, word, cond);
+    }
+
+    if (isFloatDiv(word)) {
+        return formatFloatDiv(buf, word, cond);
+    }
+
     if (isFloatAbs(word)) {
         return formatFloatAbs(buf, word, cond);
     }
@@ -193,6 +201,14 @@ fn isFloatMul(word: u32) bool {
     return (word & 0x0fb00f50) == 0x0e200a00;
 }
 
+fn isFloatNegMul(word: u32) bool {
+    return (word & 0x0fb00f50) == 0x0e200a40;
+}
+
+fn isFloatDiv(word: u32) bool {
+    return (word & 0x0fb00f50) == 0x0e800a00;
+}
+
 fn isFloatAbs(word: u32) bool {
     return (word & 0x0fbf0ed0) == 0x0eb00ac0;
 }
@@ -241,6 +257,40 @@ fn formatFloatMul(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         }) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "vmul{}.f32 s{}, s{}, s{}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatNegMul(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vnmul{}.f64 d{}, d{}, d{}", .{
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word >> 16, bits.getBit32(word, 7)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vnmul{}.f32 s{}, s{}, s{}", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatDiv(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vdiv{}.f64 d{}, d{}, d{}", .{
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word >> 16, bits.getBit32(word, 7)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vdiv{}.f32 s{}, s{}, s{}", .{
         condName(cond),
         floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
         floatWordTextIndex(word >> 16, bits.getBit32(word, 7)),
