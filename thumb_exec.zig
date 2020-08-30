@@ -1034,6 +1034,7 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
 
     if ((word & 0xff00) == 0xdf00) {
         if (hooks.supervisor) |callback| {
+            state.write(.pc, state.read(.pc) + 2);
             callback(@intCast(u32, word & 0xff), state);
             return;
         }

@@ -543,10 +543,8 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
             return;
         }
         if (hooks.supervisor) |callback| {
+            state.write(.pc, pc + 4);
             callback(supervisorImmediate(word), state);
-            if (state.read(.pc) == pc) {
-                state.write(.pc, pc + 4);
-            }
             return;
         }
     }
