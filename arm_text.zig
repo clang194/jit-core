@@ -186,6 +186,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmMultiply(buf, word);
     }
 
+    if (isArmLoadMultiple(word)) {
+        return formatArmLoadMultiple(buf, word, cond);
+    }
+
     if (arm_exec.isLoadWord(word)) {
         return formatArmTransferWord(buf, "ldr", word);
     }
@@ -613,6 +617,29 @@ fn floatPairTextIndex(value: u32, high: bool) u32 {
 
 fn armReg(value: u32) arm_state.ArmReg {
     return @intToEnum(arm_state.ArmReg, @intCast(u8, value & 0xf));
+}
+
+fn isArmLoadMultiple(word: u32) bool {
+    return (word & 0x0e500000) == 0x08100000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+}
+
+fn formatArmLoadMultiple(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    var used: usize = 0;
+    const op = if (bits.getBit32(word, 24))
+        if (bits.getBit32(word, 23)) "ldmib" else "ldmdb"
+    else
+        if (bits.getBit32(word, 23)) "ldm" else "ldmda";
+    try appendText(buf, &used, op);
+    try appendText(buf, &used, condName(cond));
+    try appendText(buf, &used, " ");
+    try appendText(buf, &used, arm_state.regName(armReg(word >> 16)));
+    if (bits.getBit32(word, 21)) {
+        try appendText(buf, &used, "!");
+    }
+    try appendText(buf, &used, ", {");
+    try appendRegList(buf, &used, @intCast(u16, word & 0xffff));
+    try appendText(buf, &used, "}");
+    return buf[0..used];
 }
 
 fn isMiscArmFormat(word: u32) bool {
@@ -1841,19 +1868,23 @@ fn formatThumbMultiple(buf: []u8, comptime op: []const u8, base: arm_state.ArmRe
         try appendText(buf, &used, "!");
     }
     try appendText(buf, &used, ", {");
+    try appendRegList(buf, &used, mask);
+    try appendText(buf, &used, "}");
+    return buf[0..used];
+}
+
+fn appendRegList(buf: []u8, used: *usize, mask: u16) TextError!void {
     var first = true;
-    var index: u8 = 0;
-    while (index < 8) : (index += 1) {
-        if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
+    var index: u5 = 0;
+    while (index < 16) : (index += 1) {
+        if ((mask & (@as(u16, 1) << index)) != 0) {
             if (!first) {
-                try appendText(buf, &used, ", ");
+                try appendText(buf, used, ", ");
             }
-            try appendText(buf, &used, arm_state.regName(@intToEnum(arm_state.ArmReg, index)));
+            try appendText(buf, used, arm_state.regName(@intToEnum(arm_state.ArmReg, @intCast(u8, index))));
             first = false;
         }
     }
-    try appendText(buf, &used, "}");
-    return buf[0..used];
 }
 
 fn appendText(buf: []u8, used: *usize, text: []const u8) TextError!void {

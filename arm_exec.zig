@@ -240,6 +240,10 @@ pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
 
+fn isLoadMultiple(word: u32) bool {
+    return (word & 0x0e500000) == 0x08100000 and armCondition(word) != null;
+}
+
 pub fn isLoadWord(word: u32) bool {
     if (armCondition(word) == null) {
         return false;
@@ -458,6 +462,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isBranchExchangeRegister(word)) {
         return runBranchExchangeRegister(word, state, pc);
+    }
+
+    if (isLoadMultiple(word)) {
+        return runLoadMultiple(word, state, hooks, pc);
     }
 
     if (usesExternalArmHandler(word)) {
@@ -1326,6 +1334,17 @@ fn nextFloatWordReg(reg: arm_state.FloatWordReg) arm_state.FloatWordReg {
     return @intToEnum(arm_state.FloatWordReg, @intCast(u5, @enumToInt(reg) + 1));
 }
 
+fn regListCount(list: u16) u5 {
+    var count: u5 = 0;
+    var index: u5 = 0;
+    while (index < 16) : (index += 1) {
+        if ((list & (@as(u16, 1) << index)) != 0) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
 fn readFloatPair(state: *const arm_state.MachineState, reg: arm_state.FloatPairReg) u64 {
     return state.readFloatPair(reg);
 }
@@ -1614,6 +1633,51 @@ fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!vo
         .unsigned_half => rotated & 0xffff,
     };
     state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runLoadMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const base_reg = armReg(word >> 16);
+    const list = @intCast(u16, word & 0xffff);
+    const count = regListCount(list);
+    if (base_reg == .pc or count == 0) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const base = state.read(base_reg);
+    const span = @as(u32, count) * 4;
+    const start = if (bits.getBit32(word, 24))
+        if (bits.getBit32(word, 23)) base +% 4 else base -% span
+    else
+        if (bits.getBit32(word, 23)) base else base -% span +% 4;
+    const writeback = if (bits.getBit32(word, 24))
+        if (bits.getBit32(word, 23)) base +% span else base -% span
+    else
+        if (bits.getBit32(word, 23)) base +% span else start +% 4;
+
+    var address = start;
+    var index: u5 = 0;
+    while (index < 15) : (index += 1) {
+        if ((list & (@as(u16, 1) << index)) != 0) {
+            state.write(@intToEnum(arm_state.ArmReg, @intCast(u8, index)), try readMemory32(state, hooks, address));
+            address +%= 4;
+        }
+    }
+
+    if (bits.getBit32(word, 21)) {
+        state.write(base_reg, writeback);
+    }
+
+    if ((list & 0x8000) != 0) {
+        loadWritePc(state, try readMemory32(state, hooks, address));
+        return;
+    }
     state.write(.pc, pc + 4);
 }
 
