@@ -244,6 +244,10 @@ fn isLoadMultiple(word: u32) bool {
     return (word & 0x0e500000) == 0x08100000 and armCondition(word) != null;
 }
 
+fn isStoreMultiple(word: u32) bool {
+    return (word & 0x0e500000) == 0x08000000 and armCondition(word) != null;
+}
+
 pub fn isLoadWord(word: u32) bool {
     if (armCondition(word) == null) {
         return false;
@@ -466,6 +470,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isLoadMultiple(word)) {
         return runLoadMultiple(word, state, hooks, pc);
+    }
+
+    if (isStoreMultiple(word)) {
+        return runStoreMultiple(word, state, hooks, pc);
     }
 
     if (usesExternalArmHandler(word)) {
@@ -1677,6 +1685,50 @@ fn runLoadMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.H
     if ((list & 0x8000) != 0) {
         loadWritePc(state, try readMemory32(state, hooks, address));
         return;
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const base_reg = armReg(word >> 16);
+    const list = @intCast(u16, word & 0xffff);
+    const count = regListCount(list);
+    if (base_reg == .pc or count == 0) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const base = state.read(base_reg);
+    const span = @as(u32, count) * 4;
+    const start = if (bits.getBit32(word, 24))
+        if (bits.getBit32(word, 23)) base +% 4 else base -% span
+    else
+        if (bits.getBit32(word, 23)) base else base -% span +% 4;
+    const writeback = if (bits.getBit32(word, 24))
+        if (bits.getBit32(word, 23)) base +% span else base -% span
+    else
+        if (bits.getBit32(word, 23)) base +% span else start +% 4;
+
+    var address = start;
+    var index: u5 = 0;
+    while (index < 15) : (index += 1) {
+        if ((list & (@as(u16, 1) << index)) != 0) {
+            try writeMemory32(state, hooks, address, state.read(@intToEnum(arm_state.ArmReg, @intCast(u8, index))));
+            address +%= 4;
+        }
+    }
+
+    if (bits.getBit32(word, 21)) {
+        state.write(base_reg, writeback);
+    }
+
+    if ((list & 0x8000) != 0) {
+        try writeMemory32(state, hooks, address, pc);
     }
     state.write(.pc, pc + 4);
 }
