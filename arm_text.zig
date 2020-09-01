@@ -1138,7 +1138,7 @@ fn formatArmLoadOffset(buf: []u8, word: u32) TextError![]u8 {
             return buf[0..0];
         }
         if (increase) {
-            return std.fmt.bufPrint(buf, "#{}", .{offset}) catch error.NoSpaceLeft;
+            return std.fmt.bufPrint(buf, "#+{}", .{offset}) catch error.NoSpaceLeft;
         }
         return std.fmt.bufPrint(buf, "#-{}", .{offset}) catch error.NoSpaceLeft;
     }
@@ -1146,7 +1146,7 @@ fn formatArmLoadOffset(buf: []u8, word: u32) TextError![]u8 {
     const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
     const mode = @intCast(u2, (word >> 5) & 0x3);
     const amount = @intCast(u8, (word >> 7) & 0x1f);
-    const prefix: []const u8 = if (increase) "" else "-";
+    const prefix: []const u8 = if (increase) "+" else "-";
     if (mode == 0 and amount == 0) {
         return std.fmt.bufPrint(buf, "{}{}", .{ prefix, arm_state.regName(source) }) catch error.NoSpaceLeft;
     }
@@ -1222,14 +1222,14 @@ fn formatArmHalfOffset(buf: []u8, word: u32) TextError![]u8 {
             return buf[0..0];
         }
         if (increase) {
-            return std.fmt.bufPrint(buf, "#{}", .{offset}) catch error.NoSpaceLeft;
+            return std.fmt.bufPrint(buf, "#+{}", .{offset}) catch error.NoSpaceLeft;
         }
         return std.fmt.bufPrint(buf, "#-{}", .{offset}) catch error.NoSpaceLeft;
     }
 
     const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
     if (increase) {
-        return std.fmt.bufPrint(buf, "{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
+        return std.fmt.bufPrint(buf, "+{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "-{}", .{arm_state.regName(source)}) catch error.NoSpaceLeft;
 }
