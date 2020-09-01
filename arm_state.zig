@@ -145,6 +145,8 @@ pub const MachineState = struct {
     float_regs: [64]u32,
     cpsr: u32,
     fpscr: u32,
+    exclusive: bool,
+    exclusive_address: u32,
 
     pub fn zeroed() MachineState {
         return MachineState{
@@ -152,6 +154,8 @@ pub const MachineState = struct {
             .float_regs = [_]u32{0} ** 64,
             .cpsr = 0,
             .fpscr = 0,
+            .exclusive = false,
+            .exclusive_address = 0,
         };
     }
 

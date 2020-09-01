@@ -158,6 +158,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmExtend(buf, word, info);
     }
 
+    if (isSyncArmFormat(word)) {
+        return formatSyncArm(buf, word, cond);
+    }
+
     if (isMiscArmFormat(word)) {
         return formatMiscArm(buf, word, cond);
     }
@@ -667,6 +671,105 @@ fn formatArmStoreMultiple(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     try appendRegList(buf, &used, @intCast(u16, word & 0xffff));
     try appendText(buf, &used, "}");
     return buf[0..used];
+}
+
+fn isSyncArmFormat(word: u32) bool {
+    return word == 0xf57ff01f or
+        (word & 0x0ff00fff) == 0x01900f9f or
+        (word & 0x0ff00fff) == 0x01d00f9f or
+        (word & 0x0ff00fff) == 0x01b00f9f or
+        (word & 0x0ff00fff) == 0x01f00f9f or
+        (word & 0x0ff00ff0) == 0x01800f90 or
+        (word & 0x0ff00ff0) == 0x01c00f90 or
+        (word & 0x0ff00ff0) == 0x01a00f90 or
+        (word & 0x0ff00ff0) == 0x01e00f90 or
+        (word & 0x0ff00ff0) == 0x01000090 or
+        (word & 0x0ff00ff0) == 0x01400090;
+}
+
+fn formatSyncArm(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const base = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (word == 0xf57ff01f) {
+        return std.fmt.bufPrint(buf, "clrex", .{}) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00fff) == 0x01900f9f) {
+        return std.fmt.bufPrint(buf, "ldrex{} {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00fff) == 0x01d00f9f) {
+        return std.fmt.bufPrint(buf, "ldrexb{} {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00fff) == 0x01b00f9f) {
+        return std.fmt.bufPrint(buf, "ldrexd{} {}, {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(nextReg(dest)),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00fff) == 0x01f00f9f) {
+        return std.fmt.bufPrint(buf, "ldrexh{} {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00ff0) == 0x01800f90) {
+        return std.fmt.bufPrint(buf, "strex{} {}, {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(source),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00ff0) == 0x01c00f90) {
+        return std.fmt.bufPrint(buf, "strexb{} {}, {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(source),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00ff0) == 0x01a00f90) {
+        return std.fmt.bufPrint(buf, "strexd{} {}, {}, {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(source),
+            arm_state.regName(nextReg(source)),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00ff0) == 0x01e00f90) {
+        return std.fmt.bufPrint(buf, "strexh{} {}, {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(source),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    if ((word & 0x0ff00ff0) == 0x01000090) {
+        return std.fmt.bufPrint(buf, "swp{} {}, {}, [{}]", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(source),
+            arm_state.regName(base),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "swpb{} {}, {}, [{}]", .{
+        condName(cond),
+        arm_state.regName(dest),
+        arm_state.regName(source),
+        arm_state.regName(base),
+    }) catch error.NoSpaceLeft;
 }
 
 fn isMiscArmFormat(word: u32) bool {

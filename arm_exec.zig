@@ -236,6 +236,29 @@ fn isBranchLinkExchangeImmediate(word: u32) bool {
     return (word & 0xfe000000) == 0xfa000000;
 }
 
+fn isClearExclusive(word: u32) bool {
+    return word == 0xf57ff01f;
+}
+
+fn isLoadExclusive(word: u32) bool {
+    return ((word & 0x0ff00fff) == 0x01900f9f or
+        (word & 0x0ff00fff) == 0x01d00f9f or
+        (word & 0x0ff00fff) == 0x01b00f9f or
+        (word & 0x0ff00fff) == 0x01f00f9f) and armCondition(word) != null;
+}
+
+fn isStoreExclusive(word: u32) bool {
+    return ((word & 0x0ff00ff0) == 0x01800f90 or
+        (word & 0x0ff00ff0) == 0x01c00f90 or
+        (word & 0x0ff00ff0) == 0x01a00f90 or
+        (word & 0x0ff00ff0) == 0x01e00f90) and armCondition(word) != null;
+}
+
+fn isSwap(word: u32) bool {
+    return ((word & 0x0ff00ff0) == 0x01000090 or
+        (word & 0x0ff00ff0) == 0x01400090) and armCondition(word) != null;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -466,6 +489,24 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isBranchExchangeRegister(word)) {
         return runBranchExchangeRegister(word, state, pc);
+    }
+
+    if (isClearExclusive(word)) {
+        state.exclusive = false;
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    if (isLoadExclusive(word)) {
+        return runLoadExclusive(word, state, hooks, pc);
+    }
+
+    if (isStoreExclusive(word)) {
+        return runStoreExclusive(word, state, hooks, pc);
+    }
+
+    if (isSwap(word)) {
+        return runSwap(word, state, hooks, pc);
     }
 
     if (isLoadMultiple(word)) {
@@ -1733,6 +1774,105 @@ fn runStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.
     state.write(.pc, pc + 4);
 }
 
+fn runLoadExclusive(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const base_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const op = word & 0x0ff00000;
+    if (base_reg == .pc or dest == .pc or (op == 0x01b00000 and dest == .lr)) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const address = state.read(base_reg);
+    state.exclusive = true;
+    state.exclusive_address = address;
+    switch (op) {
+        0x01900000 => state.write(dest, try readMemory32(state, hooks, address)),
+        0x01d00000 => state.write(dest, try readMemory8(hooks, address)),
+        0x01b00000 => {
+            state.write(dest, try readMemory32(state, hooks, address));
+            state.write(nextArmReg(dest), try readMemory32(state, hooks, address +% 4));
+        },
+        0x01f00000 => state.write(dest, try readMemory16(state, hooks, address)),
+        else => return error.UnknownInstruction,
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runStoreExclusive(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const base_reg = armReg(word >> 16);
+    const status_reg = armReg(word >> 12);
+    const data_reg = armReg(word);
+    const op = word & 0x0ff00000;
+    if (base_reg == .pc or status_reg == .pc or status_reg == base_reg or status_reg == data_reg) {
+        return error.Unpredictable;
+    }
+    if (op == 0x01a00000) {
+        if (data_reg == .lr or (@enumToInt(data_reg) & 1) != 0 or status_reg == nextArmReg(data_reg)) {
+            return error.Unpredictable;
+        }
+    } else if (data_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const address = state.read(base_reg);
+    if (exclusiveHolds(state, address)) {
+        state.exclusive = false;
+        switch (op) {
+            0x01800000 => try writeMemory32(state, hooks, address, state.read(data_reg)),
+            0x01c00000 => try writeMemory8(hooks, address, bits.lowByte(state.read(data_reg))),
+            0x01a00000 => {
+                try writeMemory32(state, hooks, address, state.read(data_reg));
+                try writeMemory32(state, hooks, address +% 4, state.read(nextArmReg(data_reg)));
+            },
+            0x01e00000 => try writeMemory16(state, hooks, address, @intCast(u16, state.read(data_reg) & 0xffff)),
+            else => return error.UnknownInstruction,
+        }
+        state.write(status_reg, 0);
+    } else {
+        state.write(status_reg, 1);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runSwap(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const base_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (base_reg == .pc or dest == .pc or source == .pc or base_reg == dest or base_reg == source) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const address = state.read(base_reg);
+    if ((word & 0x00400000) != 0) {
+        const data = try readMemory8(hooks, address);
+        try writeMemory8(hooks, address, bits.lowByte(state.read(source)));
+        state.write(dest, data);
+    } else {
+        const data = try readMemory32(state, hooks, address);
+        try writeMemory32(state, hooks, address, state.read(source));
+        state.write(dest, data);
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn runLoadWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -2245,6 +2385,10 @@ fn nextArmReg(reg: arm_state.ArmReg) arm_state.ArmReg {
         return .pc;
     }
     return @intToEnum(arm_state.ArmReg, @intCast(u8, next));
+}
+
+fn exclusiveHolds(state: *const arm_state.MachineState, address: u32) bool {
+    return state.exclusive and (((address ^ state.exclusive_address) & 0xfffffff8) == 0);
 }
 
 fn readArmOperand(state: *const arm_state.MachineState, reg: arm_state.ArmReg, pc: u32) u32 {
