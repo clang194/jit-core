@@ -109,6 +109,14 @@ pub const Core = struct {
         _ = self;
     }
 
+    pub fn resetState(self: *Core) CoreError!void {
+        if (self.active) {
+            return error.Busy;
+        }
+        self.state = arm_state.MachineState.zeroed();
+        self.halt = false;
+    }
+
     pub fn requestHalt(self: *Core) void {
         self.halt = true;
     }
