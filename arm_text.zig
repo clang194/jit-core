@@ -146,6 +146,11 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return std.fmt.bufPrint(buf, "nop", .{}) catch error.NoSpaceLeft;
     }
 
+    if ((word & 0xfffffdff) == 0xf1010000) {
+        const name = if ((word & 0x00000200) != 0) "be" else "le";
+        return std.fmt.bufPrint(buf, "setend {}", .{name}) catch error.NoSpaceLeft;
+    }
+
     if ((word & 0x0fff0ff0) == 0x06bf0f30) {
         return formatArmUnaryReg(buf, "rev", word, cond);
     }
