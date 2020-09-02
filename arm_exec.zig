@@ -457,6 +457,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatLoad(word, state, hooks, pc);
     }
 
+    if (isFloatStore(word)) {
+        return runFloatStore(word, state, hooks, pc);
+    }
+
     if (isFloatAbs(word)) {
         return runFloatAbs(word, state, hooks, pc);
     }
@@ -731,6 +735,10 @@ fn isFloatMoveReg(word: u32) bool {
 
 fn isFloatLoad(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0f300e00) == 0x0d100a00;
+}
+
+fn isFloatStore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0f300e00) == 0x0d000a00;
 }
 
 fn isFloatAbs(word: u32) bool {
@@ -1078,6 +1086,35 @@ fn runFloatLoad(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
         writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), value);
     } else {
         state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), try readMemory32(state, hooks, address));
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatStore(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const offset = (word & 0xff) << 2;
+    const base_reg = armReg(word >> 16);
+    const base = if (base_reg == .pc) (pc + 8) & 0xfffffffc else state.read(base_reg);
+    const address = if (bits.getBit32(word, 23)) base +% offset else base -% offset;
+
+    if (bits.getBit32(word, 8)) {
+        const value = readFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)));
+        const low = @intCast(u32, value & 0xffffffff);
+        const high = @intCast(u32, value >> 32);
+        if (state.bigEndian()) {
+            try writeMemory32(state, hooks, address, high);
+            try writeMemory32(state, hooks, address +% 4, low);
+        } else {
+            try writeMemory32(state, hooks, address, low);
+            try writeMemory32(state, hooks, address +% 4, high);
+        }
+    } else {
+        try writeMemory32(state, hooks, address, state.readFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22))));
     }
     state.write(.pc, pc + 4);
 }

@@ -86,6 +86,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatLoad(buf, word, cond);
     }
 
+    if (isFloatStore(word)) {
+        return formatFloatStore(buf, word, cond);
+    }
+
     if (isFloatAbs(word)) {
         return formatFloatAbs(buf, word, cond);
     }
@@ -341,6 +345,10 @@ fn isFloatLoad(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0f300e00) == 0x0d100a00;
 }
 
+fn isFloatStore(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0f300e00) == 0x0d000a00;
+}
+
 fn isFloatAbs(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00ac0;
 }
@@ -562,6 +570,28 @@ fn formatFloatLoad(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         }) catch error.NoSpaceLeft;
     }
     return std.fmt.bufPrint(buf, "vldr{} s{}, [{}, #{}{}]", .{
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        arm_state.regName(base),
+        suffix,
+        offset,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatStore(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const suffix = if (bits.getBit32(word, 23)) "+" else "-";
+    const offset = (word & 0xff) << 2;
+    const base = armReg(word >> 16);
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vstr{} d{}, [{}, #{}{}]", .{
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            arm_state.regName(base),
+            suffix,
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vstr{} s{}, [{}, #{}{}]", .{
         condName(cond),
         floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
         arm_state.regName(base),
