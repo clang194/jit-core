@@ -305,6 +305,26 @@ pub fn isLoadHalf(word: u32) bool {
     return (word & 0x0e500ff0) == 0x001000b0;
 }
 
+pub fn isLoadSignedByte(word: u32) bool {
+    if (armCondition(word) == null) {
+        return false;
+    }
+    if ((word & 0x0e5000f0) == 0x005000d0) {
+        return true;
+    }
+    return (word & 0x0e500ff0) == 0x001000d0;
+}
+
+pub fn isLoadSignedHalf(word: u32) bool {
+    if (armCondition(word) == null) {
+        return false;
+    }
+    if ((word & 0x0e5000f0) == 0x005000f0) {
+        return true;
+    }
+    return (word & 0x0e500ff0) == 0x001000f0;
+}
+
 pub fn isLoadDouble(word: u32) bool {
     if (armCondition(word) == null) {
         return false;
@@ -561,6 +581,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isLoadHalf(word)) {
         return runLoadHalf(word, state, hooks, pc);
+    }
+
+    if (isLoadSignedByte(word)) {
+        return runLoadSignedByte(word, state, hooks, pc);
+    }
+
+    if (isLoadSignedHalf(word)) {
+        return runLoadSignedHalf(word, state, hooks, pc);
     }
 
     if (isLoadDouble(word)) {
@@ -2013,6 +2041,72 @@ fn runLoadHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
     const data = try readMemory16(state, hooks, address);
     if (dest == .pc) {
         writeArmAluPc(state, @as(u32, data) +% 4);
+        return;
+    }
+    state.write(dest, data);
+    state.write(.pc, pc + 4);
+}
+
+fn runLoadSignedByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const pre_index = bits.getBit32(word, 24);
+    const increase = bits.getBit32(word, 23);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const base_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const base = readArmOperand(state, base_reg, pc);
+    const offset = transferHalfOffset(word, state, pc);
+    const changed = offsetAddress(base, offset, increase);
+    const address = if (pre_index) changed else base;
+
+    if (writeback) {
+        if (base_reg == .pc) {
+            return error.Unpredictable;
+        }
+        state.write(base_reg, changed);
+    }
+
+    const data = signExtendByte(try readMemory8(hooks, address));
+    if (dest == .pc) {
+        writeArmAluPc(state, data +% 4);
+        return;
+    }
+    state.write(dest, data);
+    state.write(.pc, pc + 4);
+}
+
+fn runLoadSignedHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const pre_index = bits.getBit32(word, 24);
+    const increase = bits.getBit32(word, 23);
+    const writeback = !pre_index or bits.getBit32(word, 21);
+    const base_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const base = readArmOperand(state, base_reg, pc);
+    const offset = transferHalfOffset(word, state, pc);
+    const changed = offsetAddress(base, offset, increase);
+    const address = if (pre_index) changed else base;
+
+    if (writeback) {
+        if (base_reg == .pc) {
+            return error.Unpredictable;
+        }
+        state.write(base_reg, changed);
+    }
+
+    const data = signExtendHalf(try readMemory16(state, hooks, address));
+    if (dest == .pc) {
+        writeArmAluPc(state, data +% 4);
         return;
     }
     state.write(dest, data);

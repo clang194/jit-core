@@ -219,6 +219,14 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatArmTransferHalf(buf, "ldrh", word);
     }
 
+    if (arm_exec.isLoadSignedByte(word)) {
+        return formatArmTransferHalf(buf, "ldrsb", word);
+    }
+
+    if (arm_exec.isLoadSignedHalf(word)) {
+        return formatArmTransferHalf(buf, "ldrsh", word);
+    }
+
     if (arm_exec.isLoadDouble(word)) {
         return formatArmTransferDouble(buf, "ldrd", word);
     }
