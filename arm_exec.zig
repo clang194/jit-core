@@ -259,6 +259,10 @@ fn isSwap(word: u32) bool {
         (word & 0x0ff00ff0) == 0x01400090) and armCondition(word) != null;
 }
 
+fn isEndianSelect(word: u32) bool {
+    return (word & 0xfffffdff) == 0xf1010000;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -511,6 +515,12 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isSwap(word)) {
         return runSwap(word, state, hooks, pc);
+    }
+
+    if (isEndianSelect(word)) {
+        state.setBigEndian((word & 0x00000200) != 0);
+        state.write(.pc, pc + 4);
+        return;
     }
 
     if (isLoadMultiple(word)) {
