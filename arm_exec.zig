@@ -271,6 +271,14 @@ fn isSignedSaturatingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06200ff0 and armCondition(word) != null;
 }
 
+fn isUnsignedSaturatingAddBytes(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06600f90 and armCondition(word) != null;
+}
+
+fn isSignedSaturatingAddBytes(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06200f90 and armCondition(word) != null;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -557,6 +565,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isSignedSaturatingSubBytes(word)) {
         return runSignedSaturatingSubBytes(word, state, pc);
+    }
+
+    if (isUnsignedSaturatingAddBytes(word)) {
+        return runUnsignedSaturatingAddBytes(word, state, pc);
+    }
+
+    if (isSignedSaturatingAddBytes(word)) {
+        return runSignedSaturatingAddBytes(word, state, pc);
     }
 
     if (isLoadMultiple(word)) {
@@ -1915,6 +1931,64 @@ fn runSignedSaturatingSubBytes(word: u32, state: *arm_state.MachineState, pc: u3
     while (index < 4) : (index += 1) {
         const shift = @intCast(u5, index * 8);
         const lane = clampSignedByte(signedByte(left >> shift) - signedByte(right >> shift));
+        const encoded = if (lane < 0) @intCast(u8, lane + 256) else @intCast(u8, lane);
+        result |= @as(u32, encoded) << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runUnsignedSaturatingAddBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const left_byte = (left >> shift) & 0xff;
+        const right_byte = (right >> shift) & 0xff;
+        const sum = left_byte + right_byte;
+        const byte = if (sum > 0xff) @as(u32, 0xff) else sum;
+        result |= byte << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedSaturatingAddBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const lane = clampSignedByte(signedByte(left >> shift) + signedByte(right >> shift));
         const encoded = if (lane < 0) @intCast(u8, lane + 256) else @intCast(u8, lane);
         result |= @as(u32, encoded) << shift;
     }
