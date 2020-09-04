@@ -263,6 +263,10 @@ fn isEndianSelect(word: u32) bool {
     return (word & 0xfffffdff) == 0xf1010000;
 }
 
+fn isUnsignedSaturatingSubBytes(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06600ff0 and armCondition(word) != null;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -541,6 +545,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         state.setBigEndian((word & 0x00000200) != 0);
         state.write(.pc, pc + 4);
         return;
+    }
+
+    if (isUnsignedSaturatingSubBytes(word)) {
+        return runUnsignedSaturatingSubBytes(word, state, pc);
     }
 
     if (isLoadMultiple(word)) {
@@ -1846,6 +1854,35 @@ fn runStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.
     if ((list & 0x8000) != 0) {
         try writeMemory32(state, hooks, address, pc);
     }
+    state.write(.pc, pc + 4);
+}
+
+fn runUnsignedSaturatingSubBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const left_byte = @intCast(u8, (left >> shift) & 0xff);
+        const right_byte = @intCast(u8, (right >> shift) & 0xff);
+        const byte = if (left_byte > right_byte) left_byte - right_byte else 0;
+        result |= @as(u32, byte) << shift;
+    }
+    state.write(dest, result);
     state.write(.pc, pc + 4);
 }
 

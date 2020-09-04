@@ -179,6 +179,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatSaturatingArm(buf, word, cond);
     }
 
+    if (isParallelSaturatingFormat(word)) {
+        return formatParallelSaturating(buf, word, cond);
+    }
+
     if (isHalfMultiplyFormat(word)) {
         return formatHalfMultiply(buf, word, cond);
     }
@@ -896,6 +900,19 @@ fn formatSaturatingArm(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         sat,
         arm_state.regName(source),
         shift,
+    }) catch error.NoSpaceLeft;
+}
+
+fn isParallelSaturatingFormat(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06600ff0;
+}
+
+fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "uqsub8{} {}, {}, {}", .{
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word >> 16)),
+        arm_state.regName(armReg(word)),
     }) catch error.NoSpaceLeft;
 }
 
