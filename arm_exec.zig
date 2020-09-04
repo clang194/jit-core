@@ -267,6 +267,10 @@ fn isUnsignedSaturatingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06600ff0 and armCondition(word) != null;
 }
 
+fn isSignedSaturatingSubBytes(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06200ff0 and armCondition(word) != null;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -549,6 +553,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isUnsignedSaturatingSubBytes(word)) {
         return runUnsignedSaturatingSubBytes(word, state, pc);
+    }
+
+    if (isSignedSaturatingSubBytes(word)) {
+        return runSignedSaturatingSubBytes(word, state, pc);
     }
 
     if (isLoadMultiple(word)) {
@@ -1886,6 +1894,34 @@ fn runUnsignedSaturatingSubBytes(word: u32, state: *arm_state.MachineState, pc: 
     state.write(.pc, pc + 4);
 }
 
+fn runSignedSaturatingSubBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const lane = clampSignedByte(signedByte(left >> shift) - signedByte(right >> shift));
+        const encoded = if (lane < 0) @intCast(u8, lane + 256) else @intCast(u8, lane);
+        result |= @as(u32, encoded) << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
 fn runLoadExclusive(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     const base_reg = armReg(word >> 16);
     const dest = armReg(word >> 12);
@@ -2749,6 +2785,24 @@ fn signExtendByte(value: u32) u32 {
         return narrowed | 0xffffff00;
     }
     return narrowed;
+}
+
+fn signedByte(value: u32) i16 {
+    const narrowed = @intCast(i16, value & 0xff);
+    if ((narrowed & 0x80) != 0) {
+        return narrowed - 256;
+    }
+    return narrowed;
+}
+
+fn clampSignedByte(value: i16) i16 {
+    if (value > 127) {
+        return 127;
+    }
+    if (value < -128) {
+        return -128;
+    }
+    return value;
 }
 
 fn signExtendHalf(value: u32) u32 {

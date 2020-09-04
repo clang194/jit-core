@@ -904,11 +904,14 @@ fn formatSaturatingArm(buf: []u8, word: u32, cond: u4) TextError![]u8 {
 }
 
 fn isParallelSaturatingFormat(word: u32) bool {
-    return (word & 0x0ff00ff0) == 0x06600ff0;
+    return (word & 0x0ff00ff0) == 0x06600ff0 or
+        (word & 0x0ff00ff0) == 0x06200ff0;
 }
 
 fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
-    return std.fmt.bufPrint(buf, "uqsub8{} {}, {}, {}", .{
+    const op = if ((word & 0x00400000) != 0) "uqsub8" else "qsub8";
+    return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
+        op,
         condName(cond),
         arm_state.regName(armReg(word >> 12)),
         arm_state.regName(armReg(word >> 16)),
