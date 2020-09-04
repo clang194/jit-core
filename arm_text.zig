@@ -907,16 +907,21 @@ fn isParallelSaturatingFormat(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06600ff0 or
         (word & 0x0ff00ff0) == 0x06200ff0 or
         (word & 0x0ff00ff0) == 0x06600f90 or
-        (word & 0x0ff00ff0) == 0x06200f90;
+        (word & 0x0ff00ff0) == 0x06200f90 or
+        (word & 0x0ff00ff0) == 0x06600f70 or
+        (word & 0x0ff00ff0) == 0x06200f70 or
+        (word & 0x0ff00ff0) == 0x06600f10 or
+        (word & 0x0ff00ff0) == 0x06200f10;
 }
 
 fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     const unsigned = (word & 0x00400000) != 0;
     const subtract = (word & 0x00000060) == 0x00000060;
+    const half = (word & 0x00000080) == 0;
     const op = if (subtract)
-        if (unsigned) "uqsub8" else "qsub8"
+        if (half) if (unsigned) "uqsub16" else "qsub16" else if (unsigned) "uqsub8" else "qsub8"
     else
-        if (unsigned) "uqadd8" else "qadd8";
+        if (half) if (unsigned) "uqadd16" else "qadd16" else if (unsigned) "uqadd8" else "qadd8";
     return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
         op,
         condName(cond),

@@ -279,6 +279,22 @@ fn isSignedSaturatingAddBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06200f90 and armCondition(word) != null;
 }
 
+fn isUnsignedSaturatingSubHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06600f70 and armCondition(word) != null;
+}
+
+fn isSignedSaturatingSubHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06200f70 and armCondition(word) != null;
+}
+
+fn isUnsignedSaturatingAddHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06600f10 and armCondition(word) != null;
+}
+
+fn isSignedSaturatingAddHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06200f10 and armCondition(word) != null;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -573,6 +589,22 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isSignedSaturatingAddBytes(word)) {
         return runSignedSaturatingAddBytes(word, state, pc);
+    }
+
+    if (isUnsignedSaturatingSubHalves(word)) {
+        return runUnsignedSaturatingSubHalves(word, state, pc);
+    }
+
+    if (isSignedSaturatingSubHalves(word)) {
+        return runSignedSaturatingSubHalves(word, state, pc);
+    }
+
+    if (isUnsignedSaturatingAddHalves(word)) {
+        return runUnsignedSaturatingAddHalves(word, state, pc);
+    }
+
+    if (isSignedSaturatingAddHalves(word)) {
+        return runSignedSaturatingAddHalves(word, state, pc);
     }
 
     if (isLoadMultiple(word)) {
@@ -1996,6 +2028,121 @@ fn runSignedSaturatingAddBytes(word: u32, state: *arm_state.MachineState, pc: u3
     state.write(.pc, pc + 4);
 }
 
+fn runUnsignedSaturatingSubHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const left_half = @intCast(u16, (left >> shift) & 0xffff);
+        const right_half = @intCast(u16, (right >> shift) & 0xffff);
+        const half = if (left_half > right_half) left_half - right_half else 0;
+        result |= @as(u32, half) << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedSaturatingSubHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const lane = clampSignedHalfWord(signedHalf(left >> shift) - signedHalf(right >> shift));
+        const encoded = if (lane < 0) @intCast(u16, lane + 65536) else @intCast(u16, lane);
+        result |= @as(u32, encoded) << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runUnsignedSaturatingAddHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const left_half = (left >> shift) & 0xffff;
+        const right_half = (right >> shift) & 0xffff;
+        const sum = left_half + right_half;
+        const half = if (sum > 0xffff) @as(u32, 0xffff) else sum;
+        result |= half << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedSaturatingAddHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const lane = clampSignedHalfWord(signedHalf(left >> shift) + signedHalf(right >> shift));
+        const encoded = if (lane < 0) @intCast(u16, lane + 65536) else @intCast(u16, lane);
+        result |= @as(u32, encoded) << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
 fn runLoadExclusive(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     const base_reg = armReg(word >> 16);
     const dest = armReg(word >> 12);
@@ -2875,6 +3022,24 @@ fn clampSignedByte(value: i16) i16 {
     }
     if (value < -128) {
         return -128;
+    }
+    return value;
+}
+
+fn signedHalf(value: u32) i32 {
+    const narrowed = @intCast(i32, value & 0xffff);
+    if ((narrowed & 0x8000) != 0) {
+        return narrowed - 65536;
+    }
+    return narrowed;
+}
+
+fn clampSignedHalfWord(value: i32) i32 {
+    if (value > 32767) {
+        return 32767;
+    }
+    if (value < -32768) {
+        return -32768;
     }
     return value;
 }
