@@ -90,6 +90,14 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatStore(buf, word, cond);
     }
 
+    if (isFloatPush(word)) {
+        return formatFloatStack(buf, word, cond, "vpush");
+    }
+
+    if (isFloatPop(word)) {
+        return formatFloatStack(buf, word, cond, "vpop");
+    }
+
     if (isFloatAbs(word)) {
         return formatFloatAbs(buf, word, cond);
     }
@@ -366,6 +374,14 @@ fn isFloatStore(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0f300e00) == 0x0d000a00;
 }
 
+fn isFloatPush(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e00) == 0x0d2d0a00;
+}
+
+fn isFloatPop(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e00) == 0x0cbd0a00;
+}
+
 fn isFloatAbs(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb00ac0;
 }
@@ -614,6 +630,23 @@ fn formatFloatStore(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         arm_state.regName(base),
         suffix,
         offset,
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatStack(buf: []u8, word: u32, cond: u4, name: []const u8) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "{}{} d{}(+{})", .{
+            name,
+            condName(cond),
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            (word & 0xff) >> 1,
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "{}{} s{}(+{})", .{
+        name,
+        condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        word & 0xff,
     }) catch error.NoSpaceLeft;
 }
 

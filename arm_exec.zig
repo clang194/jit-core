@@ -517,6 +517,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatStore(word, state, hooks, pc);
     }
 
+    if (isFloatPush(word)) {
+        return runFloatPush(word, state, hooks, pc);
+    }
+
+    if (isFloatPop(word)) {
+        return runFloatPop(word, state, hooks, pc);
+    }
+
     if (isFloatAbs(word)) {
         return runFloatAbs(word, state, hooks, pc);
     }
@@ -841,6 +849,14 @@ fn isFloatLoad(word: u32) bool {
 
 fn isFloatStore(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0f300e00) == 0x0d000a00;
+}
+
+fn isFloatPush(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e00) == 0x0d2d0a00;
+}
+
+fn isFloatPop(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e00) == 0x0cbd0a00;
 }
 
 fn isFloatAbs(word: u32) bool {
@@ -1221,6 +1237,81 @@ fn runFloatStore(word: u32, state: *arm_state.MachineState, hooks: arm_state.Hos
     state.write(.pc, pc + 4);
 }
 
+fn runFloatPush(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const double = bits.getBit32(word, 8);
+    const count = floatStackCount(word);
+    const base = floatStackBase(word, double);
+    if (count == 0 or base + count > 32 or (double and count > 16)) {
+        return error.Unpredictable;
+    }
+
+    var address = state.read(.sp) -% ((word & 0xff) << 2);
+    state.write(.sp, address);
+    var index: u32 = 0;
+    while (index < count) : (index += 1) {
+        if (double) {
+            const value = readFloatPair(state, @intToEnum(arm_state.FloatPairReg, @intCast(u5, base + index)));
+            const low = @intCast(u32, value & 0xffffffff);
+            const high = @intCast(u32, value >> 32);
+            if (state.bigEndian()) {
+                try writeMemory32(state, hooks, address, high);
+                try writeMemory32(state, hooks, address +% 4, low);
+            } else {
+                try writeMemory32(state, hooks, address, low);
+                try writeMemory32(state, hooks, address +% 4, high);
+            }
+            address +%= 8;
+        } else {
+            try writeMemory32(state, hooks, address, state.readFloatWord(@intToEnum(arm_state.FloatWordReg, @intCast(u5, base + index))));
+            address +%= 4;
+        }
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatPop(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const double = bits.getBit32(word, 8);
+    const count = floatStackCount(word);
+    const base = floatStackBase(word, double);
+    if (count == 0 or base + count > 32 or (double and count > 16)) {
+        return error.Unpredictable;
+    }
+
+    var address = state.read(.sp);
+    var index: u32 = 0;
+    while (index < count) : (index += 1) {
+        if (double) {
+            var low = try readMemory32(state, hooks, address);
+            var high = try readMemory32(state, hooks, address +% 4);
+            if (state.bigEndian()) {
+                const saved = low;
+                low = high;
+                high = saved;
+            }
+            const value = @as(u64, low) | (@as(u64, high) << 32);
+            writeFloatPair(state, @intToEnum(arm_state.FloatPairReg, @intCast(u5, base + index)), value);
+            address +%= 8;
+        } else {
+            state.writeFloatWord(@intToEnum(arm_state.FloatWordReg, @intCast(u5, base + index)), try readMemory32(state, hooks, address));
+            address +%= 4;
+        }
+    }
+    state.write(.sp, address);
+    state.write(.pc, pc + 4);
+}
+
 fn runFloatAbs(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
         return runExternalArmHandler(state, hooks, pc);
@@ -1512,6 +1603,22 @@ fn floatWordIndex(value: u32, high: bool) arm_state.FloatWordReg {
 fn floatPairIndex(value: u32, high: bool) arm_state.FloatPairReg {
     const index = @intCast(u5, (value & 0xf) | (@as(u32, @boolToInt(high)) << 4));
     return @intToEnum(arm_state.FloatPairReg, index);
+}
+
+fn floatStackBase(word: u32, double: bool) u32 {
+    const value = (word >> 12) & 0xf;
+    const high = @as(u32, @boolToInt(bits.getBit32(word, 22)));
+    if (double) {
+        return value | (high << 4);
+    }
+    return (value << 1) | high;
+}
+
+fn floatStackCount(word: u32) u32 {
+    if (bits.getBit32(word, 8)) {
+        return (word & 0xff) >> 1;
+    }
+    return word & 0xff;
 }
 
 fn isLastFloatWord(reg: arm_state.FloatWordReg) bool {
