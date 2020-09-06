@@ -159,6 +159,18 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return std.fmt.bufPrint(buf, "setend {}", .{name}) catch error.NoSpaceLeft;
     }
 
+    if (isStatusRead(word)) {
+        return formatStatusRead(buf, word, cond);
+    }
+
+    if (isStatusWriteImmediate(word)) {
+        return formatStatusWriteImmediate(buf, word, cond);
+    }
+
+    if (isStatusWriteRegister(word)) {
+        return formatStatusWriteRegister(buf, word, cond);
+    }
+
     if ((word & 0x0fff0ff0) == 0x06bf0f30) {
         return formatArmUnaryReg(buf, "rev", word, cond);
     }
@@ -396,6 +408,18 @@ fn isFloatSqrt(word: u32) bool {
 
 fn isVfpCondition(word: u32) bool {
     return (word >> 28) != 0xf;
+}
+
+fn isStatusRead(word: u32) bool {
+    return (word & 0x0fff0fff) == 0x010f0000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+}
+
+fn isStatusWriteImmediate(word: u32) bool {
+    return (word & 0x0ff3f000) == 0x0320f000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+}
+
+fn isStatusWriteRegister(word: u32) bool {
+    return (word & 0x0ff3fff0) == 0x0120f000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
 }
 
 fn formatFloatAdd(buf: []u8, word: u32, cond: u4) TextError![]u8 {
@@ -701,6 +725,40 @@ fn floatWordTextIndex(value: u32, high: bool) u32 {
 
 fn floatPairTextIndex(value: u32, high: bool) u32 {
     return (value & 0xf) | (@as(u32, @boolToInt(high)) << 4);
+}
+
+fn statusMaskName(word: u32) TextError![]const u8 {
+    return switch ((word >> 18) & 0x3) {
+        0x1 => "g",
+        0x2 => "nzcvq",
+        0x3 => "nzcvqg",
+        else => error.UnknownInstruction,
+    };
+}
+
+fn formatStatusRead(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const dest = armReg(word >> 12);
+    return std.fmt.bufPrint(buf, "mrs{} {}, apsr", .{
+        condName(cond),
+        arm_state.regName(dest),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatStatusWriteImmediate(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "msr{} apsr_{}, #{}", .{
+        condName(cond),
+        try statusMaskName(word),
+        arm_exec.expandArmImmediate(@intCast(u8, (word >> 8) & 0xf), @intCast(u8, word & 0xff)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatStatusWriteRegister(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const source = armReg(word);
+    return std.fmt.bufPrint(buf, "msr{} apsr_{}, {}", .{
+        condName(cond),
+        try statusMaskName(word),
+        arm_state.regName(source),
+    }) catch error.NoSpaceLeft;
 }
 
 fn armReg(value: u32) arm_state.ArmReg {

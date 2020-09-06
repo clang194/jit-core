@@ -263,6 +263,18 @@ fn isEndianSelect(word: u32) bool {
     return (word & 0xfffffdff) == 0xf1010000;
 }
 
+fn isStatusRead(word: u32) bool {
+    return (word & 0x0fff0fff) == 0x010f0000 and armCondition(word) != null;
+}
+
+fn isStatusWriteImmediate(word: u32) bool {
+    return (word & 0x0ff3f000) == 0x0320f000 and armCondition(word) != null;
+}
+
+fn isStatusWriteRegister(word: u32) bool {
+    return (word & 0x0ff3fff0) == 0x0120f000 and armCondition(word) != null;
+}
+
 fn isUnsignedSaturatingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06600ff0 and armCondition(word) != null;
 }
@@ -581,6 +593,18 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         state.setBigEndian((word & 0x00000200) != 0);
         state.write(.pc, pc + 4);
         return;
+    }
+
+    if (isStatusRead(word)) {
+        return runStatusRead(word, state, pc);
+    }
+
+    if (isStatusWriteImmediate(word)) {
+        return runStatusWriteImmediate(word, state, pc);
+    }
+
+    if (isStatusWriteRegister(word)) {
+        return runStatusWriteRegister(word, state, pc);
     }
 
     if (isUnsignedSaturatingSubBytes(word)) {
@@ -1640,12 +1664,74 @@ fn regListCount(list: u16) u5 {
     return count;
 }
 
+fn statusWriteMask(word: u32) u32 {
+    const field = (word >> 18) & 0x3;
+    var mask: u32 = 0;
+    if ((field & 0x2) != 0) {
+        mask |= 0xf8000000;
+    }
+    if ((field & 0x1) != 0) {
+        mask |= 0x000f0000;
+    }
+    return mask;
+}
+
+fn mergeStatus(old: u32, value: u32, mask: u32) u32 {
+    return (old & ~mask) | (value & mask);
+}
+
 fn readFloatPair(state: *const arm_state.MachineState, reg: arm_state.FloatPairReg) u64 {
     return state.readFloatPair(reg);
 }
 
 fn writeFloatPair(state: *arm_state.MachineState, reg: arm_state.FloatPairReg, value: u64) void {
     state.writeFloatPair(reg, value);
+}
+
+fn runStatusRead(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    if (dest == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(dest, state.cpsr);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runStatusWriteImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const mask = statusWriteMask(word);
+    if (mask == 0) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const rotate = @intCast(u8, (word >> 8) & 0xf);
+        const value = expandArmImmediate(rotate, @intCast(u8, word & 0xff));
+        state.cpsr = mergeStatus(state.cpsr, value, mask);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runStatusWriteRegister(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const source = armReg(word);
+    if (source == .pc) {
+        return error.Unpredictable;
+    }
+
+    const mask = statusWriteMask(word);
+    if (mask == 0) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.cpsr = mergeStatus(state.cpsr, state.read(source), mask);
+    }
+    state.write(.pc, pc + 4);
 }
 
 fn runBranchImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
