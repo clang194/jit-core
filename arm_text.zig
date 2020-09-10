@@ -154,9 +154,33 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return std.fmt.bufPrint(buf, "nop", .{}) catch error.NoSpaceLeft;
     }
 
+    if ((word & 0xfd70f000) == 0xf550f000) {
+        return std.fmt.bufPrint(buf, "pld #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0x0fffffff) == 0x0320f004) {
+        return std.fmt.bufPrint(buf, "sev", .{}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0x0fffffff) == 0x0320f002) {
+        return std.fmt.bufPrint(buf, "wfe", .{}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0x0fffffff) == 0x0320f003) {
+        return std.fmt.bufPrint(buf, "wfi", .{}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0x0fffffff) == 0x0320f001) {
+        return std.fmt.bufPrint(buf, "yield", .{}) catch error.NoSpaceLeft;
+    }
+
     if ((word & 0xfffffdff) == 0xf1010000) {
         const name = if ((word & 0x00000200) != 0) "be" else "le";
         return std.fmt.bufPrint(buf, "setend {}", .{name}) catch error.NoSpaceLeft;
+    }
+
+    if (try formatCoprocessor(buf, word)) |text| {
+        return text;
     }
 
     if (isStatusRead(word)) {
@@ -759,6 +783,38 @@ fn formatStatusWriteRegister(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         try statusMaskName(word),
         arm_state.regName(source),
     }) catch error.NoSpaceLeft;
+}
+
+fn formatCoprocessor(buf: []u8, word: u32) TextError!?[]u8 {
+    if ((word & 0xff000010) == 0xfe000010 or (word & 0x0f000010) == 0x0e000000) {
+        return std.fmt.bufPrint(buf, "cdp #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0xfe100000) == 0xfc100000 or (word & 0x0e100000) == 0x0c100000) {
+        return std.fmt.bufPrint(buf, "ldc #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0xff100010) == 0xfe000010 or (word & 0x0f100010) == 0x0e000010) {
+        return std.fmt.bufPrint(buf, "mcr #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0xfff00000) == 0xfc400000 or (word & 0x0ff00000) == 0x0c400000) {
+        return std.fmt.bufPrint(buf, "mcrr #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0xff100010) == 0xfe100010 or (word & 0x0f100010) == 0x0e100010) {
+        return std.fmt.bufPrint(buf, "mrc #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0xfff00000) == 0xfc500000 or (word & 0x0ff00000) == 0x0c500000) {
+        return std.fmt.bufPrint(buf, "mrrc #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    if ((word & 0xfe100000) == 0xfc000000 or (word & 0x0e100000) == 0x0c000000) {
+        return std.fmt.bufPrint(buf, "stc #{x}", .{word}) catch error.NoSpaceLeft;
+    }
+
+    return null;
 }
 
 fn armReg(value: u32) arm_state.ArmReg {
