@@ -784,7 +784,7 @@ fn runExternalArmHandler(state: *arm_state.MachineState, hooks: arm_state.HostHo
 }
 
 fn isHintNoOp(word: u32) bool {
-    return (word & 0xfc70f000) == 0xf450f000 or
+    return (word & 0xfd70f000) == 0xf550f000 or
         (word & 0x0fffffff) == 0x0320f004 or
         (word & 0x0fffffff) == 0x0320f002 or
         (word & 0x0fffffff) == 0x0320f003 or
