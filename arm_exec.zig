@@ -2768,17 +2768,22 @@ fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
         return;
     }
     const base = armReg(word >> 16);
+    const dest = armReg(word >> 12);
     const source = armReg(word);
     const amount = armReg(word >> 8);
     switch (op) {
-        .compare, .compare_negative => return,
+        .test_and, .test_xor, .compare, .compare_negative => {
+            if (base == .pc or source == .pc or amount == .pc) {
+                return error.Unpredictable;
+            }
+        },
         .move, .move_not => {
-            if (source == .pc or amount == .pc) {
+            if (dest == .pc or source == .pc or amount == .pc) {
                 return error.Unpredictable;
             }
         },
         else => {
-            if (base == .pc or source == .pc or amount == .pc) {
+            if (base == .pc or dest == .pc or source == .pc or amount == .pc) {
                 return error.Unpredictable;
             }
         },
