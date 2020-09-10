@@ -290,6 +290,9 @@ pub fn regName(reg: ArmReg) []const u8 {
 }
 
 pub fn conditionFromNibble(value: u4) ?ConditionCode {
+    if (value == 0xf) {
+        return null;
+    }
     return @intToEnum(ConditionCode, value);
 }
 
