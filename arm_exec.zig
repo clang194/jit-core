@@ -2436,6 +2436,11 @@ fn runSwap(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks
 }
 
 fn runLoadWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+    try rejectWordLoad(word);
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2469,6 +2474,11 @@ fn runLoadWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
 }
 
 fn runLoadByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+    try rejectNarrowLoad(word);
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2502,6 +2512,11 @@ fn runLoadByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
 }
 
 fn runLoadHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+    try rejectNarrowLoad(word);
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2535,6 +2550,11 @@ fn runLoadHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
 }
 
 fn runLoadSignedByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+    try rejectNarrowLoad(word);
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2568,6 +2588,11 @@ fn runLoadSignedByte(word: u32, state: *arm_state.MachineState, hooks: arm_state
 }
 
 fn runLoadSignedHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+    try rejectNarrowLoad(word);
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2601,6 +2626,11 @@ fn runLoadSignedHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state
 }
 
 fn runLoadDouble(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+    try rejectDoubleLoad(word);
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2649,6 +2679,10 @@ fn runLoadDouble(word: u32, state: *arm_state.MachineState, hooks: arm_state.Hos
 }
 
 fn runStoreWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2677,6 +2711,10 @@ fn runStoreWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
 }
 
 fn runStoreByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2706,6 +2744,10 @@ fn runStoreByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
 }
 
 fn runStoreHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2735,6 +2777,10 @@ fn runStoreHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
 }
 
 fn runStoreDouble(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (isTransferUserMode(word)) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -2787,6 +2833,75 @@ fn rejectBadRegisterShift(word: u32, op: DataOp) ArmStepError!void {
                 return error.Unpredictable;
             }
         },
+    }
+}
+
+fn isTransferUserMode(word: u32) bool {
+    return !bits.getBit32(word, 24) and bits.getBit32(word, 21);
+}
+
+fn transferWritesBack(word: u32) bool {
+    return !bits.getBit32(word, 24) or bits.getBit32(word, 21);
+}
+
+fn isWordTransferRegisterOffset(word: u32) bool {
+    return bits.getBit32(word, 25);
+}
+
+fn isHalfTransferRegisterOffset(word: u32) bool {
+    return !bits.getBit32(word, 22);
+}
+
+fn rejectWordLoad(word: u32) ArmStepError!void {
+    const base = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    if (transferWritesBack(word)) {
+        if (base == .pc or base == dest) {
+            return error.Unpredictable;
+        }
+    }
+    if (isWordTransferRegisterOffset(word) and armReg(word) == .pc) {
+        return error.Unpredictable;
+    }
+}
+
+fn rejectNarrowLoad(word: u32) ArmStepError!void {
+    const base = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    if (dest == .pc) {
+        return error.Unpredictable;
+    }
+    if (transferWritesBack(word)) {
+        if (base == .pc or base == dest) {
+            return error.Unpredictable;
+        }
+    }
+    const register_offset = if ((word & 0x0e000000) == 0x06000000)
+        isWordTransferRegisterOffset(word)
+    else
+        isHalfTransferRegisterOffset(word);
+    if (register_offset and armReg(word) == .pc) {
+        return error.Unpredictable;
+    }
+}
+
+fn rejectDoubleLoad(word: u32) ArmStepError!void {
+    const base = armReg(word >> 16);
+    const first = armReg(word >> 12);
+    const second = nextArmReg(first);
+    if ((@enumToInt(first) & 1) != 0 or second == .pc) {
+        return error.Unpredictable;
+    }
+    if (transferWritesBack(word)) {
+        if (base == .pc or base == first or base == second) {
+            return error.Unpredictable;
+        }
+    }
+    if (isHalfTransferRegisterOffset(word)) {
+        const offset = armReg(word);
+        if (offset == .pc or offset == first or offset == second) {
+            return error.Unpredictable;
+        }
     }
 }
 
