@@ -1921,7 +1921,11 @@ fn runMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!
         return error.Unpredictable;
     }
     switch (op) {
-        .multiply_add => {},
+        .multiply_add => {
+            if (low == .pc) {
+                return error.Unpredictable;
+            }
+        },
         .multiply => {},
         else => {
             if (low == .pc or low == high) {
