@@ -203,6 +203,23 @@ const MultiplyOp = enum(u4) {
     signed_long_add,
 };
 
+const HalfMultiplyOp = enum(u3) {
+    long_add,
+    add,
+    multiply,
+    word_add,
+    word_multiply,
+};
+
+const DualMultiplyOp = enum(u3) {
+    add,
+    long_add,
+    sub,
+    long_sub,
+    pair_add,
+    pair_sub,
+};
+
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
     if (hooks.read32 == null) {
         return error.MissingRead;
@@ -551,6 +568,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isSignedTopMultiply(word)) {
         return runSignedTopMultiply(word, state, pc);
+    }
+
+    if (halfMultiplyOp(word) != null) {
+        return runHalfMultiply(word, state, pc);
+    }
+
+    if (dualMultiplyOp(word) != null) {
+        return runDualMultiply(word, state, pc);
     }
 
     if (isHintNoOp(word)) {
@@ -1405,6 +1430,53 @@ fn isSignedTopMultiply(word: u32) bool {
         (word & 0x0ff000d0) == 0x075000d0;
 }
 
+fn halfMultiplyOp(word: u32) ?HalfMultiplyOp {
+    if (armCondition(word) == null) {
+        return null;
+    }
+    if ((word & 0x0ff00090) == 0x01400080) {
+        return .long_add;
+    }
+    if ((word & 0x0ff00090) == 0x01000080) {
+        return .add;
+    }
+    if ((word & 0x0ff0f090) == 0x01600080) {
+        return .multiply;
+    }
+    if ((word & 0x0ff000b0) == 0x01200080) {
+        return .word_add;
+    }
+    if ((word & 0x0ff0f0b0) == 0x012000a0) {
+        return .word_multiply;
+    }
+    return null;
+}
+
+fn dualMultiplyOp(word: u32) ?DualMultiplyOp {
+    if (armCondition(word) == null) {
+        return null;
+    }
+    if ((word & 0x0ff0f0d0) == 0x0700f010) {
+        return .pair_add;
+    }
+    if ((word & 0x0ff0f0d0) == 0x0700f050) {
+        return .pair_sub;
+    }
+    if ((word & 0x0ff000d0) == 0x07000010) {
+        return .add;
+    }
+    if ((word & 0x0ff000d0) == 0x07400010) {
+        return .long_add;
+    }
+    if ((word & 0x0ff000d0) == 0x07000050) {
+        return .sub;
+    }
+    if ((word & 0x0ff000d0) == 0x07400050) {
+        return .long_sub;
+    }
+    return null;
+}
+
 fn runSignedTopMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const dest = armReg(word >> 16);
     const addend = armReg(word >> 12);
@@ -1434,6 +1506,153 @@ fn runSignedTopMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmS
         result +%= 1;
     }
     state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runHalfMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const op = halfMultiplyOp(word).?;
+    const high_or_dest = armReg(word >> 16);
+    const low_or_addend = armReg(word >> 12);
+    const right = armReg(word >> 8);
+    const left = armReg(word);
+    const left_top = bits.getBit32(word, 5);
+    const right_top = bits.getBit32(word, 6);
+
+    if (high_or_dest == .pc or left == .pc or right == .pc) {
+        return error.Unpredictable;
+    }
+    switch (op) {
+        .add, .word_add => {
+            if (low_or_addend == .pc) {
+                return error.Unpredictable;
+            }
+        },
+        .long_add => {
+            if (low_or_addend == .pc or low_or_addend == high_or_dest) {
+                return error.Unpredictable;
+            }
+        },
+        .multiply, .word_multiply => {},
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left_word = state.read(left);
+    const right_word = state.read(right);
+    const addend_word = state.read(low_or_addend);
+    const addend_long = readLong(state, high_or_dest, low_or_addend);
+    const left_half = selectedHalf(left_word, left_top);
+    const right_half = selectedHalf(right_word, right_top);
+
+    switch (op) {
+        .long_add => {
+            const product = @as(i64, left_half * right_half);
+            writeLongResult(state, high_or_dest, low_or_addend, @bitCast(u64, product) +% addend_long);
+        },
+        .add => {
+            const product = signedLowWord(@as(i64, left_half * right_half));
+            const result = addWithCarry(product, addend_word, false);
+            state.write(high_or_dest, result.word);
+            if (result.overflow) {
+                raiseQFlag(state);
+            }
+        },
+        .multiply => {
+            state.write(high_or_dest, signedLowWord(@as(i64, left_half * right_half)));
+        },
+        .word_add => {
+            const product = (@as(i64, @bitCast(i32, left_word)) * @as(i64, right_half)) >> 16;
+            const result = addWithCarry(signedLowWord(product), addend_word, false);
+            state.write(high_or_dest, result.word);
+            if (result.overflow) {
+                raiseQFlag(state);
+            }
+        },
+        .word_multiply => {
+            const product = (@as(i64, @bitCast(i32, left_word)) * @as(i64, right_half)) >> 16;
+            state.write(high_or_dest, signedLowWord(product));
+        },
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runDualMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const op = dualMultiplyOp(word).?;
+    const high_or_dest = armReg(word >> 16);
+    const low_or_addend = armReg(word >> 12);
+    const right = armReg(word >> 8);
+    const left = armReg(word);
+    const swap_right = bits.getBit32(word, 5);
+
+    if (high_or_dest == .pc or left == .pc or right == .pc) {
+        return error.Unpredictable;
+    }
+    switch (op) {
+        .add, .sub => {},
+        .long_add, .long_sub => {
+            if (low_or_addend == .pc or low_or_addend == high_or_dest) {
+                return error.Unpredictable;
+            }
+        },
+        .pair_add, .pair_sub => {},
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left_word = state.read(left);
+    const right_word = state.read(right);
+    const addend_word = state.read(low_or_addend);
+    const addend_long = readLong(state, high_or_dest, low_or_addend);
+    const left_low = selectedHalf(left_word, false);
+    const left_high = selectedHalf(left_word, true);
+    const right_low = selectedHalf(right_word, swap_right);
+    const right_high = selectedHalf(right_word, !swap_right);
+    const product_low = signedLowWord(@as(i64, left_low * right_low));
+    const product_high = signedLowWord(@as(i64, left_high * right_high));
+
+    switch (op) {
+        .add, .pair_add => {
+            var sum = addWithCarry(product_low, product_high, false);
+            if (sum.overflow) {
+                raiseQFlag(state);
+            }
+            if (op == .add) {
+                sum = addWithCarry(sum.word, addend_word, false);
+                if (sum.overflow) {
+                    raiseQFlag(state);
+                }
+            }
+            state.write(high_or_dest, sum.word);
+        },
+        .sub, .pair_sub => {
+            const difference = product_low -% product_high;
+            if (op == .sub) {
+                const sum = addWithCarry(difference, addend_word, false);
+                state.write(high_or_dest, sum.word);
+                if (sum.overflow) {
+                    raiseQFlag(state);
+                }
+            } else {
+                state.write(high_or_dest, difference);
+            }
+        },
+        .long_add => {
+            const product = @as(i64, left_low * right_low) + @as(i64, left_high * right_high);
+            writeLongResult(state, high_or_dest, low_or_addend, @bitCast(u64, product) +% addend_long);
+        },
+        .long_sub => {
+            const product = @as(i64, left_low * right_low) - @as(i64, left_high * right_high);
+            writeLongResult(state, high_or_dest, low_or_addend, @bitCast(u64, product) +% addend_long);
+        },
+    }
     state.write(.pc, pc + 4);
 }
 
@@ -3036,6 +3255,10 @@ fn writeLongMultiplyFlags(state: *arm_state.MachineState, value: u64) void {
     state.setZero(value == 0);
 }
 
+fn raiseQFlag(state: *arm_state.MachineState) void {
+    state.cpsr = bits.setBit32(state.cpsr, 27, true);
+}
+
 fn runAdcImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -3367,6 +3590,14 @@ fn signExtendHalf(value: u32) u32 {
         return narrowed | 0xffff0000;
     }
     return narrowed;
+}
+
+fn selectedHalf(value: u32, high: bool) i32 {
+    return signedHalf(if (high) value >> 16 else value);
+}
+
+fn signedLowWord(value: i64) u32 {
+    return @intCast(u32, @bitCast(u64, value) & 0xffffffff);
 }
 
 fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
