@@ -2040,7 +2040,7 @@ fn runLoadMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.H
     const writeback = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) base +% span else base -% span
     else
-        if (bits.getBit32(word, 23)) base +% span else start +% 4;
+        if (bits.getBit32(word, 23)) base +% span else start -% 4;
 
     var address = start;
     var index: u5 = 0;
@@ -2051,7 +2051,7 @@ fn runLoadMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.H
         }
     }
 
-    if (bits.getBit32(word, 21)) {
+    if (bits.getBit32(word, 21) and (list & (@as(u16, 1) << @enumToInt(base_reg))) == 0) {
         state.write(base_reg, writeback);
     }
 
@@ -2085,7 +2085,7 @@ fn runStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.
     const writeback = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) base +% span else base -% span
     else
-        if (bits.getBit32(word, 23)) base +% span else start +% 4;
+        if (bits.getBit32(word, 23)) base +% span else start -% 4;
 
     var address = start;
     var index: u5 = 0;
