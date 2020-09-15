@@ -584,8 +584,8 @@ pub fn buildThumbTraceAt(word: u16, pc: u32, tape: *trace.Tape) RunError!void {
 
     if ((word & 0xff87) == 0x4780) {
         const link = try tape.literalReg(.lr);
-        _ = try tape.storeReg(link, try tape.literalWord((pc + 2) | 1));
         const source = try traceOperand(tape, arm_state.reg4(word >> 3), pc);
+        _ = try tape.storeReg(link, try tape.literalWord((pc + 2) | 1));
         _ = try tape.loadPc(source);
         return;
     }
@@ -1371,8 +1371,9 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     if ((word & 0xff87) == 0x4780) {
         const source = arm_state.reg4(word >> 3);
         const pc = state.read(.pc);
+        const target = readOperand(state, source, pc);
         state.write(.lr, (pc + 2) | 1);
-        loadWritePc(state, readOperand(state, source, pc));
+        loadWritePc(state, target);
         return;
     }
 
