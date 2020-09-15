@@ -1998,11 +1998,12 @@ fn runBranchExchangeRegister(word: u32, state: *arm_state.MachineState, pc: u32)
         return;
     }
 
+    const target = readArmOperand(state, source, pc);
     if ((word & 0x0ffffff0) == 0x012fff30) {
         state.write(.lr, pc + 4);
     }
 
-    loadWritePc(state, readArmOperand(state, source, pc));
+    loadWritePc(state, target);
 }
 
 fn dataOp(word: u32) ?DataOp {
