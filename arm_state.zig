@@ -38,6 +38,13 @@ pub const ConditionCode = enum(u4) {
     nv = 0xf,
 };
 
+pub const FloatRoundMode = enum(u2) {
+    nearest = 0,
+    positive = 1,
+    negative = 2,
+    zero = 3,
+};
+
 pub const FloatWordReg = enum(u5) {
     s0,
     s1,
@@ -233,6 +240,10 @@ pub const MachineState = struct {
 
     pub fn bigEndian(self: *const MachineState) bool {
         return bits.getBit32(self.cpsr, 9);
+    }
+
+    pub fn floatRoundMode(self: *const MachineState) FloatRoundMode {
+        return @intToEnum(FloatRoundMode, @intCast(u2, (self.fpscr >> 22) & 3));
     }
 
     pub fn setThumb(self: *MachineState, enabled: bool) void {
