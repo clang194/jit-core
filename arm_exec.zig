@@ -574,6 +574,22 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatSqrt(word, state, hooks, pc);
     }
 
+    if (isFloatConvertWidth(word)) {
+        return runFloatConvertWidth(word, state, hooks, pc);
+    }
+
+    if (isFloatConvertIntToFloat(word)) {
+        return runFloatConvertIntToFloat(word, state, hooks, pc);
+    }
+
+    if (isFloatConvertToUnsigned(word)) {
+        return runFloatConvertToUnsigned(word, state, hooks, pc);
+    }
+
+    if (isFloatConvertToSigned(word)) {
+        return runFloatConvertToSigned(word, state, hooks, pc);
+    }
+
     if (isSignedTopMultiply(word)) {
         return runSignedTopMultiply(word, state, pc);
     }
@@ -934,6 +950,22 @@ fn isFloatNeg(word: u32) bool {
 
 fn isFloatSqrt(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb10ac0;
+}
+
+fn isFloatConvertWidth(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb70ac0;
+}
+
+fn isFloatConvertIntToFloat(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0eb80a40;
+}
+
+fn isFloatConvertToUnsigned(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0ebc0a40;
+}
+
+fn isFloatConvertToSigned(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0ebd0a40;
 }
 
 fn isVfpCondition(word: u32) bool {
@@ -1547,6 +1579,75 @@ fn runFloatSqrt(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
     state.write(.pc, pc + 4);
 }
 
+fn runFloatConvertWidth(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        if (bits.getBit32(word, 8)) {
+            const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+            state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), convertFloat64To32(state, value));
+        } else {
+            const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+            writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), convertFloat32To64(state, value));
+        }
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatConvertIntToFloat(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const raw = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+        if (bits.getBit32(word, 8)) {
+            const value = if (bits.getBit32(word, 7)) floatFromSigned32To64(state, raw) else floatFromUnsigned32To64(state, raw);
+            writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), value);
+        } else {
+            const value = if (bits.getBit32(word, 7)) floatFromSigned32To32(state, raw) else floatFromUnsigned32To32(state, raw);
+            state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value);
+        }
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatConvertToUnsigned(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const value = if (bits.getBit32(word, 8))
+            convertFloat64ToUnsigned32(state, readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5))), bits.getBit32(word, 7))
+        else
+            convertFloat32ToUnsigned32(state, state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5))), bits.getBit32(word, 7));
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatConvertToSigned(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (fpscrVectorLength(state.fpscr) != 1 or fpscrVectorStride(state.fpscr) != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const value = if (bits.getBit32(word, 8))
+            convertFloat64ToSigned32(state, readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5))), bits.getBit32(word, 7))
+        else
+            convertFloat32ToSigned32(state, state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5))), bits.getBit32(word, 7));
+        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value);
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn isSignedTopMultiply(word: u32) bool {
     return (word & 0x0ff0f0d0) == 0x0750f010 or
         (word & 0x0ff000d0) == 0x07500010 or
@@ -1893,6 +1994,97 @@ fn subFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
         return 0x7ff8000000000000;
     }
     return result;
+}
+
+fn convertFloat32To64(state: *arm_state.MachineState, value: u32) u64 {
+    const input = floatInput32(state, value);
+    var result = @bitCast(u64, @floatCast(f64, @bitCast(f32, input)));
+    result = floatOutput64(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan64(result)) {
+        return 0x7ff8000000000000;
+    }
+    return result;
+}
+
+fn convertFloat64To32(state: *arm_state.MachineState, value: u64) u32 {
+    const input = floatInput64(state, value);
+    var result = @bitCast(u32, @floatCast(f32, @bitCast(f64, input)));
+    result = floatOutput32(state, result);
+    if (fpscrDefaultNaN(state.fpscr) and isNan32(result)) {
+        return 0x7fc00000;
+    }
+    return result;
+}
+
+fn floatFromSigned32To32(state: *arm_state.MachineState, value: u32) u32 {
+    return floatOutput32(state, @bitCast(u32, @intToFloat(f32, @bitCast(i32, value))));
+}
+
+fn floatFromUnsigned32To32(state: *arm_state.MachineState, value: u32) u32 {
+    return floatOutput32(state, @bitCast(u32, @intToFloat(f32, value)));
+}
+
+fn floatFromSigned32To64(state: *arm_state.MachineState, value: u32) u64 {
+    return floatOutput64(state, @bitCast(u64, @intToFloat(f64, @bitCast(i32, value))));
+}
+
+fn floatFromUnsigned32To64(state: *arm_state.MachineState, value: u32) u64 {
+    return floatOutput64(state, @bitCast(u64, @intToFloat(f64, value)));
+}
+
+fn convertFloat32ToSigned32(state: *arm_state.MachineState, value: u32, round_towards_zero: bool) u32 {
+    const rounded = roundedFloat64(state, @floatCast(f64, @bitCast(f32, floatInput32(state, value))), round_towards_zero);
+    return intWordFromSignedFloat(rounded);
+}
+
+fn convertFloat64ToSigned32(state: *arm_state.MachineState, value: u64, round_towards_zero: bool) u32 {
+    const rounded = roundedFloat64(state, @bitCast(f64, floatInput64(state, value)), round_towards_zero);
+    return intWordFromSignedFloat(rounded);
+}
+
+fn convertFloat32ToUnsigned32(state: *arm_state.MachineState, value: u32, round_towards_zero: bool) u32 {
+    const rounded = roundedFloat64(state, @floatCast(f64, @bitCast(f32, floatInput32(state, value))), round_towards_zero);
+    return intWordFromUnsignedFloat(rounded);
+}
+
+fn convertFloat64ToUnsigned32(state: *arm_state.MachineState, value: u64, round_towards_zero: bool) u32 {
+    const rounded = roundedFloat64(state, @bitCast(f64, floatInput64(state, value)), round_towards_zero);
+    return intWordFromUnsignedFloat(rounded);
+}
+
+fn roundedFloat64(state: *const arm_state.MachineState, value: f64, round_towards_zero: bool) f64 {
+    if (round_towards_zero) {
+        return @trunc(value);
+    }
+    return switch (state.floatRoundMode()) {
+        .nearest => if (value >= 0) @floor(value + 0.5) else @ceil(value - 0.5),
+        .positive => @ceil(value),
+        .negative => @floor(value),
+        .zero => @trunc(value),
+    };
+}
+
+fn intWordFromSignedFloat(value: f64) u32 {
+    if (value != value) {
+        return 0;
+    }
+    if (value >= 2147483647.0) {
+        return 0x7fffffff;
+    }
+    if (value <= -2147483648.0) {
+        return 0x80000000;
+    }
+    return @bitCast(u32, @floatToInt(i32, value));
+}
+
+fn intWordFromUnsignedFloat(value: f64) u32 {
+    if (value != value or value <= 0.0) {
+        return 0;
+    }
+    if (value >= 4294967295.0) {
+        return 0xffffffff;
+    }
+    return @floatToInt(u32, value);
 }
 
 fn floatInput32(state: *arm_state.MachineState, value: u32) u32 {

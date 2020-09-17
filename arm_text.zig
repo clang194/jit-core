@@ -118,6 +118,22 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatSqrt(buf, word, cond);
     }
 
+    if (isFloatConvertWidth(word)) {
+        return formatFloatConvertWidth(buf, word, cond);
+    }
+
+    if (isFloatConvertIntToFloat(word)) {
+        return formatFloatConvertIntToFloat(buf, word, cond);
+    }
+
+    if (isFloatConvertToUnsigned(word)) {
+        return formatFloatConvertToInt(buf, word, cond, "u32");
+    }
+
+    if (isFloatConvertToSigned(word)) {
+        return formatFloatConvertToInt(buf, word, cond, "s32");
+    }
+
     if (cond == 0xf and ((word >> 25) & 0x7) == 0x5) {
         return formatBranchExchangeImmediate(buf, word);
     }
@@ -444,6 +460,22 @@ fn isFloatNeg(word: u32) bool {
 
 fn isFloatSqrt(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb10ac0;
+}
+
+fn isFloatConvertWidth(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0ed0) == 0x0eb70ac0;
+}
+
+fn isFloatConvertIntToFloat(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0eb80a40;
+}
+
+fn isFloatConvertToUnsigned(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0ebc0a40;
+}
+
+fn isFloatConvertToSigned(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0ebd0a40;
 }
 
 fn isVfpCondition(word: u32) bool {
@@ -802,6 +834,59 @@ fn formatFloatSqrt(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     }
     return std.fmt.bufPrint(buf, "vsqrt{}.f32 s{}, s{}", .{
         condName(cond),
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatConvertWidth(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vcvt{}.f32.f64 s{}, d{}", .{
+            condName(cond),
+            floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vcvt{}.f64.f32 d{}, s{}", .{
+        condName(cond),
+        floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatConvertIntToFloat(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const int_type = if (bits.getBit32(word, 7)) "s32" else "u32";
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vcvt{}.f64.{} d{}, s{}", .{
+            condName(cond),
+            int_type,
+            floatPairTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatWordTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vcvt{}.f32.{} s{}, s{}", .{
+        condName(cond),
+        int_type,
+        floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+        floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatConvertToInt(buf: []u8, word: u32, cond: u4, int_type: []const u8) TextError![]u8 {
+    const rounded = if (bits.getBit32(word, 7)) "" else "r";
+    if (bits.getBit32(word, 8)) {
+        return std.fmt.bufPrint(buf, "vcvt{}{}.{}.f64 s{}, d{}", .{
+            rounded,
+            condName(cond),
+            int_type,
+            floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
+            floatPairTextIndex(word, bits.getBit32(word, 5)),
+        }) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vcvt{}{}.{}.f32 s{}, s{}", .{
+        rounded,
+        condName(cond),
+        int_type,
         floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
         floatWordTextIndex(word, bits.getBit32(word, 5)),
     }) catch error.NoSpaceLeft;
