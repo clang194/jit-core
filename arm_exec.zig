@@ -550,6 +550,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatPush(word, state, hooks, pc);
     }
 
+    if (isFloatStoreMultiple(word)) {
+        return runFloatStoreMultiple(word, state, hooks, pc);
+    }
+
     if (isFloatPop(word)) {
         return runFloatPop(word, state, hooks, pc);
     }
@@ -906,6 +910,10 @@ fn isFloatStore(word: u32) bool {
 
 fn isFloatPush(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0e00) == 0x0d2d0a00;
+}
+
+fn isFloatStoreMultiple(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0e100e00) == 0x0c000a00;
 }
 
 fn isFloatPop(word: u32) bool {
@@ -1366,6 +1374,60 @@ fn runFloatPop(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
         }
     }
     state.write(.sp, address);
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    const pre = bits.getBit32(word, 24);
+    const up = bits.getBit32(word, 23);
+    const writeback = bits.getBit32(word, 21);
+    if ((!pre and !up and !writeback) or (pre and !writeback) or (pre == up and writeback)) {
+        return error.UnknownInstruction;
+    }
+
+    const base_reg = armReg(word >> 16);
+    if (base_reg == .pc and writeback) {
+        return error.Unpredictable;
+    }
+
+    const double = bits.getBit32(word, 8);
+    const count = floatStackCount(word);
+    const base = floatStackBase(word, double);
+    if (count == 0 or base + count > 32 or (double and count > 16)) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const offset = (word & 0xff) << 2;
+    const start = if (up) readArmOperand(state, base_reg, pc) else readArmOperand(state, base_reg, pc) -% offset;
+    var address = start;
+    var index: u32 = 0;
+    while (index < count) : (index += 1) {
+        if (double) {
+            const value = readFloatPair(state, @intToEnum(arm_state.FloatPairReg, @intCast(u5, base + index)));
+            const low = @intCast(u32, value & 0xffffffff);
+            const high = @intCast(u32, value >> 32);
+            if (state.bigEndian()) {
+                try writeMemory32(state, hooks, address, high);
+                try writeMemory32(state, hooks, address +% 4, low);
+            } else {
+                try writeMemory32(state, hooks, address, low);
+                try writeMemory32(state, hooks, address +% 4, high);
+            }
+            address +%= 8;
+        } else {
+            try writeMemory32(state, hooks, address, state.readFloatWord(@intToEnum(arm_state.FloatWordReg, @intCast(u5, base + index))));
+            address +%= 4;
+        }
+    }
+    if (writeback) {
+        state.write(base_reg, if (up) start +% offset else start);
+    }
     state.write(.pc, pc + 4);
 }
 
