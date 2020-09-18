@@ -246,6 +246,22 @@ pub const MachineState = struct {
         return @intToEnum(FloatRoundMode, @intCast(u2, (self.fpscr >> 22) & 3));
     }
 
+    pub fn floatFlushZero(self: *const MachineState) bool {
+        return bits.getBit32(self.fpscr, 24);
+    }
+
+    pub fn floatDefaultNaN(self: *const MachineState) bool {
+        return bits.getBit32(self.fpscr, 25);
+    }
+
+    pub fn floatVectorLength(self: *const MachineState) u32 {
+        return ((self.fpscr >> 16) & 0x7) + 1;
+    }
+
+    pub fn floatVectorStride(self: *const MachineState) u32 {
+        return ((self.fpscr >> 20) & 0x3) + 1;
+    }
+
     pub fn setThumb(self: *MachineState, enabled: bool) void {
         self.cpsr = bits.setBit32(self.cpsr, 5, enabled);
     }
