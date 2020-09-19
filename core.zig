@@ -129,16 +129,16 @@ pub const Core = struct {
         return &self.state.regs;
     }
 
-    pub fn regsCopy(self: *const Core) [16]u32 {
-        return self.state.regs;
+    pub fn regsView(self: *const Core) *const [16]u32 {
+        return &self.state.regs;
     }
 
     pub fn floatRegs(self: *Core) *[64]u32 {
         return &self.state.float_regs;
     }
 
-    pub fn floatRegsCopy(self: *const Core) [64]u32 {
-        return self.state.float_regs;
+    pub fn floatRegsView(self: *const Core) *const [64]u32 {
+        return &self.state.float_regs;
     }
 
     pub fn status(self: *Core) *u32 {
