@@ -1887,13 +1887,13 @@ fn formatArmUnaryReg(buf: []u8, comptime op: []const u8, word: u32, cond: u4) Te
 
 pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if ((word & 0xf800) == 0x0000) {
-        return formatThumbShiftImm(buf, "lsls", word);
+        return formatThumbShiftImm(buf, "lsls", word, false);
     }
     if ((word & 0xf800) == 0x0800) {
-        return formatThumbShiftImm(buf, "lsrs", word);
+        return formatThumbShiftImm(buf, "lsrs", word, true);
     }
     if ((word & 0xf800) == 0x1000) {
-        return formatThumbShiftImm(buf, "asrs", word);
+        return formatThumbShiftImm(buf, "asrs", word, true);
     }
     if ((word & 0xfe00) == 0x1800) {
         const addend = arm_state.lowReg(word >> 6);
@@ -2246,8 +2246,9 @@ pub fn formatThumb32(buf: []u8, word: u32) TextError![]u8 {
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
 }
 
-fn formatThumbShiftImm(buf: []u8, comptime op: []const u8, word: u16) TextError![]u8 {
-    const amount = @intCast(u8, (word >> 6) & 0x1f);
+fn formatThumbShiftImm(buf: []u8, comptime op: []const u8, word: u16, zero_is_thirty_two: bool) TextError![]u8 {
+    const raw_amount = @intCast(u8, (word >> 6) & 0x1f);
+    const amount = if (zero_is_thirty_two and raw_amount == 0) 32 else raw_amount;
     const source = arm_state.lowReg(word >> 3);
     const dest = arm_state.lowReg(word);
     return std.fmt.bufPrint(buf, "{} {}, {}, #{}", .{
