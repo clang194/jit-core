@@ -134,6 +134,14 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatFloatConvertToInt(buf, word, cond, "s32");
     }
 
+    if (isFloatStatusWrite(word)) {
+        return formatFloatStatusWrite(buf, word, cond);
+    }
+
+    if (isFloatStatusRead(word)) {
+        return formatFloatStatusRead(buf, word, cond);
+    }
+
     if (cond == 0xf and ((word >> 25) & 0x7) == 0x5) {
         return formatBranchExchangeImmediate(buf, word);
     }
@@ -476,6 +484,14 @@ fn isFloatConvertToUnsigned(word: u32) bool {
 
 fn isFloatConvertToSigned(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0ebd0a40;
+}
+
+fn isFloatStatusWrite(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fff0fff) == 0x0ee10a10;
+}
+
+fn isFloatStatusRead(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fff0fff) == 0x0ef10a10;
 }
 
 fn isVfpCondition(word: u32) bool {
@@ -889,6 +905,25 @@ fn formatFloatConvertToInt(buf: []u8, word: u32, cond: u4, int_type: []const u8)
         int_type,
         floatWordTextIndex(word >> 12, bits.getBit32(word, 22)),
         floatWordTextIndex(word, bits.getBit32(word, 5)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatStatusWrite(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const source = armReg(word >> 12);
+    return std.fmt.bufPrint(buf, "vmsr{} fpscr, {}", .{
+        condName(cond),
+        arm_state.regName(source),
+    }) catch error.NoSpaceLeft;
+}
+
+fn formatFloatStatusRead(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    const dest = armReg(word >> 12);
+    if (dest == .pc) {
+        return std.fmt.bufPrint(buf, "vmrs{} apsr_nzcv, fpscr", .{condName(cond)}) catch error.NoSpaceLeft;
+    }
+    return std.fmt.bufPrint(buf, "vmrs{} {}, fpscr", .{
+        condName(cond),
+        arm_state.regName(dest),
     }) catch error.NoSpaceLeft;
 }
 

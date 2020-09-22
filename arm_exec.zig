@@ -590,6 +590,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatConvertToSigned(word, state, hooks, pc);
     }
 
+    if (isFloatStatusWrite(word)) {
+        return runFloatStatusWrite(word, state, pc);
+    }
+
+    if (isFloatStatusRead(word)) {
+        return runFloatStatusRead(word, state, pc);
+    }
+
     if (isSignedTopMultiply(word)) {
         return runSignedTopMultiply(word, state, pc);
     }
@@ -966,6 +974,14 @@ fn isFloatConvertToUnsigned(word: u32) bool {
 
 fn isFloatConvertToSigned(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0ebd0a40;
+}
+
+fn isFloatStatusWrite(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fff0fff) == 0x0ee10a10;
+}
+
+fn isFloatStatusRead(word: u32) bool {
+    return isVfpCondition(word) and (word & 0x0fff0fff) == 0x0ef10a10;
 }
 
 fn isVfpCondition(word: u32) bool {
@@ -1644,6 +1660,32 @@ fn runFloatConvertToSigned(word: u32, state: *arm_state.MachineState, hooks: arm
         else
             convertFloat32ToSigned32(state, state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5))), bits.getBit32(word, 7));
         state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatStatusWrite(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const source = armReg(word >> 12);
+    if (source == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.fpscr = state.read(source);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatStatusRead(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        if (dest == .pc) {
+            state.cpsr = mergeStatus(state.cpsr, state.fpscr, 0xf0000000);
+        } else {
+            state.write(dest, state.fpscr);
+        }
     }
     state.write(.pc, pc + 4);
 }
