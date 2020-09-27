@@ -221,10 +221,12 @@ const DualMultiplyOp = enum(u3) {
 };
 
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
-    if (hooks.read32 == null) {
-        return error.MissingRead;
+    const address = pc & 0xfffffffc;
+    if (hooks.readDirect32(address)) |value| {
+        return value;
     }
-    return hooks.read32.?(pc & 0xfffffffc);
+    const read32 = hooks.read32 orelse return error.MissingRead;
+    return read32(address);
 }
 
 pub fn isSupervisorCall(word: u32) bool {
@@ -3730,8 +3732,10 @@ fn loadWritePc(state: *arm_state.MachineState, value: u32) void {
 }
 
 fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) ArmStepError!u32 {
-    const read32 = hooks.read32 orelse return error.MissingRead;
-    var value = read32(address);
+    var value = if (hooks.readDirect32(address)) |direct| direct else blk: {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        break :blk read32(address);
+    };
     if (state.bigEndian()) {
         value = byteReverseWord(value);
     }
@@ -3739,13 +3743,18 @@ fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks
 }
 
 fn readMemory8(hooks: arm_state.HostHooks, address: u32) ArmStepError!u8 {
+    if (hooks.readDirect8(address)) |value| {
+        return value;
+    }
     const read8 = hooks.read8 orelse return error.MissingRead;
     return read8(address);
 }
 
 fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) ArmStepError!u16 {
-    const read16 = hooks.read16 orelse return error.MissingRead;
-    var value = read16(address);
+    var value = if (hooks.readDirect16(address)) |direct| direct else blk: {
+        const read16 = hooks.read16 orelse return error.MissingRead;
+        break :blk read16(address);
+    };
     if (state.bigEndian()) {
         value = @intCast(u16, byteReverseHalf(value));
     }
@@ -3753,24 +3762,33 @@ fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks
 }
 
 fn writeMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u32) ArmStepError!void {
-    const write32 = hooks.write32 orelse return error.MissingWrite;
     var data = value;
     if (state.bigEndian()) {
         data = byteReverseWord(data);
     }
+    if (hooks.writeDirect32(address, data)) {
+        return;
+    }
+    const write32 = hooks.write32 orelse return error.MissingWrite;
     write32(address, data);
 }
 
 fn writeMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u16) ArmStepError!void {
-    const write16 = hooks.write16 orelse return error.MissingWrite;
     var data = value;
     if (state.bigEndian()) {
         data = @intCast(u16, byteReverseHalf(data));
     }
+    if (hooks.writeDirect16(address, data)) {
+        return;
+    }
+    const write16 = hooks.write16 orelse return error.MissingWrite;
     write16(address, data);
 }
 
 fn writeMemory8(hooks: arm_state.HostHooks, address: u32, value: u8) ArmStepError!void {
+    if (hooks.writeDirect8(address, value)) {
+        return;
+    }
     const write8 = hooks.write8 orelse return error.MissingWrite;
     write8(address, value);
 }

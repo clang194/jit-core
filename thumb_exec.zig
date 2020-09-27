@@ -27,12 +27,11 @@ pub const ThumbWord = struct {
 };
 
 pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
-    if (hooks.read32 == null) {
-        return error.MissingRead;
-    }
-
     const first_address = pc & 0xfffffffc;
-    var first = hooks.read32.?(first_address);
+    var first = if (hooks.readDirect32(first_address)) |direct| direct else blk: {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        break :blk read32(first_address);
+    };
     if ((pc & 2) != 0) {
         first >>= 16;
     }
@@ -43,7 +42,11 @@ pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
     }
 
     const second_pc = pc + 2;
-    var second = hooks.read32.?(second_pc & 0xfffffffc);
+    const second_address = second_pc & 0xfffffffc;
+    var second = if (hooks.readDirect32(second_address)) |direct| direct else blk: {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        break :blk read32(second_address);
+    };
     if ((second_pc & 2) != 0) {
         second >>= 16;
     }
@@ -1808,8 +1811,10 @@ pub fn byteReverseHalfwords(value: u32) u32 {
 }
 
 fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) RunError!u16 {
-    const read16 = hooks.read16 orelse return error.MissingRead;
-    var value = read16(address);
+    var value = if (hooks.readDirect16(address)) |direct| direct else blk: {
+        const read16 = hooks.read16 orelse return error.MissingRead;
+        break :blk read16(address);
+    };
     if (state.bigEndian()) {
         value = @intCast(u16, byteReverseHalf(value));
     }
@@ -1817,8 +1822,10 @@ fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks
 }
 
 fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) RunError!u32 {
-    const read32 = hooks.read32 orelse return error.MissingRead;
-    var value = read32(address);
+    var value = if (hooks.readDirect32(address)) |direct| direct else blk: {
+        const read32 = hooks.read32 orelse return error.MissingRead;
+        break :blk read32(address);
+    };
     if (state.bigEndian()) {
         value = byteReverseWord(value);
     }
@@ -1826,20 +1833,26 @@ fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks
 }
 
 fn writeMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u16) RunError!void {
-    const write16 = hooks.write16 orelse return error.MissingWrite;
     var data = value;
     if (state.bigEndian()) {
         data = @intCast(u16, byteReverseHalf(data));
     }
+    if (hooks.writeDirect16(address, data)) {
+        return;
+    }
+    const write16 = hooks.write16 orelse return error.MissingWrite;
     write16(address, data);
 }
 
 fn writeMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32, value: u32) RunError!void {
-    const write32 = hooks.write32 orelse return error.MissingWrite;
     var data = value;
     if (state.bigEndian()) {
         data = byteReverseWord(data);
     }
+    if (hooks.writeDirect32(address, data)) {
+        return;
+    }
+    const write32 = hooks.write32 orelse return error.MissingWrite;
     write32(address, data);
 }
 

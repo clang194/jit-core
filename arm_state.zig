@@ -1,5 +1,10 @@
 const bits = @import("bits.zig");
 
+const DirectPage = struct {
+    bytes: [*]u8,
+    offset: usize,
+};
+
 pub const ArmReg = enum(u8) {
     r0,
     r1,
@@ -116,6 +121,11 @@ pub const FloatPairReg = enum(u5) {
 };
 
 pub const HostHooks = struct {
+    pub const page_bits = 12;
+    pub const page_size = @as(usize, 1) << page_bits;
+    pub const page_count = @as(usize, 1) << (32 - page_bits);
+    pub const PageMap = [page_count]?[*]u8;
+
     read8: ?fn (u32) u8,
     read16: ?fn (u32) u16,
     read32: ?fn (u32) u32,
@@ -128,6 +138,7 @@ pub const HostHooks = struct {
     fallback: ?fn (u32, *MachineState) void,
     trap: ?fn (u32) bool,
     supervisor: ?fn (u32, *MachineState) void,
+    direct_pages: ?*PageMap,
 
     pub fn empty() HostHooks {
         return HostHooks{
@@ -143,7 +154,85 @@ pub const HostHooks = struct {
             .fallback = null,
             .trap = null,
             .supervisor = null,
+            .direct_pages = null,
         };
+    }
+
+    fn directPage(self: HostHooks, address: u32, comptime width: usize) ?DirectPage {
+        const offset = @intCast(usize, address & (page_size - 1));
+        if (offset + width > page_size) {
+            return null;
+        }
+        const table = self.direct_pages orelse return null;
+        const page = table.*[@intCast(usize, address >> page_bits)] orelse return null;
+        return DirectPage{ .bytes = page, .offset = offset };
+    }
+
+    pub fn readDirect8(self: HostHooks, address: u32) ?u8 {
+        const page = self.directPage(address, 1) orelse return null;
+        return page.bytes[page.offset];
+    }
+
+    pub fn readDirect16(self: HostHooks, address: u32) ?u16 {
+        const page = self.directPage(address, 2) orelse return null;
+        return @as(u16, page.bytes[page.offset]) |
+            (@as(u16, page.bytes[page.offset + 1]) << 8);
+    }
+
+    pub fn readDirect32(self: HostHooks, address: u32) ?u32 {
+        const page = self.directPage(address, 4) orelse return null;
+        return @as(u32, page.bytes[page.offset]) |
+            (@as(u32, page.bytes[page.offset + 1]) << 8) |
+            (@as(u32, page.bytes[page.offset + 2]) << 16) |
+            (@as(u32, page.bytes[page.offset + 3]) << 24);
+    }
+
+    pub fn readDirect64(self: HostHooks, address: u32) ?u64 {
+        const page = self.directPage(address, 8) orelse return null;
+        const low = @as(u32, page.bytes[page.offset]) |
+            (@as(u32, page.bytes[page.offset + 1]) << 8) |
+            (@as(u32, page.bytes[page.offset + 2]) << 16) |
+            (@as(u32, page.bytes[page.offset + 3]) << 24);
+        const high = @as(u32, page.bytes[page.offset + 4]) |
+            (@as(u32, page.bytes[page.offset + 5]) << 8) |
+            (@as(u32, page.bytes[page.offset + 6]) << 16) |
+            (@as(u32, page.bytes[page.offset + 7]) << 24);
+        return @as(u64, low) | (@as(u64, high) << 32);
+    }
+
+    pub fn writeDirect8(self: HostHooks, address: u32, value: u8) bool {
+        const page = self.directPage(address, 1) orelse return false;
+        page.bytes[page.offset] = value;
+        return true;
+    }
+
+    pub fn writeDirect16(self: HostHooks, address: u32, value: u16) bool {
+        const page = self.directPage(address, 2) orelse return false;
+        page.bytes[page.offset] = @intCast(u8, value & 0xff);
+        page.bytes[page.offset + 1] = @intCast(u8, value >> 8);
+        return true;
+    }
+
+    pub fn writeDirect32(self: HostHooks, address: u32, value: u32) bool {
+        const page = self.directPage(address, 4) orelse return false;
+        page.bytes[page.offset] = @intCast(u8, value & 0xff);
+        page.bytes[page.offset + 1] = @intCast(u8, (value >> 8) & 0xff);
+        page.bytes[page.offset + 2] = @intCast(u8, (value >> 16) & 0xff);
+        page.bytes[page.offset + 3] = @intCast(u8, value >> 24);
+        return true;
+    }
+
+    pub fn writeDirect64(self: HostHooks, address: u32, value: u64) bool {
+        const page = self.directPage(address, 8) orelse return false;
+        page.bytes[page.offset] = @intCast(u8, value & 0xff);
+        page.bytes[page.offset + 1] = @intCast(u8, (value >> 8) & 0xff);
+        page.bytes[page.offset + 2] = @intCast(u8, (value >> 16) & 0xff);
+        page.bytes[page.offset + 3] = @intCast(u8, (value >> 24) & 0xff);
+        page.bytes[page.offset + 4] = @intCast(u8, (value >> 32) & 0xff);
+        page.bytes[page.offset + 5] = @intCast(u8, (value >> 40) & 0xff);
+        page.bytes[page.offset + 6] = @intCast(u8, (value >> 48) & 0xff);
+        page.bytes[page.offset + 7] = @intCast(u8, value >> 56);
+        return true;
     }
 };
 
