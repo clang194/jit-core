@@ -1042,7 +1042,7 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
             return;
         }
         if (hooks.fallback) |callback| {
-            callback(state.read(.pc), state);
+            callback(state.read(.pc), state, hooks.context);
             return;
         }
         return error.UnknownInstruction;

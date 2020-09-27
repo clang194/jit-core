@@ -99,7 +99,7 @@ pub const Core = struct {
 
     fn interpretOne(self: *Core, pc: u32) CoreError!void {
         if (self.hooks.fallback) |callback| {
-            callback(pc, &self.state);
+            callback(pc, &self.state, self.hooks.context);
             return;
         }
         return error.UnknownInstruction;

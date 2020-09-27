@@ -811,7 +811,7 @@ pub fn runArmWithHooks(state: *arm_state.MachineState, hooks: arm_state.HostHook
     const word = readArmWord(hooks, pc) catch |err| switch (err) {
         error.MissingRead => {
             if (hooks.fallback) |callback| {
-                callback(pc, state);
+                callback(pc, state, hooks.context);
                 return;
             }
             return err;
@@ -836,7 +836,7 @@ fn usesExternalArmHandler(word: u32) bool {
 
 fn runExternalArmHandler(state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     if (hooks.fallback) |callback| {
-        callback(pc, state);
+        callback(pc, state, hooks.context);
         return;
     }
     return error.UnknownInstruction;
