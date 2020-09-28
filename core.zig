@@ -106,7 +106,9 @@ pub const Core = struct {
     }
 
     pub fn clearTranslatedState(self: *Core) void {
-        _ = self;
+        if (self.active) {
+            self.halt = true;
+        }
     }
 
     pub fn resetState(self: *Core) CoreError!void {
