@@ -3249,6 +3249,7 @@ fn runStoreWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
     if (isTransferUserMode(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
+    try rejectSingleStore(word, false, isWordTransferRegisterOffset(word));
 
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -3281,6 +3282,7 @@ fn runStoreByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
     if (isTransferUserMode(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
+    try rejectSingleStore(word, true, isWordTransferRegisterOffset(word));
 
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -3314,6 +3316,7 @@ fn runStoreHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.Host
     if (isTransferUserMode(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
+    try rejectSingleStore(word, true, isHalfTransferRegisterOffset(word));
 
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -3486,6 +3489,22 @@ fn rejectDoubleStore(word: u32) ArmStepError!void {
         }
     }
     if (isHalfTransferRegisterOffset(word) and armReg(word) == .pc) {
+        return error.Unpredictable;
+    }
+}
+
+fn rejectSingleStore(word: u32, reject_pc_source: bool, register_offset: bool) ArmStepError!void {
+    const base = armReg(word >> 16);
+    const source = armReg(word >> 12);
+    if (reject_pc_source and source == .pc) {
+        return error.Unpredictable;
+    }
+    if (bits.getBit32(word, 21)) {
+        if (base == .pc or base == source) {
+            return error.Unpredictable;
+        }
+    }
+    if (register_offset and armReg(word) == .pc) {
         return error.Unpredictable;
     }
 }
