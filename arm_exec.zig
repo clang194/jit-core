@@ -3347,6 +3347,7 @@ fn runStoreDouble(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     if (isTransferUserMode(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
+    try rejectDoubleStore(word);
 
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -3469,6 +3470,23 @@ fn rejectDoubleLoad(word: u32) ArmStepError!void {
         if (offset == .pc or offset == first or offset == second) {
             return error.Unpredictable;
         }
+    }
+}
+
+fn rejectDoubleStore(word: u32) ArmStepError!void {
+    const base = armReg(word >> 16);
+    const first = armReg(word >> 12);
+    const second = nextArmReg(first);
+    if ((@enumToInt(first) & 1) != 0 or second == .pc) {
+        return error.Unpredictable;
+    }
+    if (transferWritesBack(word)) {
+        if (base == .pc or base == first or base == second) {
+            return error.Unpredictable;
+        }
+    }
+    if (isHalfTransferRegisterOffset(word) and armReg(word) == .pc) {
+        return error.Unpredictable;
     }
 }
 
