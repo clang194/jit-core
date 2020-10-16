@@ -156,10 +156,10 @@ pub const Core = struct {
     }
 
     pub fn floatStatusCopy(self: *const Core) u32 {
-        return self.state.fpscr;
+        return self.state.readFloatStatus();
     }
 
     pub fn writeFloatStatus(self: *Core, value: u32) void {
-        self.state.fpscr = value;
+        self.state.writeFloatStatus(value);
     }
 };

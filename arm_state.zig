@@ -50,6 +50,12 @@ pub const FloatRoundMode = enum(u2) {
     zero = 3,
 };
 
+pub const float_status_mask: u32 = 0xfff79f9f;
+
+pub fn cleanFloatStatus(value: u32) u32 {
+    return value & float_status_mask;
+}
+
 pub const FloatWordReg = enum(u5) {
     s0,
     s1,
@@ -282,6 +288,14 @@ pub const MachineState = struct {
         const index = @as(usize, @enumToInt(reg)) * 2;
         self.float_regs[index] = @intCast(u32, value & 0xffffffff);
         self.float_regs[index + 1] = @intCast(u32, value >> 32);
+    }
+
+    pub fn readFloatStatus(self: *const MachineState) u32 {
+        return cleanFloatStatus(self.fpscr);
+    }
+
+    pub fn writeFloatStatus(self: *MachineState, value: u32) void {
+        self.fpscr = cleanFloatStatus(value);
     }
 
     pub fn carry(self: *const MachineState) bool {

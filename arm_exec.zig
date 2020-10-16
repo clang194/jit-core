@@ -1674,7 +1674,7 @@ fn runFloatStatusWrite(word: u32, state: *arm_state.MachineState, pc: u32) ArmSt
 
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
-        state.fpscr = state.read(source);
+        state.writeFloatStatus(state.read(source));
     }
     state.write(.pc, pc + 4);
 }
@@ -1684,9 +1684,9 @@ fn runFloatStatusRead(word: u32, state: *arm_state.MachineState, pc: u32) ArmSte
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
         if (dest == .pc) {
-            state.cpsr = mergeStatus(state.cpsr, state.fpscr, 0xf0000000);
+            state.cpsr = mergeStatus(state.cpsr, state.readFloatStatus(), 0xf0000000);
         } else {
-            state.write(dest, state.fpscr);
+            state.write(dest, state.readFloatStatus());
         }
     }
     state.write(.pc, pc + 4);
