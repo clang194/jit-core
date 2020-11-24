@@ -259,6 +259,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatParallelSaturating(buf, word, cond);
     }
 
+    if (isByteSelectFormat(word)) {
+        return formatByteSelect(buf, word, cond);
+    }
+
     if (isHalfMultiplyFormat(word)) {
         return formatHalfMultiply(buf, word, cond);
     }
@@ -1255,6 +1259,19 @@ fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         if (half) if (unsigned) "uqadd16" else "qadd16" else if (unsigned) "uqadd8" else "qadd8";
     return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
         op,
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word >> 16)),
+        arm_state.regName(armReg(word)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn isByteSelectFormat(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06800fb0 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+}
+
+fn formatByteSelect(buf: []u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "sel{} {}, {}, {}", .{
         condName(cond),
         arm_state.regName(armReg(word >> 12)),
         arm_state.regName(armReg(word >> 16)),

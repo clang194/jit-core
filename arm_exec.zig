@@ -326,6 +326,10 @@ fn isSignedSaturatingAddHalves(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06200f10 and armCondition(word) != null;
 }
 
+fn isByteSelect(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06800fb0 and armCondition(word) != null;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -696,6 +700,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isSignedSaturatingAddHalves(word)) {
         return runSignedSaturatingAddHalves(word, state, pc);
+    }
+
+    if (isByteSelect(word)) {
+        return runByteSelect(word, state, pc);
     }
 
     if (isLoadMultiple(word)) {
@@ -2901,6 +2909,39 @@ fn runSignedSaturatingAddHalves(word: u32, state: *arm_state.MachineState, pc: u
     }
     state.write(dest, result);
     state.write(.pc, pc + 4);
+}
+
+fn runByteSelect(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const mask = byteSelectMask(state.cpsr);
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    state.write(dest, (left & mask) | (right & ~mask));
+    state.write(.pc, pc + 4);
+}
+
+fn byteSelectMask(cpsr: u32) u32 {
+    const lanes = (cpsr >> 16) & 0xf;
+    var mask: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        if ((lanes & (@as(u32, 1) << index)) != 0) {
+            mask |= @as(u32, 0xff) << @intCast(u5, index * 8);
+        }
+    }
+    return mask;
 }
 
 fn runLoadExclusive(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
