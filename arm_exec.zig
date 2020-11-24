@@ -2925,15 +2925,14 @@ fn runByteSelect(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepErro
         return;
     }
 
-    const mask = byteSelectMask(state.cpsr);
+    const mask = byteSelectMask(state.readGreaterEqualLanes());
     const left = state.read(left_reg);
     const right = state.read(right_reg);
     state.write(dest, (left & mask) | (right & ~mask));
     state.write(.pc, pc + 4);
 }
 
-fn byteSelectMask(cpsr: u32) u32 {
-    const lanes = (cpsr >> 16) & 0xf;
+fn byteSelectMask(lanes: u32) u32 {
     var mask: u32 = 0;
     var index: u5 = 0;
     while (index < 4) : (index += 1) {
