@@ -314,6 +314,14 @@ pub const MachineState = struct {
         return bits.getBit32(self.cpsr, 28);
     }
 
+    pub fn readGreaterEqualLanes(self: *const MachineState) u32 {
+        return (self.cpsr >> 16) & 0xf;
+    }
+
+    pub fn writeGreaterEqualLanes(self: *MachineState, value: u32) void {
+        self.cpsr = (self.cpsr & ~@as(u32, 0x000f0000)) | ((value & 0xf) << 16);
+    }
+
     pub fn conditionHolds(self: *const MachineState, code: ConditionCode) bool {
         const n = self.negative();
         const z = self.zero();
