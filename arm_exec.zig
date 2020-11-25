@@ -330,6 +330,11 @@ fn isByteSelect(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06800fb0 and armCondition(word) != null;
 }
 
+fn isHalfwordPack(word: u32) bool {
+    return ((word & 0x0ff00070) == 0x06800010 or
+        (word & 0x0ff00070) == 0x06800050) and armCondition(word) != null;
+}
+
 pub fn isMultiply(word: u32) bool {
     return multiplyOp(word) != null;
 }
@@ -704,6 +709,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isByteSelect(word)) {
         return runByteSelect(word, state, pc);
+    }
+
+    if (isHalfwordPack(word)) {
+        return runHalfwordPack(word, state, pc);
     }
 
     if (isLoadMultiple(word)) {
@@ -2941,6 +2950,37 @@ fn byteSelectMask(lanes: u32) u32 {
         }
     }
     return mask;
+}
+
+fn runHalfwordPack(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const base_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (base_reg == .pc or dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const amount = @intCast(u8, (word >> 7) & 0x1f);
+    const top = (word & 0x00000040) != 0;
+    const shifted = shiftByImmediate(
+        state.read(source),
+        if (top) ShiftMode.signed_right else ShiftMode.left,
+        amount,
+        state.carry(),
+    ).word;
+    const base = state.read(base_reg);
+    const result = if (top)
+        (base & 0xffff0000) | (shifted & 0x0000ffff)
+    else
+        (base & 0x0000ffff) | (shifted & 0xffff0000);
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
 }
 
 fn runLoadExclusive(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
