@@ -259,6 +259,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatParallelSaturating(buf, word, cond);
     }
 
+    if (isUnsignedHalvingAddBytesFormat(word)) {
+        return formatParallelThreeReg(buf, "uhadd8", word, cond);
+    }
+
     if (isByteSelectFormat(word)) {
         return formatByteSelect(buf, word, cond);
     }
@@ -1257,6 +1261,20 @@ fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         if (half) if (unsigned) "uqsub16" else "qsub16" else if (unsigned) "uqsub8" else "qsub8"
     else
         if (half) if (unsigned) "uqadd16" else "qadd16" else if (unsigned) "uqadd8" else "qadd8";
+    return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
+        op,
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word >> 16)),
+        arm_state.regName(armReg(word)),
+    }) catch error.NoSpaceLeft;
+}
+
+fn isUnsignedHalvingAddBytesFormat(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06700f90 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+}
+
+fn formatParallelThreeReg(buf: []u8, comptime op: []const u8, word: u32, cond: u4) TextError![]u8 {
     return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
         op,
         condName(cond),
