@@ -187,6 +187,7 @@ const ExtendOp = enum(u4) {
     signed_half_add,
     signed_byte,
     signed_half,
+    unsigned_byte_pair,
     unsigned_byte_add,
     unsigned_half_add,
     unsigned_byte,
@@ -2398,6 +2399,9 @@ fn extendOp(word: u32) ?ExtendOp {
     if ((word & 0x0fff03f0) == 0x06bf0070) {
         return .signed_half;
     }
+    if ((word & 0x0fff03f0) == 0x06cf0070) {
+        return .unsigned_byte_pair;
+    }
     if ((word & 0x0fff03f0) == 0x06ef0070) {
         return .unsigned_byte;
     }
@@ -2592,6 +2596,7 @@ fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!vo
         .signed_half_add => base +% signExtendHalf(rotated),
         .signed_byte => signExtendByte(rotated),
         .signed_half => signExtendHalf(rotated),
+        .unsigned_byte_pair => rotated & 0x00ff00ff,
         .unsigned_byte_add => base +% (rotated & 0xff),
         .unsigned_half_add => base +% (rotated & 0xffff),
         .unsigned_byte => rotated & 0xff,
