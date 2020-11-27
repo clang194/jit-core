@@ -263,6 +263,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatParallelThreeReg(buf, "uhadd8", word, cond);
     }
 
+    if (isUnsignedHalvingAddHalvesFormat(word)) {
+        return formatParallelThreeReg(buf, "uhadd16", word, cond);
+    }
+
     if (isByteSelectFormat(word)) {
         return formatByteSelect(buf, word, cond);
     }
@@ -1272,6 +1276,10 @@ fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
 
 fn isUnsignedHalvingAddBytesFormat(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06700f90 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+}
+
+fn isUnsignedHalvingAddHalvesFormat(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06700f10 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
 }
 
 fn formatParallelThreeReg(buf: []u8, comptime op: []const u8, word: u32, cond: u4) TextError![]u8 {
