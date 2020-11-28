@@ -626,6 +626,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runFloatConvertToSigned(word, state, hooks, pc);
     }
 
+    if (isFloatCompare(word)) {
+        return runFloatCompare(word, state, hooks, pc);
+    }
+
     if (isFloatStatusWrite(word)) {
         return runFloatStatusWrite(word, state, pc);
     }
@@ -1042,6 +1046,11 @@ fn isFloatConvertToUnsigned(word: u32) bool {
 
 fn isFloatConvertToSigned(word: u32) bool {
     return isVfpCondition(word) and (word & 0x0fbf0e50) == 0x0ebd0a40;
+}
+
+fn isFloatCompare(word: u32) bool {
+    return isVfpCondition(word) and ((word & 0x0fbf0e50) == 0x0eb40a40 or
+        (word & 0x0fbf0e7f) == 0x0eb50a40);
 }
 
 fn isFloatStatusWrite(word: u32) bool {
@@ -1732,6 +1741,28 @@ fn runFloatConvertToSigned(word: u32, state: *arm_state.MachineState, hooks: arm
     state.write(.pc, pc + 4);
 }
 
+fn runFloatCompare(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
+        return runExternalArmHandler(state, hooks, pc);
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const double = bits.getBit32(word, 8);
+        const zero = (word & 0x0fbf0e7f) == 0x0eb50a40;
+        if (double) {
+            const left = readFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)));
+            const right = if (zero) @as(u64, 0) else readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
+            writeFloatCompare64(state, left, right);
+        } else {
+            const left = state.readFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)));
+            const right = if (zero) @as(u32, 0) else state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
+            writeFloatCompare32(state, left, right);
+        }
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn runFloatStatusWrite(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const source = armReg(word >> 12);
     if (source == .pc) {
@@ -2104,6 +2135,46 @@ fn subFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
         return 0x7ff8000000000000;
     }
     return result;
+}
+
+fn writeFloatCompare32(state: *arm_state.MachineState, left: u32, right: u32) void {
+    const left_word = floatInput32(state, left);
+    const right_word = floatInput32(state, right);
+    if (isNan32(left_word) or isNan32(right_word)) {
+        writeFloatNzcv(state, 0x30000000);
+        return;
+    }
+    const left_value = @bitCast(f32, left_word);
+    const right_value = @bitCast(f32, right_word);
+    if (left_value == right_value) {
+        writeFloatNzcv(state, 0x60000000);
+    } else if (left_value < right_value) {
+        writeFloatNzcv(state, 0x80000000);
+    } else {
+        writeFloatNzcv(state, 0x20000000);
+    }
+}
+
+fn writeFloatCompare64(state: *arm_state.MachineState, left: u64, right: u64) void {
+    const left_word = floatInput64(state, left);
+    const right_word = floatInput64(state, right);
+    if (isNan64(left_word) or isNan64(right_word)) {
+        writeFloatNzcv(state, 0x30000000);
+        return;
+    }
+    const left_value = @bitCast(f64, left_word);
+    const right_value = @bitCast(f64, right_word);
+    if (left_value == right_value) {
+        writeFloatNzcv(state, 0x60000000);
+    } else if (left_value < right_value) {
+        writeFloatNzcv(state, 0x80000000);
+    } else {
+        writeFloatNzcv(state, 0x20000000);
+    }
+}
+
+fn writeFloatNzcv(state: *arm_state.MachineState, value: u32) void {
+    state.fpscr = mergeStatus(state.fpscr, value, 0xf0000000);
 }
 
 fn convertFloat32To64(state: *arm_state.MachineState, value: u32) u64 {
