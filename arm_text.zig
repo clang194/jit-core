@@ -251,6 +251,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatMiscArm(buf, word, cond);
     }
 
+    if (saturatingBinaryName(word)) |op| {
+        return formatSaturatingBinary(buf, op, word, cond);
+    }
+
     if (isSaturatingArmFormat(word)) {
         return formatSaturatingArm(buf, word, cond);
     }
@@ -259,12 +263,8 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatParallelSaturating(buf, word, cond);
     }
 
-    if (isUnsignedHalvingAddBytesFormat(word)) {
-        return formatParallelThreeReg(buf, "uhadd8", word, cond);
-    }
-
-    if (isUnsignedHalvingAddHalvesFormat(word)) {
-        return formatParallelThreeReg(buf, "uhadd16", word, cond);
+    if (parallelHalvingName(word)) |op| {
+        return formatParallelThreeReg(buf, op, word, cond);
     }
 
     if (isByteSelectFormat(word)) {
@@ -1246,6 +1246,36 @@ fn formatSaturatingArm(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     }) catch error.NoSpaceLeft;
 }
 
+fn saturatingBinaryName(word: u32) ?[]const u8 {
+    if (arm_state.conditionFromNibble(@intCast(u4, word >> 28)) == null) {
+        return null;
+    }
+    const op = word & 0x0ff00ff0;
+    if (op == 0x01000050) {
+        return "qadd";
+    }
+    if (op == 0x01200050) {
+        return "qsub";
+    }
+    if (op == 0x01400050) {
+        return "qdadd";
+    }
+    if (op == 0x01600050) {
+        return "qdsub";
+    }
+    return null;
+}
+
+fn formatSaturatingBinary(buf: []u8, op: []const u8, word: u32, cond: u4) TextError![]u8 {
+    return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
+        op,
+        condName(cond),
+        arm_state.regName(armReg(word >> 12)),
+        arm_state.regName(armReg(word)),
+        arm_state.regName(armReg(word >> 16)),
+    }) catch error.NoSpaceLeft;
+}
+
 fn isParallelSaturatingFormat(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06600ff0 or
         (word & 0x0ff00ff0) == 0x06200ff0 or
@@ -1274,15 +1304,27 @@ fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     }) catch error.NoSpaceLeft;
 }
 
-fn isUnsignedHalvingAddBytesFormat(word: u32) bool {
-    return (word & 0x0ff00ff0) == 0x06700f90 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+fn parallelHalvingName(word: u32) ?[]const u8 {
+    if (arm_state.conditionFromNibble(@intCast(u4, word >> 28)) == null) {
+        return null;
+    }
+    const op = word & 0x0ff00ff0;
+    if (op == 0x06300f90) return "shadd8";
+    if (op == 0x06300f10) return "shadd16";
+    if (op == 0x06300f30) return "shasx";
+    if (op == 0x06300f50) return "shsax";
+    if (op == 0x06300ff0) return "shsub8";
+    if (op == 0x06300f70) return "shsub16";
+    if (op == 0x06700f90) return "uhadd8";
+    if (op == 0x06700f10) return "uhadd16";
+    if (op == 0x06700f30) return "uhasx";
+    if (op == 0x06700f50) return "uhsax";
+    if (op == 0x06700ff0) return "uhsub8";
+    if (op == 0x06700f70) return "uhsub16";
+    return null;
 }
 
-fn isUnsignedHalvingAddHalvesFormat(word: u32) bool {
-    return (word & 0x0ff00ff0) == 0x06700f10 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
-}
-
-fn formatParallelThreeReg(buf: []u8, comptime op: []const u8, word: u32, cond: u4) TextError![]u8 {
+fn formatParallelThreeReg(buf: []u8, op: []const u8, word: u32, cond: u4) TextError![]u8 {
     return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
         op,
         condName(cond),
