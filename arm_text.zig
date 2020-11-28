@@ -263,6 +263,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatParallelSaturating(buf, word, cond);
     }
 
+    if (parallelWrappingName(word)) |op| {
+        return formatParallelThreeReg(buf, op, word, cond);
+    }
+
     if (parallelHalvingName(word)) |op| {
         return formatParallelThreeReg(buf, op, word, cond);
     }
@@ -1321,6 +1325,26 @@ fn parallelHalvingName(word: u32) ?[]const u8 {
     if (op == 0x06700f50) return "uhsax";
     if (op == 0x06700ff0) return "uhsub8";
     if (op == 0x06700f70) return "uhsub16";
+    return null;
+}
+
+fn parallelWrappingName(word: u32) ?[]const u8 {
+    if (arm_state.conditionFromNibble(@intCast(u4, word >> 28)) == null) {
+        return null;
+    }
+    const op = word & 0x0ff00ff0;
+    if (op == 0x06100f90) return "sadd8";
+    if (op == 0x06100f10) return "sadd16";
+    if (op == 0x06100f30) return "sasx";
+    if (op == 0x06100f50) return "ssax";
+    if (op == 0x06100ff0) return "ssub8";
+    if (op == 0x06100f70) return "ssub16";
+    if (op == 0x06500f90) return "uadd8";
+    if (op == 0x06500f10) return "uadd16";
+    if (op == 0x06500f30) return "uasx";
+    if (op == 0x06500f50) return "usax";
+    if (op == 0x06500ff0) return "usub8";
+    if (op == 0x06500f70) return "usub16";
     return null;
 }
 
