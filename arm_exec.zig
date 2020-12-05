@@ -295,6 +295,10 @@ fn isStatusWriteRegister(word: u32) bool {
     return (word & 0x0ff3fff0) == 0x0120f000 and armCondition(word) != null;
 }
 
+fn isCountLeadingZeros(word: u32) bool {
+    return (word & 0x0fff0ff0) == 0x016f0f10 and armCondition(word) != null;
+}
+
 fn isUnsignedSaturatingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06600ff0 and armCondition(word) != null;
 }
@@ -706,6 +710,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isStatusWriteRegister(word)) {
         return runStatusWriteRegister(word, state, pc);
+    }
+
+    if (isCountLeadingZeros(word)) {
+        return runCountLeadingZeros(word, state, pc);
     }
 
     if (isUnsignedSaturatingSubBytes(word)) {
@@ -2437,6 +2445,20 @@ fn runStatusWriteRegister(word: u32, state: *arm_state.MachineState, pc: u32) Ar
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
         state.cpsr = mergeStatus(state.cpsr, state.read(source), mask);
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runCountLeadingZeros(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(dest, countLeadingZeros32(state.read(source)));
     }
     state.write(.pc, pc + 4);
 }
@@ -4268,6 +4290,15 @@ fn rotateRightWord(value: u32, amount: u8) u32 {
         return value;
     }
     return (value >> @intCast(u5, shift)) | (value << @intCast(u5, 32 - shift));
+}
+
+fn countLeadingZeros32(value: u32) u32 {
+    var mask: u32 = 0x80000000;
+    var count: u32 = 0;
+    while (mask != 0 and (value & mask) == 0) : (mask >>= 1) {
+        count += 1;
+    }
+    return count;
 }
 
 fn logicalLeft(value: u32, amount: u8, carry_in: bool) ShiftResult {
