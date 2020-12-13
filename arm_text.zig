@@ -183,7 +183,7 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
 
     if ((word & 0x0ff000f0) == 0x01200070) {
         const value = (((word >> 8) & 0xfff) << 4) | (word & 0xf);
-        return std.fmt.bufPrint(buf, "bkpt #{}", .{value}) catch error.NoSpaceLeft;
+        return std.fmt.bufPrint(buf, "bkpt{} #{}", .{ condName(cond), value }) catch error.NoSpaceLeft;
     }
 
     if ((word & 0x0fffffff) == 0x0320f000) {
@@ -263,8 +263,8 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatSaturatingArm(buf, word, cond);
     }
 
-    if (isParallelSaturatingFormat(word)) {
-        return formatParallelSaturating(buf, word, cond);
+    if (parallelSaturatingName(word)) |op| {
+        return formatParallelThreeReg(buf, op, word, cond);
     }
 
     if (parallelWrappingName(word)) |op| {
@@ -1322,32 +1322,24 @@ fn formatSaturatingBinary(buf: []u8, op: []const u8, word: u32, cond: u4) TextEr
     }) catch error.NoSpaceLeft;
 }
 
-fn isParallelSaturatingFormat(word: u32) bool {
-    return (word & 0x0ff00ff0) == 0x06600ff0 or
-        (word & 0x0ff00ff0) == 0x06200ff0 or
-        (word & 0x0ff00ff0) == 0x06600f90 or
-        (word & 0x0ff00ff0) == 0x06200f90 or
-        (word & 0x0ff00ff0) == 0x06600f70 or
-        (word & 0x0ff00ff0) == 0x06200f70 or
-        (word & 0x0ff00ff0) == 0x06600f10 or
-        (word & 0x0ff00ff0) == 0x06200f10;
-}
-
-fn formatParallelSaturating(buf: []u8, word: u32, cond: u4) TextError![]u8 {
-    const unsigned = (word & 0x00400000) != 0;
-    const subtract = (word & 0x00000060) == 0x00000060;
-    const half = (word & 0x00000080) == 0;
-    const op = if (subtract)
-        if (half) if (unsigned) "uqsub16" else "qsub16" else if (unsigned) "uqsub8" else "qsub8"
-    else
-        if (half) if (unsigned) "uqadd16" else "qadd16" else if (unsigned) "uqadd8" else "qadd8";
-    return std.fmt.bufPrint(buf, "{}{} {}, {}, {}", .{
-        op,
-        condName(cond),
-        arm_state.regName(armReg(word >> 12)),
-        arm_state.regName(armReg(word >> 16)),
-        arm_state.regName(armReg(word)),
-    }) catch error.NoSpaceLeft;
+fn parallelSaturatingName(word: u32) ?[]const u8 {
+    if (arm_state.conditionFromNibble(@intCast(u4, word >> 28)) == null) {
+        return null;
+    }
+    const op = word & 0x0ff00ff0;
+    if (op == 0x06200f90) return "qadd8";
+    if (op == 0x06200f10) return "qadd16";
+    if (op == 0x06200f30) return "qasx";
+    if (op == 0x06200f50) return "qsax";
+    if (op == 0x06200ff0) return "qsub8";
+    if (op == 0x06200f70) return "qsub16";
+    if (op == 0x06600f90) return "uqadd8";
+    if (op == 0x06600f10) return "uqadd16";
+    if (op == 0x06600f30) return "uqasx";
+    if (op == 0x06600f50) return "uqsax";
+    if (op == 0x06600ff0) return "uqsub8";
+    if (op == 0x06600f70) return "uqsub16";
+    return null;
 }
 
 fn parallelHalvingName(word: u32) ?[]const u8 {
