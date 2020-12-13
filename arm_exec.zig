@@ -19,6 +19,11 @@ pub const ShiftResult = struct {
     carry: bool,
 };
 
+const SaturatingWordResult = struct {
+    word: u32,
+    overflow: bool,
+};
+
 const ArmPattern = struct {
     mask: u32,
     expect: u32,
@@ -297,6 +302,14 @@ fn isStatusWriteRegister(word: u32) bool {
 
 fn isCountLeadingZeros(word: u32) bool {
     return (word & 0x0fff0ff0) == 0x016f0f10 and armCondition(word) != null;
+}
+
+fn isSignedSaturatingWord(word: u32) bool {
+    const op = word & 0x0ff00ff0;
+    return (op == 0x01000050 or
+        op == 0x01200050 or
+        op == 0x01400050 or
+        op == 0x01600050) and armCondition(word) != null;
 }
 
 fn isUnsignedSaturatingSubBytes(word: u32) bool {
@@ -718,6 +731,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isCountLeadingZeros(word)) {
         return runCountLeadingZeros(word, state, pc);
+    }
+
+    if (isSignedSaturatingWord(word)) {
+        return runSignedSaturatingWord(word, state, pc);
     }
 
     if (isUnsignedSaturatingSubBytes(word)) {
@@ -2852,6 +2869,48 @@ fn runStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_state.
     state.write(.pc, pc + 4);
 }
 
+fn runSignedSaturatingWord(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word >> 16);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    const op = word & 0x0ff00ff0;
+    var result = SaturatingWordResult{ .word = 0, .overflow = false };
+    if (op == 0x01000050) {
+        result = signedSaturatingAddWord(left, right);
+    } else if (op == 0x01200050) {
+        result = signedSaturatingSubWord(left, right);
+    } else if (op == 0x01400050) {
+        const doubled = signedSaturatingAddWord(right, right);
+        result = signedSaturatingAddWord(left, doubled.word);
+        if (doubled.overflow) {
+            result.overflow = true;
+        }
+    } else {
+        const doubled = signedSaturatingAddWord(right, right);
+        result = signedSaturatingSubWord(left, doubled.word);
+        if (doubled.overflow) {
+            result.overflow = true;
+        }
+    }
+    state.write(dest, result.word);
+    if (result.overflow) {
+        raiseQFlag(state);
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn runUnsignedSaturatingSubBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const left_reg = armReg(word >> 16);
     const dest = armReg(word >> 12);
@@ -4111,6 +4170,24 @@ fn writeLongMultiplyFlags(state: *arm_state.MachineState, value: u64) void {
 
 fn raiseQFlag(state: *arm_state.MachineState) void {
     state.cpsr = bits.setBit32(state.cpsr, 27, true);
+}
+
+fn signedSaturatingAddWord(left: u32, right: u32) SaturatingWordResult {
+    const sum = addWithCarry(left, right, false);
+    if (!sum.overflow) {
+        return SaturatingWordResult{ .word = sum.word, .overflow = false };
+    }
+    const word = if ((left & 0x80000000) != 0) @as(u32, 0x80000000) else @as(u32, 0x7fffffff);
+    return SaturatingWordResult{ .word = word, .overflow = true };
+}
+
+fn signedSaturatingSubWord(left: u32, right: u32) SaturatingWordResult {
+    const difference = subWithCarry(left, right, true);
+    if (!difference.overflow) {
+        return SaturatingWordResult{ .word = difference.word, .overflow = false };
+    }
+    const word = if ((left & 0x80000000) != 0) @as(u32, 0x80000000) else @as(u32, 0x7fffffff);
+    return SaturatingWordResult{ .word = word, .overflow = true };
 }
 
 fn runAdcImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
