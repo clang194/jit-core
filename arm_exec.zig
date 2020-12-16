@@ -372,8 +372,32 @@ fn isUnsignedWrappingAddBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06500f90 and armCondition(word) != null;
 }
 
+fn isSignedWrappingAddBytes(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06100f90 and armCondition(word) != null;
+}
+
+fn isUnsignedWrappingAddHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06500f10 and armCondition(word) != null;
+}
+
+fn isSignedWrappingAddHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06100f10 and armCondition(word) != null;
+}
+
 fn isUnsignedWrappingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06500ff0 and armCondition(word) != null;
+}
+
+fn isSignedWrappingSubBytes(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06100ff0 and armCondition(word) != null;
+}
+
+fn isUnsignedWrappingSubHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06500f70 and armCondition(word) != null;
+}
+
+fn isSignedWrappingSubHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06100f70 and armCondition(word) != null;
 }
 
 fn isByteSelect(word: u32) bool {
@@ -802,8 +826,32 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runUnsignedWrappingAddBytes(word, state, pc);
     }
 
+    if (isSignedWrappingAddBytes(word)) {
+        return runSignedWrappingAddBytes(word, state, pc);
+    }
+
+    if (isUnsignedWrappingAddHalves(word)) {
+        return runUnsignedWrappingAddHalves(word, state, pc);
+    }
+
+    if (isSignedWrappingAddHalves(word)) {
+        return runSignedWrappingAddHalves(word, state, pc);
+    }
+
     if (isUnsignedWrappingSubBytes(word)) {
         return runUnsignedWrappingSubBytes(word, state, pc);
+    }
+
+    if (isSignedWrappingSubBytes(word)) {
+        return runSignedWrappingSubBytes(word, state, pc);
+    }
+
+    if (isUnsignedWrappingSubHalves(word)) {
+        return runUnsignedWrappingSubHalves(word, state, pc);
+    }
+
+    if (isSignedWrappingSubHalves(word)) {
+        return runSignedWrappingSubHalves(word, state, pc);
     }
 
     if (isByteSelect(word)) {
@@ -3348,6 +3396,104 @@ fn runUnsignedWrappingAddBytes(word: u32, state: *arm_state.MachineState, pc: u3
     state.write(.pc, pc + 4);
 }
 
+fn runSignedWrappingAddBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var ge: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const lane = signedByte(left >> shift) + signedByte(right >> shift);
+        const encoded = if (lane < 0) @intCast(u8, lane + 256) else @intCast(u8, lane);
+        result |= @as(u32, encoded) << shift;
+        if (lane >= 0) {
+            ge |= @as(u32, 1) << index;
+        }
+    }
+    state.write(dest, result);
+    state.writeGreaterEqualLanes(ge);
+    state.write(.pc, pc + 4);
+}
+
+fn runUnsignedWrappingAddHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var ge: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const sum = ((left >> shift) & 0xffff) + ((right >> shift) & 0xffff);
+        result |= (sum & 0xffff) << shift;
+        if (sum >= 0x10000) {
+            ge |= @as(u32, 3) << @intCast(u5, index * 2);
+        }
+    }
+    state.write(dest, result);
+    state.writeGreaterEqualLanes(ge);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedWrappingAddHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var ge: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const lane = signedHalf(left >> shift) + signedHalf(right >> shift);
+        const encoded = if (lane < 0) @intCast(u16, lane + 65536) else @intCast(u16, lane);
+        result |= @as(u32, encoded) << shift;
+        if (lane >= 0) {
+            ge |= @as(u32, 3) << @intCast(u5, index * 2);
+        }
+    }
+    state.write(dest, result);
+    state.writeGreaterEqualLanes(ge);
+    state.write(.pc, pc + 4);
+}
+
 fn runUnsignedWrappingSubBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const left_reg = armReg(word >> 16);
     const dest = armReg(word >> 12);
@@ -3374,6 +3520,105 @@ fn runUnsignedWrappingSubBytes(word: u32, state: *arm_state.MachineState, pc: u3
         result |= ((left_byte -% right_byte) & 0xff) << shift;
         if (left_byte >= right_byte) {
             ge |= @as(u32, 1) << index;
+        }
+    }
+    state.write(dest, result);
+    state.writeGreaterEqualLanes(ge);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedWrappingSubBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var ge: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const lane = signedByte(left >> shift) - signedByte(right >> shift);
+        const encoded = if (lane < 0) @intCast(u8, lane + 256) else @intCast(u8, lane);
+        result |= @as(u32, encoded) << shift;
+        if (lane >= 0) {
+            ge |= @as(u32, 1) << index;
+        }
+    }
+    state.write(dest, result);
+    state.writeGreaterEqualLanes(ge);
+    state.write(.pc, pc + 4);
+}
+
+fn runUnsignedWrappingSubHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var ge: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const left_half = (left >> shift) & 0xffff;
+        const right_half = (right >> shift) & 0xffff;
+        result |= ((left_half -% right_half) & 0xffff) << shift;
+        if (left_half >= right_half) {
+            ge |= @as(u32, 3) << @intCast(u5, index * 2);
+        }
+    }
+    state.write(dest, result);
+    state.writeGreaterEqualLanes(ge);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedWrappingSubHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var ge: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const lane = signedHalf(left >> shift) - signedHalf(right >> shift);
+        const encoded = if (lane < 0) @intCast(u16, lane + 65536) else @intCast(u16, lane);
+        result |= @as(u32, encoded) << shift;
+        if (lane >= 0) {
+            ge |= @as(u32, 3) << @intCast(u5, index * 2);
         }
     }
     state.write(dest, result);
