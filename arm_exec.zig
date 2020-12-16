@@ -380,6 +380,11 @@ fn isByteSelect(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06800fb0 and armCondition(word) != null;
 }
 
+fn isUnsignedAbsDiffSum(word: u32) bool {
+    return ((word & 0x0ff0f0f0) == 0x0780f010 or
+        (word & 0x0ff000f0) == 0x07800010) and armCondition(word) != null;
+}
+
 fn isHalfwordPack(word: u32) bool {
     return ((word & 0x0ff00070) == 0x06800010 or
         (word & 0x0ff00070) == 0x06800050) and armCondition(word) != null;
@@ -803,6 +808,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isByteSelect(word)) {
         return runByteSelect(word, state, pc);
+    }
+
+    if (isUnsignedAbsDiffSum(word)) {
+        return runUnsignedAbsDiffSum(word, state, pc);
     }
 
     if (isHalfwordPack(word)) {
@@ -3390,6 +3399,39 @@ fn runByteSelect(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepErro
     const left = state.read(left_reg);
     const right = state.read(right_reg);
     state.write(dest, (left & mask) | (right & ~mask));
+    state.write(.pc, pc + 4);
+}
+
+fn runUnsignedAbsDiffSum(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 16);
+    const addend = armReg(word >> 12);
+    const right_reg = armReg(word >> 8);
+    const left_reg = armReg(word);
+    const with_addend = (word & 0x0000f000) != 0x0000f000;
+    if (dest == .pc or left_reg == .pc or right_reg == .pc or (with_addend and addend == .pc)) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const left_byte = (left >> shift) & 0xff;
+        const right_byte = (right >> shift) & 0xff;
+        result += if (left_byte > right_byte) left_byte - right_byte else right_byte - left_byte;
+    }
+    if (with_addend) {
+        result +%= state.read(addend);
+    }
+    state.write(dest, result);
     state.write(.pc, pc + 4);
 }
 
