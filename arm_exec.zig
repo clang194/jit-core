@@ -228,6 +228,9 @@ const DualMultiplyOp = enum(u3) {
 
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
     const address = pc & 0xfffffffc;
+    if (hooks.fetch32) |fetch32| {
+        return fetch32(address);
+    }
     if (hooks.readDirect32(address)) |value| {
         return value;
     }

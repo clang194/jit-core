@@ -28,7 +28,7 @@ pub const ThumbWord = struct {
 
 pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
     const first_address = pc & 0xfffffffc;
-    var first = if (hooks.readDirect32(first_address)) |direct| direct else blk: {
+    var first = if (hooks.fetch32) |fetch32| fetch32(first_address) else if (hooks.readDirect32(first_address)) |direct| direct else blk: {
         const read32 = hooks.read32 orelse return error.MissingRead;
         break :blk read32(first_address);
     };
@@ -43,7 +43,7 @@ pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
 
     const second_pc = pc + 2;
     const second_address = second_pc & 0xfffffffc;
-    var second = if (hooks.readDirect32(second_address)) |direct| direct else blk: {
+    var second = if (hooks.fetch32) |fetch32| fetch32(second_address) else if (hooks.readDirect32(second_address)) |direct| direct else blk: {
         const read32 = hooks.read32 orelse return error.MissingRead;
         break :blk read32(second_address);
     };
