@@ -1603,6 +1603,10 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         return;
     }
 
+    if ((word & 0xffe8) == 0xb660) {
+        return;
+    }
+
     if ((word & 0xf800) == 0xc000) {
         const base = arm_state.lowReg(word >> 8);
         const mask = @intCast(u8, word & 0xff);
