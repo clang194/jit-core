@@ -1306,6 +1306,15 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
         return;
     }
 
+    if ((word & 0xffc0) == 0x4340) {
+        const source = arm_state.lowReg(word >> 3);
+        const dest = arm_state.lowReg(word);
+        const result = state.read(dest) *% state.read(source);
+        state.write(dest, result);
+        updateNz(state, result);
+        return;
+    }
+
     if ((word & 0xffc0) == 0x4380) {
         const source = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
