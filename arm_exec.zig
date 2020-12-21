@@ -372,8 +372,16 @@ fn isUnsignedHalvingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06700ff0 and armCondition(word) != null;
 }
 
+fn isSignedHalvingSubBytes(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06300ff0 and armCondition(word) != null;
+}
+
 fn isUnsignedHalvingSubHalves(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06700f70 and armCondition(word) != null;
+}
+
+fn isSignedHalvingSubHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06300f70 and armCondition(word) != null;
 }
 
 fn isUnsignedWrappingAddBytes(word: u32) bool {
@@ -830,8 +838,16 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runUnsignedHalvingSubBytes(word, state, pc);
     }
 
+    if (isSignedHalvingSubBytes(word)) {
+        return runSignedHalvingSubBytes(word, state, pc);
+    }
+
     if (isUnsignedHalvingSubHalves(word)) {
         return runUnsignedHalvingSubHalves(word, state, pc);
+    }
+
+    if (isSignedHalvingSubHalves(word)) {
+        return runSignedHalvingSubHalves(word, state, pc);
     }
 
     if (isUnsignedWrappingAddBytes(word)) {
@@ -3401,6 +3417,62 @@ fn runUnsignedHalvingSubHalves(word: u32, state: *arm_state.MachineState, pc: u3
     while (index < 2) : (index += 1) {
         const shift = @intCast(u5, index * 16);
         const lane = @divFloor(@intCast(i32, (left >> shift) & 0xffff) - @intCast(i32, (right >> shift) & 0xffff), 2);
+        const encoded = if (lane < 0) @intCast(u16, lane + 65536) else @intCast(u16, lane);
+        result |= @as(u32, encoded) << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedHalvingSubBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 4) : (index += 1) {
+        const shift = @intCast(u5, index * 8);
+        const lane = @divFloor(signedByte(left >> shift) - signedByte(right >> shift), 2);
+        const encoded = if (lane < 0) @intCast(u8, lane + 256) else @intCast(u8, lane);
+        result |= @as(u32, encoded) << shift;
+    }
+    state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedHalvingSubHalves(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    var result: u32 = 0;
+    var index: u5 = 0;
+    while (index < 2) : (index += 1) {
+        const shift = @intCast(u5, index * 16);
+        const lane = @divFloor(signedHalf(left >> shift) - signedHalf(right >> shift), 2);
         const encoded = if (lane < 0) @intCast(u16, lane + 65536) else @intCast(u16, lane);
         result |= @as(u32, encoded) << shift;
     }
