@@ -368,6 +368,22 @@ fn isSignedHalvingAddHalves(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06300f10 and armCondition(word) != null;
 }
 
+fn isUnsignedHalvingAddSubHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06700f30 and armCondition(word) != null;
+}
+
+fn isUnsignedHalvingSubAddHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06700f50 and armCondition(word) != null;
+}
+
+fn isSignedHalvingAddSubHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06300f30 and armCondition(word) != null;
+}
+
+fn isSignedHalvingSubAddHalves(word: u32) bool {
+    return (word & 0x0ff00ff0) == 0x06300f50 and armCondition(word) != null;
+}
+
 fn isUnsignedHalvingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06700ff0 and armCondition(word) != null;
 }
@@ -832,6 +848,22 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isSignedHalvingAddHalves(word)) {
         return runSignedHalvingAddHalves(word, state, pc);
+    }
+
+    if (isUnsignedHalvingAddSubHalves(word)) {
+        return runUnsignedHalvingMixedHalves(word, state, pc, true);
+    }
+
+    if (isUnsignedHalvingSubAddHalves(word)) {
+        return runUnsignedHalvingMixedHalves(word, state, pc, false);
+    }
+
+    if (isSignedHalvingAddSubHalves(word)) {
+        return runSignedHalvingMixedHalves(word, state, pc, true);
+    }
+
+    if (isSignedHalvingSubAddHalves(word)) {
+        return runSignedHalvingMixedHalves(word, state, pc, false);
     }
 
     if (isUnsignedHalvingSubBytes(word)) {
@@ -3365,6 +3397,74 @@ fn runSignedHalvingAddHalves(word: u32, state: *arm_state.MachineState, pc: u32)
         result |= @as(u32, encoded) << shift;
     }
     state.write(dest, result);
+    state.write(.pc, pc + 4);
+}
+
+fn runUnsignedHalvingMixedHalves(word: u32, state: *arm_state.MachineState, pc: u32, add_sub: bool) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    const left_low = @intCast(i32, left & 0xffff);
+    const left_high = @intCast(i32, (left >> 16) & 0xffff);
+    const right_low = @intCast(i32, right & 0xffff);
+    const right_high = @intCast(i32, (right >> 16) & 0xffff);
+    const low_lane = if (add_sub)
+        @divFloor(left_low - right_high, 2)
+    else
+        @divFloor(left_low + right_high, 2);
+    const high_lane = if (add_sub)
+        @divFloor(left_high + right_low, 2)
+    else
+        @divFloor(left_high - right_low, 2);
+    const low = if (low_lane < 0) @intCast(u16, low_lane + 65536) else @intCast(u16, low_lane);
+    const high = if (high_lane < 0) @intCast(u16, high_lane + 65536) else @intCast(u16, high_lane);
+    state.write(dest, @as(u32, low) | (@as(u32, high) << 16));
+    state.write(.pc, pc + 4);
+}
+
+fn runSignedHalvingMixedHalves(word: u32, state: *arm_state.MachineState, pc: u32, add_sub: bool) ArmStepError!void {
+    const left_reg = armReg(word >> 16);
+    const dest = armReg(word >> 12);
+    const right_reg = armReg(word);
+    if (left_reg == .pc or dest == .pc or right_reg == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const left = state.read(left_reg);
+    const right = state.read(right_reg);
+    const left_low = signedHalf(left);
+    const left_high = signedHalf(left >> 16);
+    const right_low = signedHalf(right);
+    const right_high = signedHalf(right >> 16);
+    const low_lane = if (add_sub)
+        @divFloor(left_low - right_high, 2)
+    else
+        @divFloor(left_low + right_high, 2);
+    const high_lane = if (add_sub)
+        @divFloor(left_high + right_low, 2)
+    else
+        @divFloor(left_high - right_low, 2);
+    const low = if (low_lane < 0) @intCast(u16, low_lane + 65536) else @intCast(u16, low_lane);
+    const high = if (high_lane < 0) @intCast(u16, high_lane + 65536) else @intCast(u16, high_lane);
+    state.write(dest, @as(u32, low) | (@as(u32, high) << 16));
     state.write(.pc, pc + 4);
 }
 
