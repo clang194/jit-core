@@ -193,6 +193,7 @@ const ExtendOp = enum(u4) {
     signed_byte,
     signed_half,
     unsigned_byte_pair,
+    unsigned_byte_pair_add,
     unsigned_byte_add,
     unsigned_half_add,
     unsigned_byte,
@@ -2705,6 +2706,9 @@ fn extendOp(word: u32) ?ExtendOp {
     if ((word & 0x0ff003f0) == 0x06b00070) {
         return .signed_half_add;
     }
+    if ((word & 0x0ff003f0) == 0x06c00070) {
+        return .unsigned_byte_pair_add;
+    }
     if ((word & 0x0ff003f0) == 0x06e00070) {
         return .unsigned_byte_add;
     }
@@ -2870,7 +2874,11 @@ fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!vo
     const op = extendOp(word).?;
     const dest = armReg(word >> 12);
     const source = armReg(word);
+    const base_reg = armReg(word >> 16);
     if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+    if (op == .unsigned_byte_pair_add and base_reg == .pc) {
         return error.Unpredictable;
     }
 
@@ -2881,13 +2889,14 @@ fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!vo
     }
 
     const rotated = rotateRightWord(state.read(source), @intCast(u8, ((word >> 10) & 0x3) * 8));
-    const base = readArmOperand(state, armReg(word >> 16), pc);
+    const base = readArmOperand(state, base_reg, pc);
     const result = switch (op) {
         .signed_byte_add => base +% signExtendByte(rotated),
         .signed_half_add => base +% signExtendHalf(rotated),
         .signed_byte => signExtendByte(rotated),
         .signed_half => signExtendHalf(rotated),
         .unsigned_byte_pair => rotated & 0x00ff00ff,
+        .unsigned_byte_pair_add => addHalfPairs(base, rotated & 0x00ff00ff),
         .unsigned_byte_add => base +% (rotated & 0xff),
         .unsigned_half_add => base +% (rotated & 0xffff),
         .unsigned_byte => rotated & 0xff,
@@ -4940,6 +4949,12 @@ fn rotateRightWord(value: u32, amount: u8) u32 {
         return value;
     }
     return (value >> @intCast(u5, shift)) | (value << @intCast(u5, 32 - shift));
+}
+
+fn addHalfPairs(left: u32, right: u32) u32 {
+    const low = (left +% right) & 0xffff;
+    const high = ((left >> 16) +% (right >> 16)) & 0xffff;
+    return low | (high << 16);
 }
 
 fn countLeadingZeros32(value: u32) u32 {
