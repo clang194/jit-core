@@ -126,6 +126,79 @@ pub const FloatPairReg = enum(u5) {
     d31,
 };
 
+pub const CoprocessorReg = enum(u4) {
+    c0,
+    c1,
+    c2,
+    c3,
+    c4,
+    c5,
+    c6,
+    c7,
+    c8,
+    c9,
+    c10,
+    c11,
+    c12,
+    c13,
+    c14,
+    c15,
+};
+
+pub const CoprocessorCommand = struct {
+    extended: bool,
+    op1: u4,
+    dest: CoprocessorReg,
+    base: CoprocessorReg,
+    operand: CoprocessorReg,
+    op2: u3,
+};
+
+pub const CoprocessorWord = struct {
+    extended: bool,
+    op1: u3,
+    base: CoprocessorReg,
+    operand: CoprocessorReg,
+    op2: u3,
+};
+
+pub const CoprocessorPair = struct {
+    extended: bool,
+    op: u4,
+    operand: CoprocessorReg,
+};
+
+pub const CoprocessorBlock = struct {
+    extended: bool,
+    long: bool,
+    register: CoprocessorReg,
+    option: ?u8,
+};
+
+pub const CoprocessorHooks = struct {
+    operate: ?fn (*MachineState, CoprocessorCommand, ?*c_void) void,
+    sendWord: ?fn (*MachineState, CoprocessorWord, u32, ?*c_void) void,
+    sendPair: ?fn (*MachineState, CoprocessorPair, u32, u32, ?*c_void) void,
+    getWord: ?fn (*MachineState, CoprocessorWord, ?*c_void) u32,
+    getPair: ?fn (*MachineState, CoprocessorPair, ?*c_void) u64,
+    loadBlock: ?fn (*MachineState, CoprocessorBlock, u32, ?*c_void) void,
+    storeBlock: ?fn (*MachineState, CoprocessorBlock, u32, ?*c_void) void,
+    context: ?*c_void,
+
+    pub fn empty() CoprocessorHooks {
+        return CoprocessorHooks{
+            .operate = null,
+            .sendWord = null,
+            .sendPair = null,
+            .getWord = null,
+            .getPair = null,
+            .loadBlock = null,
+            .storeBlock = null,
+            .context = null,
+        };
+    }
+};
+
 pub const HostHooks = struct {
     pub const page_bits = 12;
     pub const page_size = @as(usize, 1) << page_bits;
@@ -146,6 +219,7 @@ pub const HostHooks = struct {
     context: ?*c_void,
     trap: ?fn (u32) bool,
     supervisor: ?fn (u32, *MachineState) void,
+    coprocessors: [16]?CoprocessorHooks,
     direct_pages: ?*PageMap,
 
     pub fn empty() HostHooks {
@@ -164,6 +238,7 @@ pub const HostHooks = struct {
             .context = null,
             .trap = null,
             .supervisor = null,
+            .coprocessors = [_]?CoprocessorHooks{null} ** 16,
             .direct_pages = null,
         };
     }
