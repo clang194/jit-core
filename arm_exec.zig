@@ -239,13 +239,13 @@ const DualMultiplyOp = enum(u3) {
 
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
     const address = pc & 0xfffffffc;
-    if (hooks.fetch32) |fetch32| {
+    if (hooks.memory.fetch32) |fetch32| {
         return fetch32(address);
     }
-    if (hooks.readDirect32(address)) |value| {
+    if (hooks.memory.readDirect32(address)) |value| {
         return value;
     }
-    const read32 = hooks.read32 orelse return error.MissingRead;
+    const read32 = hooks.memory.read32 orelse return error.MissingRead;
     return read32(address);
 }
 
@@ -5033,8 +5033,8 @@ fn loadWritePc(state: *arm_state.MachineState, value: u32) void {
 }
 
 fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) ArmStepError!u32 {
-    var value = if (hooks.readDirect32(address)) |direct| direct else blk: {
-        const read32 = hooks.read32 orelse return error.MissingRead;
+    var value = if (hooks.memory.readDirect32(address)) |direct| direct else blk: {
+        const read32 = hooks.memory.read32 orelse return error.MissingRead;
         break :blk read32(address);
     };
     if (state.bigEndian()) {
@@ -5044,16 +5044,16 @@ fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks
 }
 
 fn readMemory8(hooks: arm_state.HostHooks, address: u32) ArmStepError!u8 {
-    if (hooks.readDirect8(address)) |value| {
+    if (hooks.memory.readDirect8(address)) |value| {
         return value;
     }
-    const read8 = hooks.read8 orelse return error.MissingRead;
+    const read8 = hooks.memory.read8 orelse return error.MissingRead;
     return read8(address);
 }
 
 fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) ArmStepError!u16 {
-    var value = if (hooks.readDirect16(address)) |direct| direct else blk: {
-        const read16 = hooks.read16 orelse return error.MissingRead;
+    var value = if (hooks.memory.readDirect16(address)) |direct| direct else blk: {
+        const read16 = hooks.memory.read16 orelse return error.MissingRead;
         break :blk read16(address);
     };
     if (state.bigEndian()) {
@@ -5067,10 +5067,10 @@ fn writeMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHook
     if (state.bigEndian()) {
         data = byteReverseWord(data);
     }
-    if (hooks.writeDirect32(address, data)) {
+    if (hooks.memory.writeDirect32(address, data)) {
         return;
     }
-    const write32 = hooks.write32 orelse return error.MissingWrite;
+    const write32 = hooks.memory.write32 orelse return error.MissingWrite;
     write32(address, data);
 }
 
@@ -5079,18 +5079,18 @@ fn writeMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHook
     if (state.bigEndian()) {
         data = @intCast(u16, byteReverseHalf(data));
     }
-    if (hooks.writeDirect16(address, data)) {
+    if (hooks.memory.writeDirect16(address, data)) {
         return;
     }
-    const write16 = hooks.write16 orelse return error.MissingWrite;
+    const write16 = hooks.memory.write16 orelse return error.MissingWrite;
     write16(address, data);
 }
 
 fn writeMemory8(hooks: arm_state.HostHooks, address: u32, value: u8) ArmStepError!void {
-    if (hooks.writeDirect8(address, value)) {
+    if (hooks.memory.writeDirect8(address, value)) {
         return;
     }
-    const write8 = hooks.write8 orelse return error.MissingWrite;
+    const write8 = hooks.memory.write8 orelse return error.MissingWrite;
     write8(address, value);
 }
 

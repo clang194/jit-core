@@ -28,8 +28,8 @@ pub const ThumbWord = struct {
 
 pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
     const first_address = pc & 0xfffffffc;
-    var first = if (hooks.fetch32) |fetch32| fetch32(first_address) else if (hooks.readDirect32(first_address)) |direct| direct else blk: {
-        const read32 = hooks.read32 orelse return error.MissingRead;
+    var first = if (hooks.memory.fetch32) |fetch32| fetch32(first_address) else if (hooks.memory.readDirect32(first_address)) |direct| direct else blk: {
+        const read32 = hooks.memory.read32 orelse return error.MissingRead;
         break :blk read32(first_address);
     };
     if ((pc & 2) != 0) {
@@ -43,8 +43,8 @@ pub fn readThumbWord(hooks: arm_state.HostHooks, pc: u32) RunError!ThumbWord {
 
     const second_pc = pc + 2;
     const second_address = second_pc & 0xfffffffc;
-    var second = if (hooks.fetch32) |fetch32| fetch32(second_address) else if (hooks.readDirect32(second_address)) |direct| direct else blk: {
-        const read32 = hooks.read32 orelse return error.MissingRead;
+    var second = if (hooks.memory.fetch32) |fetch32| fetch32(second_address) else if (hooks.memory.readDirect32(second_address)) |direct| direct else blk: {
+        const read32 = hooks.memory.read32 orelse return error.MissingRead;
         break :blk read32(second_address);
     };
     if ((second_pc & 2) != 0) {
@@ -1414,7 +1414,7 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xfe00) == 0x5400) {
-        const write8 = hooks.write8 orelse return error.MissingWrite;
+        const write8 = hooks.memory.write8 orelse return error.MissingWrite;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const data = arm_state.lowReg(word);
@@ -1423,7 +1423,7 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xfe00) == 0x5600) {
-        const read8 = hooks.read8 orelse return error.MissingRead;
+        const read8 = hooks.memory.read8 orelse return error.MissingRead;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
@@ -1448,7 +1448,7 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xfe00) == 0x5c00) {
-        const read8 = hooks.read8 orelse return error.MissingRead;
+        const read8 = hooks.memory.read8 orelse return error.MissingRead;
         const source = arm_state.lowReg(word >> 6);
         const base = arm_state.lowReg(word >> 3);
         const dest = arm_state.lowReg(word);
@@ -1481,7 +1481,7 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xf800) == 0x7000) {
-        const write8 = hooks.write8 orelse return error.MissingWrite;
+        const write8 = hooks.memory.write8 orelse return error.MissingWrite;
         const data = arm_state.lowReg(word);
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f);
@@ -1490,7 +1490,7 @@ pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_s
     }
 
     if ((word & 0xf800) == 0x7800) {
-        const read8 = hooks.read8 orelse return error.MissingRead;
+        const read8 = hooks.memory.read8 orelse return error.MissingRead;
         const dest = arm_state.lowReg(word);
         const base = arm_state.lowReg(word >> 3);
         const offset = @as(u32, (word >> 6) & 0x1f);
@@ -1824,8 +1824,8 @@ pub fn byteReverseHalfwords(value: u32) u32 {
 }
 
 fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) RunError!u16 {
-    var value = if (hooks.readDirect16(address)) |direct| direct else blk: {
-        const read16 = hooks.read16 orelse return error.MissingRead;
+    var value = if (hooks.memory.readDirect16(address)) |direct| direct else blk: {
+        const read16 = hooks.memory.read16 orelse return error.MissingRead;
         break :blk read16(address);
     };
     if (state.bigEndian()) {
@@ -1835,8 +1835,8 @@ fn readMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHooks
 }
 
 fn readMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHooks, address: u32) RunError!u32 {
-    var value = if (hooks.readDirect32(address)) |direct| direct else blk: {
-        const read32 = hooks.read32 orelse return error.MissingRead;
+    var value = if (hooks.memory.readDirect32(address)) |direct| direct else blk: {
+        const read32 = hooks.memory.read32 orelse return error.MissingRead;
         break :blk read32(address);
     };
     if (state.bigEndian()) {
@@ -1850,10 +1850,10 @@ fn writeMemory16(state: *const arm_state.MachineState, hooks: arm_state.HostHook
     if (state.bigEndian()) {
         data = @intCast(u16, byteReverseHalf(data));
     }
-    if (hooks.writeDirect16(address, data)) {
+    if (hooks.memory.writeDirect16(address, data)) {
         return;
     }
-    const write16 = hooks.write16 orelse return error.MissingWrite;
+    const write16 = hooks.memory.write16 orelse return error.MissingWrite;
     write16(address, data);
 }
 
@@ -1862,10 +1862,10 @@ fn writeMemory32(state: *const arm_state.MachineState, hooks: arm_state.HostHook
     if (state.bigEndian()) {
         data = byteReverseWord(data);
     }
-    if (hooks.writeDirect32(address, data)) {
+    if (hooks.memory.writeDirect32(address, data)) {
         return;
     }
-    const write32 = hooks.write32 orelse return error.MissingWrite;
+    const write32 = hooks.memory.write32 orelse return error.MissingWrite;
     write32(address, data);
 }
 

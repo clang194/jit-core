@@ -199,7 +199,7 @@ pub const CoprocessorHooks = struct {
     }
 };
 
-pub const HostHooks = struct {
+pub const MemoryHooks = struct {
     pub const page_bits = 12;
     pub const page_size = @as(usize, 1) << page_bits;
     pub const page_count = @as(usize, 1) << (32 - page_bits);
@@ -215,15 +215,10 @@ pub const HostHooks = struct {
     write32: ?fn (u32, u32) void,
     write64: ?fn (u32, u64) void,
     readOnly: ?fn (u32) bool,
-    fallback: ?fn (u32, *MachineState, ?*c_void) void,
-    context: ?*c_void,
-    trap: ?fn (u32) bool,
-    supervisor: ?fn (u32, *MachineState) void,
-    coprocessors: [16]?CoprocessorHooks,
     direct_pages: ?*PageMap,
 
-    pub fn empty() HostHooks {
-        return HostHooks{
+    pub fn empty() MemoryHooks {
+        return MemoryHooks{
             .read8 = null,
             .read16 = null,
             .read32 = null,
@@ -234,16 +229,11 @@ pub const HostHooks = struct {
             .write32 = null,
             .write64 = null,
             .readOnly = null,
-            .fallback = null,
-            .context = null,
-            .trap = null,
-            .supervisor = null,
-            .coprocessors = [_]?CoprocessorHooks{null} ** 16,
             .direct_pages = null,
         };
     }
 
-    fn directPage(self: HostHooks, address: u32, comptime width: usize) ?DirectPage {
+    fn directPage(self: MemoryHooks, address: u32, comptime width: usize) ?DirectPage {
         const offset = @intCast(usize, address & (page_size - 1));
         if (offset + width > page_size) {
             return null;
@@ -253,18 +243,18 @@ pub const HostHooks = struct {
         return DirectPage{ .bytes = page, .offset = offset };
     }
 
-    pub fn readDirect8(self: HostHooks, address: u32) ?u8 {
+    pub fn readDirect8(self: MemoryHooks, address: u32) ?u8 {
         const page = self.directPage(address, 1) orelse return null;
         return page.bytes[page.offset];
     }
 
-    pub fn readDirect16(self: HostHooks, address: u32) ?u16 {
+    pub fn readDirect16(self: MemoryHooks, address: u32) ?u16 {
         const page = self.directPage(address, 2) orelse return null;
         return @as(u16, page.bytes[page.offset]) |
             (@as(u16, page.bytes[page.offset + 1]) << 8);
     }
 
-    pub fn readDirect32(self: HostHooks, address: u32) ?u32 {
+    pub fn readDirect32(self: MemoryHooks, address: u32) ?u32 {
         const page = self.directPage(address, 4) orelse return null;
         return @as(u32, page.bytes[page.offset]) |
             (@as(u32, page.bytes[page.offset + 1]) << 8) |
@@ -272,7 +262,7 @@ pub const HostHooks = struct {
             (@as(u32, page.bytes[page.offset + 3]) << 24);
     }
 
-    pub fn readDirect64(self: HostHooks, address: u32) ?u64 {
+    pub fn readDirect64(self: MemoryHooks, address: u32) ?u64 {
         const page = self.directPage(address, 8) orelse return null;
         const low = @as(u32, page.bytes[page.offset]) |
             (@as(u32, page.bytes[page.offset + 1]) << 8) |
@@ -285,20 +275,20 @@ pub const HostHooks = struct {
         return @as(u64, low) | (@as(u64, high) << 32);
     }
 
-    pub fn writeDirect8(self: HostHooks, address: u32, value: u8) bool {
+    pub fn writeDirect8(self: MemoryHooks, address: u32, value: u8) bool {
         const page = self.directPage(address, 1) orelse return false;
         page.bytes[page.offset] = value;
         return true;
     }
 
-    pub fn writeDirect16(self: HostHooks, address: u32, value: u16) bool {
+    pub fn writeDirect16(self: MemoryHooks, address: u32, value: u16) bool {
         const page = self.directPage(address, 2) orelse return false;
         page.bytes[page.offset] = @intCast(u8, value & 0xff);
         page.bytes[page.offset + 1] = @intCast(u8, value >> 8);
         return true;
     }
 
-    pub fn writeDirect32(self: HostHooks, address: u32, value: u32) bool {
+    pub fn writeDirect32(self: MemoryHooks, address: u32, value: u32) bool {
         const page = self.directPage(address, 4) orelse return false;
         page.bytes[page.offset] = @intCast(u8, value & 0xff);
         page.bytes[page.offset + 1] = @intCast(u8, (value >> 8) & 0xff);
@@ -307,7 +297,7 @@ pub const HostHooks = struct {
         return true;
     }
 
-    pub fn writeDirect64(self: HostHooks, address: u32, value: u64) bool {
+    pub fn writeDirect64(self: MemoryHooks, address: u32, value: u64) bool {
         const page = self.directPage(address, 8) orelse return false;
         page.bytes[page.offset] = @intCast(u8, value & 0xff);
         page.bytes[page.offset + 1] = @intCast(u8, (value >> 8) & 0xff);
@@ -318,6 +308,26 @@ pub const HostHooks = struct {
         page.bytes[page.offset + 6] = @intCast(u8, (value >> 48) & 0xff);
         page.bytes[page.offset + 7] = @intCast(u8, value >> 56);
         return true;
+    }
+};
+
+pub const HostHooks = struct {
+    memory: MemoryHooks,
+    fallback: ?fn (u32, *MachineState, ?*c_void) void,
+    context: ?*c_void,
+    trap: ?fn (u32) bool,
+    supervisor: ?fn (u32, *MachineState) void,
+    coprocessors: [16]?CoprocessorHooks,
+
+    pub fn empty() HostHooks {
+        return HostHooks{
+            .memory = MemoryHooks.empty(),
+            .fallback = null,
+            .context = null,
+            .trap = null,
+            .supervisor = null,
+            .coprocessors = [_]?CoprocessorHooks{null} ** 16,
+        };
     }
 };
 
