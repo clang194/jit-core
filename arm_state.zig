@@ -459,7 +459,14 @@ pub const MachineState = struct {
     }
 
     pub fn floatVectorStride(self: *const MachineState) u32 {
-        return ((self.fpscr >> 20) & 0x3) + 1;
+        const stride = (self.fpscr >> 20) & 0x3;
+        if (stride == 0) {
+            return 1;
+        }
+        if (stride == 3) {
+            return 2;
+        }
+        return 0;
     }
 
     pub fn setThumb(self: *MachineState, enabled: bool) void {
