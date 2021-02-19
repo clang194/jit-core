@@ -24,6 +24,27 @@ const SaturatingWordResult = struct {
     overflow: bool,
 };
 
+const FloatVectorPlan = struct {
+    count: u32,
+    stride: u32,
+    source_scalar: bool,
+};
+
+const FloatBinaryOp = enum {
+    add,
+    sub,
+    mul,
+    neg_mul,
+    div,
+};
+
+const FloatUnaryOp = enum {
+    move,
+    abs,
+    neg,
+    sqrt,
+};
+
 const CoprocessorOp = enum {
     command,
     load,
@@ -1393,11 +1414,7 @@ fn isVfpCondition(word: u32) bool {
     return (word >> 28) != 0xf;
 }
 
-fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
+fn runFloatBinary(word: u32, state: *arm_state.MachineState, pc: u32, op: FloatBinaryOp) ArmStepError!void {
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
         state.write(.pc, pc + 4);
@@ -1405,23 +1422,111 @@ fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostH
     }
 
     if (bits.getBit32(word, 8)) {
-        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        const result = addFloat64(state, left, right);
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
+        var dest = @as(u32, @enumToInt(floatPairIndex(word >> 12, bits.getBit32(word, 22))));
+        var left_index = @as(u32, @enumToInt(floatPairIndex(word >> 16, bits.getBit32(word, 7))));
+        var right_index = @as(u32, @enumToInt(floatPairIndex(word, bits.getBit32(word, 5))));
+        const plan = try floatVectorPlan(state, true, dest, right_index);
+        var index: u32 = 0;
+        while (index < plan.count) : (index += 1) {
+            const left = readFloatPairAt(state, left_index);
+            const right = readFloatPairAt(state, right_index);
+            const result = switch (op) {
+                .add => addFloat64(state, left, right),
+                .sub => subFloat64(state, left, right),
+                .mul => mulFloat64(state, left, right),
+                .neg_mul => negFloat64(mulFloat64(state, left, right)),
+                .div => divFloat64(state, left, right),
+            };
+            writeFloatPairAt(state, dest, result);
+            dest = advanceFloatIndex(dest, plan.stride, 4);
+            left_index = advanceFloatIndex(left_index, plan.stride, 4);
+            if (!plan.source_scalar) {
+                right_index = advanceFloatIndex(right_index, plan.stride, 4);
+            }
+        }
     } else {
-        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        const result = addFloat32(state, left, right);
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
+        var dest = @as(u32, @enumToInt(floatWordIndex(word >> 12, bits.getBit32(word, 22))));
+        var left_index = @as(u32, @enumToInt(floatWordIndex(word >> 16, bits.getBit32(word, 7))));
+        var right_index = @as(u32, @enumToInt(floatWordIndex(word, bits.getBit32(word, 5))));
+        const plan = try floatVectorPlan(state, false, dest, right_index);
+        var index: u32 = 0;
+        while (index < plan.count) : (index += 1) {
+            const left = readFloatWordAt(state, left_index);
+            const right = readFloatWordAt(state, right_index);
+            const result = switch (op) {
+                .add => addFloat32(state, left, right),
+                .sub => subFloat32(state, left, right),
+                .mul => mulFloat32(state, left, right),
+                .neg_mul => negFloat32(mulFloat32(state, left, right)),
+                .div => divFloat32(state, left, right),
+            };
+            writeFloatWordAt(state, dest, result);
+            dest = advanceFloatIndex(dest, plan.stride, 8);
+            left_index = advanceFloatIndex(left_index, plan.stride, 8);
+            if (!plan.source_scalar) {
+                right_index = advanceFloatIndex(right_index, plan.stride, 8);
+            }
+        }
     }
     state.write(.pc, pc + 4);
 }
 
-fn runFloatMulAcc(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32, negate_acc: bool, negate_product: bool) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
+fn runFloatUnary(word: u32, state: *arm_state.MachineState, pc: u32, op: FloatUnaryOp) ArmStepError!void {
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
     }
+
+    if (bits.getBit32(word, 8)) {
+        var dest = @as(u32, @enumToInt(floatPairIndex(word >> 12, bits.getBit32(word, 22))));
+        var source_index = @as(u32, @enumToInt(floatPairIndex(word, bits.getBit32(word, 5))));
+        const plan = try floatVectorPlan(state, true, dest, source_index);
+        var index: u32 = 0;
+        while (index < plan.count) : (index += 1) {
+            const value = readFloatPairAt(state, source_index);
+            const result = switch (op) {
+                .move => value,
+                .abs => value & 0x7fffffffffffffff,
+                .neg => negFloat64(value),
+                .sqrt => sqrtFloat64(state, value),
+            };
+            writeFloatPairAt(state, dest, result);
+            dest = advanceFloatIndex(dest, plan.stride, 4);
+            if (!plan.source_scalar) {
+                source_index = advanceFloatIndex(source_index, plan.stride, 4);
+            }
+        }
+    } else {
+        var dest = @as(u32, @enumToInt(floatWordIndex(word >> 12, bits.getBit32(word, 22))));
+        var source_index = @as(u32, @enumToInt(floatWordIndex(word, bits.getBit32(word, 5))));
+        const plan = try floatVectorPlan(state, false, dest, source_index);
+        var index: u32 = 0;
+        while (index < plan.count) : (index += 1) {
+            const value = readFloatWordAt(state, source_index);
+            const result = switch (op) {
+                .move => value,
+                .abs => value & 0x7fffffff,
+                .neg => negFloat32(value),
+                .sqrt => sqrtFloat32(state, value),
+            };
+            writeFloatWordAt(state, dest, result);
+            dest = advanceFloatIndex(dest, plan.stride, 8);
+            if (!plan.source_scalar) {
+                source_index = advanceFloatIndex(source_index, plan.stride, 8);
+            }
+        }
+    }
+    state.write(.pc, pc + 4);
+}
+
+fn runFloatAdd(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    _ = hooks;
+    return runFloatBinary(word, state, pc, .add);
+}
+
+fn runFloatMulAcc(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32, negate_acc: bool, negate_product: bool) ArmStepError!void {
+    _ = hooks;
 
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {
@@ -1430,133 +1535,75 @@ fn runFloatMulAcc(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     }
 
     if (bits.getBit32(word, 8)) {
-        var acc = readFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)));
-        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        var product = mulFloat64(state, left, right);
-        if (negate_acc) {
-            acc = negFloat64(acc);
+        var dest = @as(u32, @enumToInt(floatPairIndex(word >> 12, bits.getBit32(word, 22))));
+        var left_index = @as(u32, @enumToInt(floatPairIndex(word >> 16, bits.getBit32(word, 7))));
+        var right_index = @as(u32, @enumToInt(floatPairIndex(word, bits.getBit32(word, 5))));
+        const plan = try floatVectorPlan(state, true, dest, right_index);
+        var index: u32 = 0;
+        while (index < plan.count) : (index += 1) {
+            var acc = readFloatPairAt(state, dest);
+            const left = readFloatPairAt(state, left_index);
+            const right = readFloatPairAt(state, right_index);
+            var product = mulFloat64(state, left, right);
+            if (negate_acc) {
+                acc = negFloat64(acc);
+            }
+            if (negate_product) {
+                product = negFloat64(product);
+            }
+            writeFloatPairAt(state, dest, addFloat64(state, acc, product));
+            dest = advanceFloatIndex(dest, plan.stride, 4);
+            left_index = advanceFloatIndex(left_index, plan.stride, 4);
+            if (!plan.source_scalar) {
+                right_index = advanceFloatIndex(right_index, plan.stride, 4);
+            }
         }
-        if (negate_product) {
-            product = negFloat64(product);
-        }
-        const result = addFloat64(state, acc, product);
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
     } else {
-        var acc = state.readFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)));
-        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        var product = mulFloat32(state, left, right);
-        if (negate_acc) {
-            acc = negFloat32(acc);
+        var dest = @as(u32, @enumToInt(floatWordIndex(word >> 12, bits.getBit32(word, 22))));
+        var left_index = @as(u32, @enumToInt(floatWordIndex(word >> 16, bits.getBit32(word, 7))));
+        var right_index = @as(u32, @enumToInt(floatWordIndex(word, bits.getBit32(word, 5))));
+        const plan = try floatVectorPlan(state, false, dest, right_index);
+        var index: u32 = 0;
+        while (index < plan.count) : (index += 1) {
+            var acc = readFloatWordAt(state, dest);
+            const left = readFloatWordAt(state, left_index);
+            const right = readFloatWordAt(state, right_index);
+            var product = mulFloat32(state, left, right);
+            if (negate_acc) {
+                acc = negFloat32(acc);
+            }
+            if (negate_product) {
+                product = negFloat32(product);
+            }
+            writeFloatWordAt(state, dest, addFloat32(state, acc, product));
+            dest = advanceFloatIndex(dest, plan.stride, 8);
+            left_index = advanceFloatIndex(left_index, plan.stride, 8);
+            if (!plan.source_scalar) {
+                right_index = advanceFloatIndex(right_index, plan.stride, 8);
+            }
         }
-        if (negate_product) {
-            product = negFloat32(product);
-        }
-        const result = addFloat32(state, acc, product);
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
     }
     state.write(.pc, pc + 4);
 }
 
 fn runFloatSub(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        const result = subFloat64(state, left, right);
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
-    } else {
-        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        const result = subFloat32(state, left, right);
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatBinary(word, state, pc, .sub);
 }
 
 fn runFloatMul(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        const result = mulFloat64(state, left, right);
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
-    } else {
-        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        const result = mulFloat32(state, left, right);
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatBinary(word, state, pc, .mul);
 }
 
 fn runFloatNegMul(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        const result = negFloat64(mulFloat64(state, left, right));
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
-    } else {
-        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        const result = negFloat32(mulFloat32(state, left, right));
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatBinary(word, state, pc, .neg_mul);
 }
 
 fn runFloatDiv(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const left = readFloatPair(state, floatPairIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        const result = divFloat64(state, left, right);
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), result);
-    } else {
-        const left = state.readFloatWord(floatWordIndex(word >> 16, bits.getBit32(word, 7)));
-        const right = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        const result = divFloat32(state, left, right);
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), result);
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatBinary(word, state, pc, .div);
 }
 
 fn runFloatMoveCoreToPairLow(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
@@ -1678,24 +1725,8 @@ fn runFloatMovePairToTwoCore(word: u32, state: *arm_state.MachineState, pc: u32)
 }
 
 fn runFloatMoveReg(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), value);
-    } else {
-        const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value);
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatUnary(word, state, pc, .move);
 }
 
 fn runFloatLoad(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
@@ -1938,66 +1969,18 @@ fn runFloatLoadMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_st
 }
 
 fn runFloatAbs(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), value & 0x7fffffffffffffff);
-    } else {
-        const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value & 0x7fffffff);
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatUnary(word, state, pc, .abs);
 }
 
 fn runFloatNeg(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), negFloat64(value));
-    } else {
-        const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), negFloat32(value));
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatUnary(word, state, pc, .neg);
 }
 
 fn runFloatSqrt(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (state.floatVectorLength() != 1 or state.floatVectorStride() != 1) {
-        return runExternalArmHandler(state, hooks, pc);
-    }
-
-    const code = armCondition(word).?;
-    if (!state.conditionHolds(code)) {
-        state.write(.pc, pc + 4);
-        return;
-    }
-
-    if (bits.getBit32(word, 8)) {
-        const value = readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-        writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), sqrtFloat64(state, value));
-    } else {
-        const value = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-        state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), sqrtFloat32(state, value));
-    }
-    state.write(.pc, pc + 4);
+    _ = hooks;
+    return runFloatUnary(word, state, pc, .sqrt);
 }
 
 fn runFloatConvertWidth(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
@@ -2654,6 +2637,56 @@ fn floatWordIndex(value: u32, high: bool) arm_state.FloatWordReg {
 fn floatPairIndex(value: u32, high: bool) arm_state.FloatPairReg {
     const index = @intCast(u5, (value & 0xf) | (@as(u32, @boolToInt(high)) << 4));
     return @intToEnum(arm_state.FloatPairReg, index);
+}
+
+fn floatVectorPlan(state: *const arm_state.MachineState, double: bool, dest: u32, source: u32) ArmStepError!FloatVectorPlan {
+    const length = state.floatVectorLength();
+    const stride = state.floatVectorStride();
+    if (stride == 0) {
+        return error.Unpredictable;
+    }
+
+    const bank_size = if (double) @as(u32, 4) else @as(u32, 8);
+    if (stride * length > bank_size or (length == 1 and stride != 1)) {
+        return error.Unpredictable;
+    }
+
+    const dest_scalar = if (double) isScalarFloatPairIndex(dest) else isScalarFloatWordIndex(dest);
+    const source_scalar = if (double) isScalarFloatPairIndex(source) else isScalarFloatWordIndex(source);
+    return FloatVectorPlan{
+        .count = if (dest_scalar) @as(u32, 1) else length,
+        .stride = stride,
+        .source_scalar = source_scalar,
+    };
+}
+
+fn isScalarFloatWordIndex(index: u32) bool {
+    return index < 8;
+}
+
+fn isScalarFloatPairIndex(index: u32) bool {
+    return index < 4 or (index >= 16 and index < 20);
+}
+
+fn advanceFloatIndex(index: u32, stride: u32, bank_size: u32) u32 {
+    const bank_start = index - (index % bank_size);
+    return bank_start + (((index - bank_start) + stride) % bank_size);
+}
+
+fn readFloatWordAt(state: *const arm_state.MachineState, index: u32) u32 {
+    return state.readFloatWord(@intToEnum(arm_state.FloatWordReg, @intCast(u5, index)));
+}
+
+fn writeFloatWordAt(state: *arm_state.MachineState, index: u32, value: u32) void {
+    state.writeFloatWord(@intToEnum(arm_state.FloatWordReg, @intCast(u5, index)), value);
+}
+
+fn readFloatPairAt(state: *const arm_state.MachineState, index: u32) u64 {
+    return readFloatPair(state, @intToEnum(arm_state.FloatPairReg, @intCast(u5, index)));
+}
+
+fn writeFloatPairAt(state: *arm_state.MachineState, index: u32, value: u64) void {
+    writeFloatPair(state, @intToEnum(arm_state.FloatPairReg, @intCast(u5, index)), value);
 }
 
 fn floatStackBase(word: u32, double: bool) u32 {
