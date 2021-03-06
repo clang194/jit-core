@@ -219,8 +219,10 @@ const ShiftMode = enum(u2) {
 };
 
 const ExtendOp = enum(u4) {
+    signed_byte_pair_add,
     signed_byte_add,
     signed_half_add,
+    signed_byte_pair,
     signed_byte,
     signed_half,
     unsigned_byte_pair,
@@ -2896,6 +2898,9 @@ fn extendOp(word: u32) ?ExtendOp {
     if (armCondition(word) == null) {
         return null;
     }
+    if ((word & 0x0fff03f0) == 0x068f0070) {
+        return .signed_byte_pair;
+    }
     if ((word & 0x0fff03f0) == 0x06af0070) {
         return .signed_byte;
     }
@@ -2910,6 +2915,9 @@ fn extendOp(word: u32) ?ExtendOp {
     }
     if ((word & 0x0fff03f0) == 0x06ff0070) {
         return .unsigned_half;
+    }
+    if ((word & 0x0ff003f0) == 0x06800070) {
+        return .signed_byte_pair_add;
     }
     if ((word & 0x0ff003f0) == 0x06a00070) {
         return .signed_byte_add;
@@ -3102,8 +3110,10 @@ fn runExtend(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!vo
     const rotated = rotateRightWord(state.read(source), @intCast(u8, ((word >> 10) & 0x3) * 8));
     const base = readArmOperand(state, base_reg, pc);
     const result = switch (op) {
+        .signed_byte_pair_add => addHalfPairs(base, signExtendBytePairs(rotated)),
         .signed_byte_add => base +% signExtendByte(rotated),
         .signed_half_add => base +% signExtendHalf(rotated),
+        .signed_byte_pair => signExtendBytePairs(rotated),
         .signed_byte => signExtendByte(rotated),
         .signed_half => signExtendHalf(rotated),
         .unsigned_byte_pair => rotated & 0x00ff00ff,
@@ -5305,6 +5315,12 @@ fn signExtendByte(value: u32) u32 {
         return narrowed | 0xffffff00;
     }
     return narrowed;
+}
+
+fn signExtendBytePairs(value: u32) u32 {
+    const low = signExtendByte(value) & 0xffff;
+    const high = signExtendByte(value >> 16) & 0xffff;
+    return low | (high << 16);
 }
 
 fn signedByte(value: u32) i16 {
