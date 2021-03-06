@@ -352,6 +352,11 @@ fn isScalarSaturatingMove(word: u32) bool {
         (word & 0x0fe00030) == 0x06e00010) and armCondition(word) != null;
 }
 
+fn isHalfSaturatingMove(word: u32) bool {
+    return ((word & 0x0ff00ff0) == 0x06a00f30 or
+        (word & 0x0ff00ff0) == 0x06e00f30) and armCondition(word) != null;
+}
+
 fn isUnsignedSaturatingSubBytes(word: u32) bool {
     return (word & 0x0ff00ff0) == 0x06600ff0 and armCondition(word) != null;
 }
@@ -832,6 +837,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isScalarSaturatingMove(word)) {
         return runScalarSaturatingMove(word, state, pc);
+    }
+
+    if (isHalfSaturatingMove(word)) {
+        return runHalfSaturatingMove(word, state, pc);
     }
 
     if (isUnsignedSaturatingSubBytes(word)) {
@@ -3271,6 +3280,39 @@ fn runScalarSaturatingMove(word: u32, state: *arm_state.MachineState, pc: u32) A
     state.write(.pc, pc + 4);
 }
 
+fn runHalfSaturatingMove(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+
+    const code = armCondition(word).?;
+    if (!state.conditionHolds(code)) {
+        state.write(.pc, pc + 4);
+        return;
+    }
+
+    const value = state.read(source);
+    const unsigned = bits.getBit32(word, 22);
+    const amount = @intCast(u8, (word >> 16) & 0xf) + if (unsigned) 0 else 1;
+    const low = signExtendHalf(value);
+    const high = signExtendHalf(value >> 16);
+    const low_result = if (unsigned)
+        unsignedSaturateWord(low, amount)
+    else
+        signedSaturateWord(low, amount);
+    const high_result = if (unsigned)
+        unsignedSaturateWord(high, amount)
+    else
+        signedSaturateWord(high, amount);
+    state.write(dest, (low_result.word & 0xffff) | ((high_result.word & 0xffff) << 16));
+    if (low_result.overflow or high_result.overflow) {
+        raiseQFlag(state);
+    }
+    state.write(.pc, pc + 4);
+}
+
 fn runUnsignedSaturatingSubBytes(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const left_reg = armReg(word >> 16);
     const dest = armReg(word >> 12);
@@ -4902,6 +4944,14 @@ fn signedSaturatingSubWord(left: u32, right: u32) SaturatingWordResult {
     }
     const word = if ((left & 0x80000000) != 0) @as(u32, 0x80000000) else @as(u32, 0x7fffffff);
     return SaturatingWordResult{ .word = word, .overflow = true };
+}
+
+fn signExtendHalf(value: u32) u32 {
+    const half = value & 0xffff;
+    if ((half & 0x8000) != 0) {
+        return half | 0xffff0000;
+    }
+    return half;
 }
 
 fn unsignedSaturateWord(value: u32, amount: u8) SaturatingWordResult {
