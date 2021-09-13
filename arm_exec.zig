@@ -2136,14 +2136,15 @@ fn runFloatCompare(word: u32, state: *arm_state.MachineState, hooks: arm_state.H
     if (state.conditionHolds(code)) {
         const double = bits.getBit32(word, 8);
         const zero = (word & 0x0fbf0e7f) == 0x0eb50a40;
+        const invalid_on_quiet = bits.getBit32(word, 7);
         if (double) {
             const left = readFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)));
             const right = if (zero) @as(u64, 0) else readFloatPair(state, floatPairIndex(word, bits.getBit32(word, 5)));
-            writeFloatCompare64(state, left, right);
+            writeFloatCompare64(state, left, right, invalid_on_quiet);
         } else {
             const left = state.readFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)));
             const right = if (zero) @as(u32, 0) else state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
-            writeFloatCompare32(state, left, right);
+            writeFloatCompare32(state, left, right, invalid_on_quiet);
         }
     }
     state.write(.pc, pc + 4);
@@ -2523,10 +2524,13 @@ fn subFloat64(state: *arm_state.MachineState, left: u64, right: u64) u64 {
     return result;
 }
 
-fn writeFloatCompare32(state: *arm_state.MachineState, left: u32, right: u32) void {
+fn writeFloatCompare32(state: *arm_state.MachineState, left: u32, right: u32, invalid_on_quiet: bool) void {
     const left_word = floatInput32(state, left);
     const right_word = floatInput32(state, right);
     if (isNan32(left_word) or isNan32(right_word)) {
+        if (invalid_on_quiet or isSignalingNan32(left_word) or isSignalingNan32(right_word)) {
+            state.fpscr |= 1;
+        }
         writeFloatNzcv(state, 0x30000000);
         return;
     }
@@ -2541,10 +2545,13 @@ fn writeFloatCompare32(state: *arm_state.MachineState, left: u32, right: u32) vo
     }
 }
 
-fn writeFloatCompare64(state: *arm_state.MachineState, left: u64, right: u64) void {
+fn writeFloatCompare64(state: *arm_state.MachineState, left: u64, right: u64, invalid_on_quiet: bool) void {
     const left_word = floatInput64(state, left);
     const right_word = floatInput64(state, right);
     if (isNan64(left_word) or isNan64(right_word)) {
+        if (invalid_on_quiet or isSignalingNan64(left_word) or isSignalingNan64(right_word)) {
+            state.fpscr |= 1;
+        }
         writeFloatNzcv(state, 0x30000000);
         return;
     }
@@ -2702,6 +2709,14 @@ fn isNan32(value: u32) bool {
 
 fn isNan64(value: u64) bool {
     return (value & 0x7fffffffffffffff) > 0x7ff0000000000000;
+}
+
+fn isSignalingNan32(value: u32) bool {
+    return isNan32(value) and (value & 0x00400000) == 0;
+}
+
+fn isSignalingNan64(value: u64) bool {
+    return isNan64(value) and (value & 0x0008000000000000) == 0;
 }
 
 fn floatWordIndex(value: u32, high: bool) arm_state.FloatWordReg {
