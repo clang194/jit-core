@@ -312,12 +312,25 @@ pub const MemoryHooks = struct {
 };
 
 pub const HostHooks = struct {
+    pub const CycleHooks = struct {
+        add: ?fn (usize, ?*c_void) void,
+        remaining: ?fn (?*c_void) usize,
+
+        pub fn empty() CycleHooks {
+            return CycleHooks{
+                .add = null,
+                .remaining = null,
+            };
+        }
+    };
+
     memory: MemoryHooks,
     fallback: ?fn (u32, *MachineState, ?*c_void) void,
     context: ?*c_void,
     trap: ?fn (u32) bool,
     supervisor: ?fn (u32, *MachineState) void,
     coprocessors: [16]?CoprocessorHooks,
+    cycles: CycleHooks,
 
     pub fn empty() HostHooks {
         return HostHooks{
@@ -327,6 +340,7 @@ pub const HostHooks = struct {
             .trap = null,
             .supervisor = null,
             .coprocessors = [_]?CoprocessorHooks{null} ** 16,
+            .cycles = CycleHooks.empty(),
         };
     }
 };

@@ -26,6 +26,19 @@ pub const Core = struct {
         };
     }
 
+    fn addCycles(self: *Core, count: usize) void {
+        if (self.hooks.cycles.add) |callback| {
+            callback(count, self.hooks.context);
+        }
+    }
+
+    fn hasCycles(self: *Core, budget: usize, used: usize) bool {
+        if (self.hooks.cycles.remaining) |callback| {
+            return callback(self.hooks.context) != 0;
+        }
+        return used < budget;
+    }
+
     pub fn runThumbWord(self: *Core, word: u16, budget: usize) CoreError!usize {
         if (self.active) {
             return error.Busy;
@@ -35,8 +48,10 @@ pub const Core = struct {
 
         self.halt = false;
         var used: usize = 0;
-        while (used < budget and !self.halt) : (used += 1) {
+        while (self.hasCycles(budget, used) and !self.halt) {
             try thumb_exec.runThumbWithHooks(word, &self.state, self.hooks);
+            used += 1;
+            self.addCycles(1);
         }
         return used;
     }
@@ -50,10 +65,11 @@ pub const Core = struct {
 
         self.halt = false;
         var used: usize = 0;
-        while (used < budget and !self.halt) {
+        while (self.hasCycles(budget, used) and !self.halt) {
             if (!self.state.thumb()) {
                 try arm_exec.runArmWithHooks(&self.state, self.hooks);
                 used += 1;
+                self.addCycles(1);
                 continue;
             }
 
@@ -62,6 +78,7 @@ pub const Core = struct {
                 error.UnknownInstruction => {
                     try self.interpretOne(pc);
                     used += 1;
+                    self.addCycles(1);
                     continue;
                 },
                 else => return err,
@@ -70,6 +87,7 @@ pub const Core = struct {
             if (fetched.size == 2 and thumb_exec.isStop(@intCast(u16, fetched.word & 0xffff))) {
                 try self.interpretOne(pc);
                 used += 1;
+                self.addCycles(1);
                 continue;
             }
 
@@ -77,6 +95,7 @@ pub const Core = struct {
                 if (thumb_exec.branchTarget(@intCast(u16, fetched.word & 0xffff), pc)) |target| {
                     self.state.write(.pc, target);
                     used += 1;
+                    self.addCycles(1);
                     continue;
                 }
             }
@@ -85,6 +104,7 @@ pub const Core = struct {
                 error.UnknownInstruction => {
                     try self.interpretOne(pc);
                     used += 1;
+                    self.addCycles(1);
                     continue;
                 },
                 else => return err,
@@ -93,6 +113,7 @@ pub const Core = struct {
                 self.state.write(.pc, pc + fetched.size);
             }
             used += 1;
+            self.addCycles(1);
         }
         return used;
     }
