@@ -11,6 +11,10 @@ pub const CoreError = error{
     MissingWrite,
 };
 
+pub const CoreImage = struct {
+    state: arm_state.MachineState,
+};
+
 pub const Core = struct {
     state: arm_state.MachineState,
     hooks: arm_state.HostHooks,
@@ -137,6 +141,19 @@ pub const Core = struct {
             return error.Busy;
         }
         self.state = arm_state.MachineState.zeroed();
+        self.halt = false;
+    }
+
+    pub fn saveImage(self: *const Core) CoreImage {
+        return CoreImage{ .state = self.state };
+    }
+
+    pub fn saveInto(self: *const Core, image: *CoreImage) void {
+        image.state = self.state;
+    }
+
+    pub fn loadImage(self: *Core, image: *const CoreImage) void {
+        self.state = image.state;
         self.halt = false;
     }
 
