@@ -2,6 +2,7 @@ pub const bits = @import("bits.zig");
 pub const arm_exec = @import("arm_exec.zig");
 pub const arm_state = @import("arm_state.zig");
 pub const arm_text = @import("arm_text.zig");
+pub const a64_state = @import("a64_state.zig");
 pub const trace = @import("trace.zig");
 pub const thumb_exec = @import("thumb_exec.zig");
 pub const core = @import("core.zig");

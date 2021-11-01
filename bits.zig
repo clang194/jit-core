@@ -54,3 +54,13 @@ pub fn signExtend32(value: u32, comptime width: u5) i32 {
     }
     return @bitCast(i32, narrowed);
 }
+
+pub fn signExtend64(value: u64, comptime width: u6) i64 {
+    const high = @as(u64, 1) << (width - 1);
+    const mask = (@as(u64, 1) << width) - 1;
+    var narrowed = value & mask;
+    if ((narrowed & high) != 0) {
+        narrowed |= ~mask;
+    }
+    return @bitCast(i64, narrowed);
+}
