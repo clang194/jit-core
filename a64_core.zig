@@ -2,6 +2,7 @@ const a64_state = @import("a64_state.zig");
 
 pub const Core64Error = error{
     Busy,
+    ReservedInstruction,
     MissingFallback,
 };
 
@@ -101,12 +102,56 @@ pub const Core64 = struct {
         self.halt = false;
         var used: usize = 0;
         while (self.hasCycles(budget, used) and !self.halt) {
-            const callback = self.hooks.fallback orelse return error.MissingFallback;
-            callback(self.state.pc, 1, &self.state, self.hooks.context);
+            try self.runOne();
             used += 1;
             self.addCycles(1);
         }
         return used;
+    }
+
+    fn runOne(self: *Core64) Core64Error!void {
+        if (self.hooks.memory.readCode) |read_code| {
+            const word = read_code(self.state.pc, self.hooks.context);
+            if (try self.runAddShifted(word)) {
+                return;
+            }
+        }
+        const callback = self.hooks.fallback orelse return error.MissingFallback;
+        callback(self.state.pc, 1, &self.state, self.hooks.context);
+    }
+
+    fn runAddShifted(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x7f200000) != 0x0b000000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const shift = @intCast(u2, (word >> 22) & 3);
+        const amount = @intCast(u6, (word >> 10) & 0x3f);
+        if (shift == 3 or (!wide and (amount & 0x20) != 0)) {
+            return error.ReservedInstruction;
+        }
+
+        const source = regFromWord(word >> 5);
+        const shifted = self.shiftedReg(wide, regFromWord(word >> 16), shift, amount);
+        const dest = regFromWord(word);
+
+        if (wide) {
+            self.state.write(dest, self.state.read(source) +% shifted);
+        } else {
+            const result = @intCast(u32, self.state.read(source)) +% @intCast(u32, shifted);
+            self.state.write(dest, @as(u64, result));
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn shiftedReg(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, shift: u2, amount: u6) u64 {
+        const value = self.state.read(reg);
+        if (wide) {
+            return shift64(value, shift, amount);
+        }
+        return @as(u64, shift32(@intCast(u32, value), shift, @intCast(u5, amount)));
     }
 
     pub fn clearTranslatedState(self: *Core64) void {
@@ -179,3 +224,25 @@ pub const Core64 = struct {
         self.state.writeFloatControl(value);
     }
 };
+
+fn regFromWord(value: u32) a64_state.GeneralReg {
+    return @intToEnum(a64_state.GeneralReg, @intCast(u5, value & 0x1f));
+}
+
+fn shift32(value: u32, shift: u2, amount: u5) u32 {
+    switch (shift) {
+        0 => return value << amount,
+        1 => return value >> amount,
+        2 => return @bitCast(u32, @bitCast(i32, value) >> amount),
+        else => return value,
+    }
+}
+
+fn shift64(value: u64, shift: u2, amount: u6) u64 {
+    switch (shift) {
+        0 => return value << amount,
+        1 => return value >> amount,
+        2 => return @bitCast(u64, @bitCast(i64, value) >> amount),
+        else => return value,
+    }
+}
