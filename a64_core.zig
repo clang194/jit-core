@@ -527,6 +527,14 @@ pub const Core64 = struct {
     pub fn writeFloatControl(self: *Core64, value: u32) void {
         self.state.writeFloatControl(value);
     }
+
+    pub fn status(self: *const Core64) u32 {
+        return self.state.readNzcv();
+    }
+
+    pub fn writeStatus(self: *Core64, value: u32) void {
+        self.state.writeNzcv(value);
+    }
 };
 
 const MathResult = struct {

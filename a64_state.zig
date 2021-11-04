@@ -258,6 +258,10 @@ pub const MachineState64 = struct {
         return bits.getBit32(self.nzcv, 28);
     }
 
+    pub fn readNzcv(self: *const MachineState64) u32 {
+        return self.nzcv & 0xf0000000;
+    }
+
     pub fn writeNzcv(self: *MachineState64, value: u32) void {
         self.nzcv = value & 0xf0000000;
     }
