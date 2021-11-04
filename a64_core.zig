@@ -116,6 +116,9 @@ pub const Core64 = struct {
             if (self.runPcRelative(word)) {
                 return;
             }
+            if (self.runBranch(word)) {
+                return;
+            }
             if (try self.runLogicalImmediate(word)) {
                 return;
             }
@@ -156,6 +159,29 @@ pub const Core64 = struct {
         self.writeSized(true, regFromWord(word), base +% immediate, false);
         self.state.pc +%= 4;
         return true;
+    }
+
+    fn runBranch(self: *Core64, word: u32) bool {
+        if ((word & 0xff000010) == 0x54000000) {
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 5) & 0x7ffff) << 2, 21));
+            if (self.conditionHolds(@intCast(u4, word & 0xf))) {
+                self.state.pc +%= offset;
+            } else {
+                self.state.pc +%= 4;
+            }
+            return true;
+        }
+
+        if ((word & 0x7c000000) == 0x14000000) {
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, word & 0x03ffffff) << 2, 28));
+            if ((word & 0x80000000) != 0) {
+                self.state.write(.x30, self.state.pc +% 4);
+            }
+            self.state.pc +%= offset;
+            return true;
+        }
+
+        return false;
     }
 
     fn runLogicalImmediate(self: *Core64, word: u32) Core64Error!bool {
@@ -388,6 +414,31 @@ pub const Core64 = struct {
             nzcv |= 0x40000000;
         }
         self.state.writeNzcv(nzcv);
+    }
+
+    fn conditionHolds(self: *const Core64, code: u4) bool {
+        const n = self.state.negative();
+        const z = self.state.zero();
+        const c = self.state.carry();
+        const v = self.state.overflow();
+        return switch (code) {
+            0x0 => z,
+            0x1 => !z,
+            0x2 => c,
+            0x3 => !c,
+            0x4 => n,
+            0x5 => !n,
+            0x6 => v,
+            0x7 => !v,
+            0x8 => c and !z,
+            0x9 => !c or z,
+            0xa => n == v,
+            0xb => n != v,
+            0xc => !z and n == v,
+            0xd => z or n != v,
+            0xe => true,
+            else => false,
+        };
     }
 
     pub fn clearTranslatedState(self: *Core64) void {
