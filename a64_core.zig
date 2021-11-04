@@ -1,4 +1,5 @@
 const a64_state = @import("a64_state.zig");
+const bits = @import("bits.zig");
 
 pub const Core64Error = error{
     Busy,
@@ -112,7 +113,16 @@ pub const Core64 = struct {
     fn runOne(self: *Core64) Core64Error!void {
         if (self.hooks.memory.readCode) |read_code| {
             const word = read_code(self.state.pc, self.hooks.context);
+            if (try self.runAddSubImmediate(word)) {
+                return;
+            }
             if (try self.runAddShifted(word)) {
+                return;
+            }
+            if (try self.runAddSubExtended(word)) {
+                return;
+            }
+            if (try self.runAddSubCarry(word)) {
                 return;
             }
         }
@@ -120,12 +130,46 @@ pub const Core64 = struct {
         callback(self.state.pc, 1, &self.state, self.hooks.context);
     }
 
-    fn runAddShifted(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0x7f200000) != 0x0b000000) {
+    fn runAddSubImmediate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1f000000) != 0x11000000) {
             return false;
         }
 
         const wide = (word & 0x80000000) != 0;
+        const subtract = (word & 0x40000000) != 0;
+        const flags = (word & 0x20000000) != 0;
+        const shift = @intCast(u2, (word >> 22) & 3);
+        if (shift > 1) {
+            return error.ReservedInstruction;
+        }
+
+        var immediate = @as(u64, (word >> 10) & 0xfff);
+        if (shift == 1) {
+            immediate <<= 12;
+        }
+
+        const source = regFromWord(word >> 5);
+        const dest = regFromWord(word);
+        const left = self.readSized(wide, source, true);
+        const result = if (subtract) mathSub(wide, left, immediate, true) else mathAdd(wide, left, immediate, false);
+        if (flags) {
+            self.writeNzcv(wide, result);
+            self.writeSized(wide, dest, result.word, false);
+        } else {
+            self.writeSized(wide, dest, result.word, true);
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runAddShifted(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1f200000) != 0x0b000000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const subtract = (word & 0x40000000) != 0;
+        const flags = (word & 0x20000000) != 0;
         const shift = @intCast(u2, (word >> 22) & 3);
         const amount = @intCast(u6, (word >> 10) & 0x3f);
         if (shift == 3 or (!wide and (amount & 0x20) != 0)) {
@@ -135,23 +179,126 @@ pub const Core64 = struct {
         const source = regFromWord(word >> 5);
         const shifted = self.shiftedReg(wide, regFromWord(word >> 16), shift, amount);
         const dest = regFromWord(word);
+        const left = self.readSized(wide, source, false);
+        const result = if (subtract) mathSub(wide, left, shifted, true) else mathAdd(wide, left, shifted, false);
 
-        if (wide) {
-            self.state.write(dest, self.state.read(source) +% shifted);
+        if (flags) {
+            self.writeNzcv(wide, result);
+            self.writeSized(wide, dest, result.word, false);
         } else {
-            const result = @intCast(u32, self.state.read(source)) +% @intCast(u32, shifted);
-            self.state.write(dest, @as(u64, result));
+            self.writeSized(wide, dest, result.word, false);
         }
         self.state.pc +%= 4;
         return true;
     }
 
     fn shiftedReg(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, shift: u2, amount: u6) u64 {
-        const value = self.state.read(reg);
+        const value = self.readSized(wide, reg, false);
         if (wide) {
             return shift64(value, shift, amount);
         }
         return @as(u64, shift32(@intCast(u32, value), shift, @intCast(u5, amount)));
+    }
+
+    fn runAddSubExtended(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1fe00000) != 0x0b200000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const subtract = (word & 0x40000000) != 0;
+        const flags = (word & 0x20000000) != 0;
+        const amount = @intCast(u3, (word >> 10) & 7);
+        if (amount > 4) {
+            return error.ReservedInstruction;
+        }
+
+        const source = regFromWord(word >> 5);
+        const extended = self.extendedReg(wide, regFromWord(word >> 16), @intCast(u3, (word >> 13) & 7), amount);
+        const dest = regFromWord(word);
+        const left = self.readSized(wide, source, true);
+        const result = if (subtract) mathSub(wide, left, extended, true) else mathAdd(wide, left, extended, false);
+
+        if (flags) {
+            self.writeNzcv(wide, result);
+        }
+        self.writeSized(wide, dest, result.word, !flags or dest == .sp);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runAddSubCarry(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1fe0fc00) != 0x1a000000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const subtract = (word & 0x40000000) != 0;
+        const flags = (word & 0x20000000) != 0;
+        const left = self.readSized(wide, regFromWord(word >> 5), false);
+        const right = self.readSized(wide, regFromWord(word >> 16), false);
+        const result = if (subtract) mathSub(wide, left, right, self.state.carry()) else mathAdd(wide, left, right, self.state.carry());
+        if (flags) {
+            self.writeNzcv(wide, result);
+        }
+        self.writeSized(wide, regFromWord(word), result.word, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn extendedReg(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, option: u3, amount: u3) u64 {
+        const value = self.readSized(wide, reg, false);
+        var extended: u64 = switch (option) {
+            0 => @as(u64, @intCast(u8, value & 0xff)),
+            1 => @as(u64, @intCast(u16, value & 0xffff)),
+            2 => @as(u64, @intCast(u32, value)),
+            3 => value,
+            4 => @bitCast(u64, @as(i64, bits.signExtend32(@intCast(u32, value & 0xff), 8))),
+            5 => @bitCast(u64, @as(i64, bits.signExtend32(@intCast(u32, value & 0xffff), 16))),
+            6 => @bitCast(u64, @as(i64, @bitCast(i32, @intCast(u32, value)))),
+            else => value,
+        };
+        if (!wide) {
+            extended = @as(u64, @intCast(u32, extended));
+        }
+        return extended << @intCast(u6, amount);
+    }
+
+    fn readSized(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, allow_sp: bool) u64 {
+        if (reg == .sp) {
+            if (allow_sp) {
+                return if (wide) self.state.sp else @as(u64, @intCast(u32, self.state.sp));
+            }
+            return 0;
+        }
+        return if (wide) self.state.read(reg) else @as(u64, @intCast(u32, self.state.read(reg)));
+    }
+
+    fn writeSized(self: *Core64, wide: bool, reg: a64_state.GeneralReg, value: u64, allow_sp: bool) void {
+        if (reg == .sp) {
+            if (allow_sp) {
+                self.state.sp = if (wide) value else @as(u64, @intCast(u32, value));
+            }
+            return;
+        }
+        self.state.write(reg, if (wide) value else @as(u64, @intCast(u32, value)));
+    }
+
+    fn writeNzcv(self: *Core64, wide: bool, result: MathResult) void {
+        var nzcv: u32 = 0;
+        if (if (wide) ((result.word & 0x8000000000000000) != 0) else ((result.word & 0x80000000) != 0)) {
+            nzcv |= 0x80000000;
+        }
+        if (if (wide) result.word == 0 else @intCast(u32, result.word) == 0) {
+            nzcv |= 0x40000000;
+        }
+        if (result.carry) {
+            nzcv |= 0x20000000;
+        }
+        if (result.overflow) {
+            nzcv |= 0x10000000;
+        }
+        self.state.writeNzcv(nzcv);
     }
 
     pub fn clearTranslatedState(self: *Core64) void {
@@ -224,6 +371,52 @@ pub const Core64 = struct {
         self.state.writeFloatControl(value);
     }
 };
+
+const MathResult = struct {
+    word: u64,
+    carry: bool,
+    overflow: bool,
+};
+
+fn mathAdd(wide: bool, left: u64, right: u64, carry_in: bool) MathResult {
+    if (wide) {
+        return mathAdd64(left, right, carry_in);
+    }
+    const result = mathAdd32(@intCast(u32, left), @intCast(u32, right), carry_in);
+    return MathResult{
+        .word = @as(u64, @intCast(u32, result.word)),
+        .carry = result.carry,
+        .overflow = result.overflow,
+    };
+}
+
+fn mathSub(wide: bool, left: u64, right: u64, carry_in: bool) MathResult {
+    return mathAdd(wide, left, ~right, carry_in);
+}
+
+fn mathAdd32(left: u32, right: u32, carry_in: bool) MathResult {
+    const carry: u64 = if (carry_in) 1 else 0;
+    const wide = @as(u64, left) + @as(u64, right) + carry;
+    const result = @intCast(u32, wide & 0xffffffff);
+    const overflow = ((~(left ^ right) & (left ^ result)) & 0x80000000) != 0;
+    return MathResult{
+        .word = @as(u64, result),
+        .carry = wide > 0xffffffff,
+        .overflow = overflow,
+    };
+}
+
+fn mathAdd64(left: u64, right: u64, carry_in: bool) MathResult {
+    const carry: u128 = if (carry_in) 1 else 0;
+    const wide = @as(u128, left) + @as(u128, right) + carry;
+    const result = @intCast(u64, wide & 0xffffffffffffffff);
+    const overflow = ((~(left ^ right) & (left ^ result)) & 0x8000000000000000) != 0;
+    return MathResult{
+        .word = result,
+        .carry = wide > 0xffffffffffffffff,
+        .overflow = overflow,
+    };
+}
 
 fn regFromWord(value: u32) a64_state.GeneralReg {
     return @intToEnum(a64_state.GeneralReg, @intCast(u5, value & 0x1f));

@@ -194,6 +194,7 @@ pub const MachineState64 = struct {
     pc: u64,
     vectors: [32]VectorValue,
     fpcr: u32,
+    nzcv: u32,
 
     pub fn zeroed() MachineState64 {
         return MachineState64{
@@ -202,6 +203,7 @@ pub const MachineState64 = struct {
             .pc = 0,
             .vectors = [_]VectorValue{VectorValue{ .low = 0, .high = 0 }} ** 32,
             .fpcr = 0,
+            .nzcv = 0,
         };
     }
 
@@ -238,6 +240,26 @@ pub const MachineState64 = struct {
 
     pub fn key(self: *const MachineState64) BlockKey {
         return BlockKey.init(self.pc, self.floatControl());
+    }
+
+    pub fn negative(self: *const MachineState64) bool {
+        return bits.getBit32(self.nzcv, 31);
+    }
+
+    pub fn zero(self: *const MachineState64) bool {
+        return bits.getBit32(self.nzcv, 30);
+    }
+
+    pub fn carry(self: *const MachineState64) bool {
+        return bits.getBit32(self.nzcv, 29);
+    }
+
+    pub fn overflow(self: *const MachineState64) bool {
+        return bits.getBit32(self.nzcv, 28);
+    }
+
+    pub fn writeNzcv(self: *MachineState64, value: u32) void {
+        self.nzcv = value & 0xf0000000;
     }
 };
 
