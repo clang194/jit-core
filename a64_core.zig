@@ -116,6 +116,12 @@ pub const Core64 = struct {
             if (self.runPcRelative(word)) {
                 return;
             }
+            if (try self.runLogicalImmediate(word)) {
+                return;
+            }
+            if (try self.runLogicalShifted(word)) {
+                return;
+            }
             if (try self.runAddSubImmediate(word)) {
                 return;
             }
@@ -148,6 +154,56 @@ pub const Core64 = struct {
             base &= ~@as(u64, 0xfff);
         }
         self.writeSized(true, regFromWord(word), base +% immediate, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runLogicalImmediate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1f800000) != 0x12000000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const opcode = @intCast(u2, (word >> 29) & 3);
+        const n = (word & 0x00400000) != 0;
+        if (!wide and n) {
+            return error.ReservedInstruction;
+        }
+        const immediate = decodeLogicalMask(n, @intCast(u6, (word >> 10) & 0x3f), @intCast(u6, (word >> 16) & 0x3f)) orelse return error.ReservedInstruction;
+        const dest = regFromWord(word);
+        const left = self.readSized(wide, regFromWord(word >> 5), false);
+        const result = logicalOp(wide, opcode, left, immediate, false);
+        if (opcode == 3) {
+            self.writeLogicalNzcv(wide, result);
+            self.writeSized(wide, dest, result, false);
+        } else {
+            self.writeSized(wide, dest, result, dest == .sp);
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runLogicalShifted(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1f000000) != 0x0a000000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const opcode = @intCast(u2, (word >> 29) & 3);
+        const invert = (word & 0x00200000) != 0;
+        const amount = @intCast(u6, (word >> 10) & 0x3f);
+        if (!wide and (amount & 0x20) != 0) {
+            return error.ReservedInstruction;
+        }
+
+        const left = self.readSized(wide, regFromWord(word >> 5), false);
+        const right = self.shiftedReg(wide, regFromWord(word >> 16), @intCast(u2, (word >> 22) & 3), amount);
+        const result = logicalOp(wide, opcode, left, right, invert);
+        const dest = regFromWord(word);
+        if (opcode == 3) {
+            self.writeLogicalNzcv(wide, result);
+        }
+        self.writeSized(wide, dest, result, false);
         self.state.pc +%= 4;
         return true;
     }
@@ -323,6 +379,17 @@ pub const Core64 = struct {
         self.state.writeNzcv(nzcv);
     }
 
+    fn writeLogicalNzcv(self: *Core64, wide: bool, result: u64) void {
+        var nzcv: u32 = 0;
+        if (if (wide) ((result & 0x8000000000000000) != 0) else ((result & 0x80000000) != 0)) {
+            nzcv |= 0x80000000;
+        }
+        if (if (wide) result == 0 else @intCast(u32, result) == 0) {
+            nzcv |= 0x40000000;
+        }
+        self.state.writeNzcv(nzcv);
+    }
+
     pub fn clearTranslatedState(self: *Core64) void {
         if (self.active) {
             self.halt = true;
@@ -440,6 +507,73 @@ fn mathAdd64(left: u64, right: u64, carry_in: bool) MathResult {
     };
 }
 
+fn logicalOp(wide: bool, opcode: u2, left: u64, right: u64, invert: bool) u64 {
+    const operand = if (invert) ~right else right;
+    const result = switch (opcode) {
+        0, 3 => left & operand,
+        1 => left | operand,
+        else => left ^ operand,
+    };
+    if (wide) {
+        return result;
+    }
+    return @as(u64, @intCast(u32, result));
+}
+
+fn decodeLogicalMask(n: bool, imms: u6, immr: u6) ?u64 {
+    const marker = (if (n) @as(u64, 1) << 6 else @as(u64, 0)) | @as(u64, imms ^ 0x3f);
+    const len = highestSetBit(marker);
+    if (len < 1) {
+        return null;
+    }
+
+    const levels = ones(@intCast(u6, len));
+    if ((@as(u64, imms) & levels) == levels) {
+        return null;
+    }
+
+    const s = @as(u64, imms) & levels;
+    const r = @as(u64, immr) & levels;
+    const size = @as(u6, 1) << @intCast(u3, len);
+    const element = ones(@intCast(u6, s + 1));
+    return rotateRight64(replicate64(element, size), @intCast(u6, r));
+}
+
+fn highestSetBit(value: u64) i8 {
+    var remaining = value;
+    var result: i8 = -1;
+    while (remaining != 0) {
+        remaining >>= 1;
+        result += 1;
+    }
+    return result;
+}
+
+fn ones(count: u6) u64 {
+    if (count == 64) {
+        return ~@as(u64, 0);
+    }
+    return (@as(u64, 1) << count) - 1;
+}
+
+fn replicate64(value: u64, element_size: u6) u64 {
+    var result = value & ones(element_size);
+    var size = element_size;
+    while (size < 64) {
+        result |= result << size;
+        size *= 2;
+    }
+    return result;
+}
+
+fn rotateRight64(value: u64, amount: u6) u64 {
+    const shift = amount & 63;
+    if (shift == 0) {
+        return value;
+    }
+    return (value >> shift) | (value << @intCast(u6, 64 - shift));
+}
+
 fn regFromWord(value: u32) a64_state.GeneralReg {
     return @intToEnum(a64_state.GeneralReg, @intCast(u5, value & 0x1f));
 }
@@ -449,7 +583,7 @@ fn shift32(value: u32, shift: u2, amount: u5) u32 {
         0 => return value << amount,
         1 => return value >> amount,
         2 => return @bitCast(u32, @bitCast(i32, value) >> amount),
-        else => return value,
+        else => return rotateRight32(value, amount),
     }
 }
 
@@ -458,6 +592,14 @@ fn shift64(value: u64, shift: u2, amount: u6) u64 {
         0 => return value << amount,
         1 => return value >> amount,
         2 => return @bitCast(u64, @bitCast(i64, value) >> amount),
-        else => return value,
+        else => return rotateRight64(value, amount),
     }
+}
+
+fn rotateRight32(value: u32, amount: u5) u32 {
+    const shift = amount & 31;
+    if (shift == 0) {
+        return value;
+    }
+    return (value >> shift) | (value << @intCast(u5, 32 - shift));
 }
