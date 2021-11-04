@@ -181,6 +181,23 @@ pub const Core64 = struct {
             return true;
         }
 
+        if ((word & 0xfffffc1f) == 0xd61f0000) {
+            self.state.pc = self.state.read(regFromWord(word >> 5));
+            return true;
+        }
+
+        if ((word & 0xfffffc1f) == 0xd63f0000) {
+            const target = self.state.read(regFromWord(word >> 5));
+            self.state.write(.x30, self.state.pc +% 4);
+            self.state.pc = target;
+            return true;
+        }
+
+        if ((word & 0xfffffc1f) == 0xd65f0000) {
+            self.state.pc = self.state.read(regFromWord(word >> 5));
+            return true;
+        }
+
         return false;
     }
 
