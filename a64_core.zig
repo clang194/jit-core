@@ -113,6 +113,9 @@ pub const Core64 = struct {
     fn runOne(self: *Core64) Core64Error!void {
         if (self.hooks.memory.readCode) |read_code| {
             const word = read_code(self.state.pc, self.hooks.context);
+            if (self.runPcRelative(word)) {
+                return;
+            }
             if (try self.runAddSubImmediate(word)) {
                 return;
             }
@@ -128,6 +131,25 @@ pub const Core64 = struct {
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
+    }
+
+    fn runPcRelative(self: *Core64, word: u32) bool {
+        if ((word & 0x1f000000) != 0x10000000) {
+            return false;
+        }
+
+        const page = (word & 0x80000000) != 0;
+        const immlo = (word >> 29) & 3;
+        const immhi = (word >> 5) & 0x7ffff;
+        var immediate = (@as(u64, immhi) << 2) | @as(u64, immlo);
+        var base = self.state.pc;
+        if (page) {
+            immediate <<= 12;
+            base &= ~@as(u64, 0xfff);
+        }
+        self.writeSized(true, regFromWord(word), base +% immediate, false);
+        self.state.pc +%= 4;
+        return true;
     }
 
     fn runAddSubImmediate(self: *Core64, word: u32) Core64Error!bool {
