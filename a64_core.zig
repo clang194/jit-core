@@ -119,6 +119,9 @@ pub const Core64 = struct {
             if (self.runBranch(word)) {
                 return;
             }
+            if (self.runCompareBranch(word)) {
+                return;
+            }
             if (try self.runLogicalImmediate(word)) {
                 return;
             }
@@ -195,6 +198,38 @@ pub const Core64 = struct {
 
         if ((word & 0xfffffc1f) == 0xd65f0000) {
             self.state.pc = self.state.read(regFromWord(word >> 5));
+            return true;
+        }
+
+        return false;
+    }
+
+    fn runCompareBranch(self: *Core64, word: u32) bool {
+        if ((word & 0x7e000000) == 0x34000000) {
+            const wide = (word & 0x80000000) != 0;
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 5) & 0x7ffff) << 2, 21));
+            const value = self.readSized(wide, regFromWord(word), false);
+            const want_nonzero = (word & 0x01000000) != 0;
+            if ((value != 0) == want_nonzero) {
+                self.state.pc +%= offset;
+            } else {
+                self.state.pc +%= 4;
+            }
+            return true;
+        }
+
+        if ((word & 0x7e000000) == 0x36000000) {
+            const bit_index = @intCast(u6, ((word >> 26) & 0x20) | ((word >> 19) & 0x1f));
+            const wide = bit_index >= 32;
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 5) & 0x3fff) << 2, 16));
+            const value = self.readSized(wide, regFromWord(word), false);
+            const bit_set = ((value >> bit_index) & 1) != 0;
+            const want_set = (word & 0x01000000) != 0;
+            if (bit_set == want_set) {
+                self.state.pc +%= offset;
+            } else {
+                self.state.pc +%= 4;
+            }
             return true;
         }
 
