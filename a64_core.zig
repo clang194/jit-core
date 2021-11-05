@@ -547,12 +547,36 @@ pub const Core64 = struct {
         self.state.write(reg, value);
     }
 
+    pub fn regs(self: *Core64) *[31]u64 {
+        return &self.state.regs;
+    }
+
+    pub fn regsView(self: *const Core64) *const [31]u64 {
+        return &self.state.regs;
+    }
+
+    pub fn writeRegs(self: *Core64, value: [31]u64) void {
+        self.state.regs = value;
+    }
+
     pub fn readVector(self: *const Core64, reg: a64_state.VectorReg) a64_state.VectorValue {
         return self.state.readVector(reg);
     }
 
     pub fn writeVector(self: *Core64, reg: a64_state.VectorReg, value: a64_state.VectorValue) void {
         self.state.writeVector(reg, value);
+    }
+
+    pub fn vectors(self: *Core64) *[32]a64_state.VectorValue {
+        return &self.state.vectors;
+    }
+
+    pub fn vectorsView(self: *const Core64) *const [32]a64_state.VectorValue {
+        return &self.state.vectors;
+    }
+
+    pub fn writeVectors(self: *Core64, value: [32]a64_state.VectorValue) void {
+        self.state.vectors = value;
     }
 
     pub fn floatControl(self: *const Core64) u32 {
