@@ -122,6 +122,9 @@ pub const Core64 = struct {
             if (self.runCompareBranch(word)) {
                 return;
             }
+            if (self.runSupervisorCall(word)) {
+                return;
+            }
             if (try self.runLogicalImmediate(word)) {
                 return;
             }
@@ -234,6 +237,16 @@ pub const Core64 = struct {
         }
 
         return false;
+    }
+
+    fn runSupervisorCall(self: *Core64, word: u32) bool {
+        if ((word & 0xffe0001f) != 0xd4000001) {
+            return false;
+        }
+        const callback = self.hooks.supervisor orelse return false;
+        self.state.pc +%= 4;
+        callback((word >> 5) & 0xffff, &self.state, self.hooks.context);
+        return true;
     }
 
     fn runLogicalImmediate(self: *Core64, word: u32) Core64Error!bool {
