@@ -4,6 +4,9 @@ const bits = @import("bits.zig");
 pub const Core64Error = error{
     Busy,
     ReservedInstruction,
+    Unpredictable,
+    MissingRead,
+    MissingWrite,
     MissingFallback,
 };
 
@@ -123,6 +126,9 @@ pub const Core64 = struct {
                 return;
             }
             if (self.runSupervisorCall(word)) {
+                return;
+            }
+            if (try self.runLoadStore(word)) {
                 return;
             }
             if (try self.runLogicalImmediate(word)) {
@@ -246,6 +252,98 @@ pub const Core64 = struct {
         const callback = self.hooks.supervisor orelse return false;
         self.state.pc +%= 4;
         callback((word >> 5) & 0xffff, &self.state, self.hooks.context);
+        return true;
+    }
+
+    fn runLoadStore(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x3f000000) == 0x18000000) {
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 5) & 0x7ffff) << 2, 21));
+            const address = self.state.pc +% offset;
+            const value = try self.readMemory(address, if ((word & 0x40000000) != 0) 8 else 4);
+            self.writeSized((word & 0x40000000) != 0, regFromWord(word), value, false);
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        if ((word & 0xff000000) == 0x98000000) {
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 5) & 0x7ffff) << 2, 21));
+            const address = self.state.pc +% offset;
+            const value = @bitCast(u64, bits.signExtend64(try self.readMemory(address, 4), 32));
+            self.writeSized(true, regFromWord(word), value, false);
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        if ((word & 0xff000000) == 0xd8000000) {
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        if ((word & 0x3f200c00) == 0x38000000) {
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 12) & 0x1ff), 9));
+            return try self.runLoadStoreRegister(word, offset, false, false);
+        }
+
+        if ((word & 0x3f200400) == 0x38000400) {
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 12) & 0x1ff), 9));
+            return try self.runLoadStoreRegister(word, offset, true, ((word >> 11) & 1) == 0);
+        }
+
+        if ((word & 0x3f000000) == 0x39000000) {
+            const size = @intCast(u2, word >> 30);
+            const offset = @as(u64, (word >> 10) & 0xfff) << @intCast(u6, size);
+            return try self.runLoadStoreRegister(word, offset, false, false);
+        }
+
+        return false;
+    }
+
+    fn runLoadStoreRegister(self: *Core64, word: u32, offset: u64, writeback: bool, postindex: bool) Core64Error!bool {
+        const size = @intCast(u2, word >> 30);
+        const opcode = @intCast(u2, (word >> 22) & 3);
+        const base_reg = regFromWord(word >> 5);
+        const data_reg = regFromWord(word);
+        const bytes = @as(usize, 1) << size;
+
+        if ((opcode & 2) != 0 and size == 3) {
+            if ((opcode & 1) != 0) {
+                return error.ReservedInstruction;
+            }
+            self.state.pc +%= 4;
+            return true;
+        }
+        if ((opcode & 2) != 0 and size == 2 and (opcode & 1) != 0) {
+            return error.ReservedInstruction;
+        }
+        if (writeback and base_reg == data_reg and base_reg != .sp) {
+            return error.Unpredictable;
+        }
+
+        var address = self.readSized(true, base_reg, true);
+        if (!postindex) {
+            address +%= offset;
+        }
+
+        if ((opcode & 2) == 0) {
+            if ((opcode & 1) == 0) {
+                try self.writeMemory(address, bytes, self.readSized(size == 3, data_reg, false));
+            } else {
+                const value = try self.readMemory(address, bytes);
+                self.writeSized(size == 3, data_reg, value, false);
+            }
+        } else {
+            const value = try self.readMemory(address, bytes);
+            const extended = @bitCast(u64, bits.signExtend64(value, @intCast(u6, bytes * 8)));
+            self.writeSized((opcode & 1) == 0, data_reg, extended, false);
+        }
+
+        if (writeback) {
+            if (postindex) {
+                address +%= offset;
+            }
+            self.writeSized(true, base_reg, address, true);
+        }
+        self.state.pc +%= 4;
         return true;
     }
 
@@ -479,6 +577,50 @@ pub const Core64 = struct {
             nzcv |= 0x40000000;
         }
         self.state.writeNzcv(nzcv);
+    }
+
+    fn readMemory(self: *Core64, address: u64, bytes: usize) Core64Error!u64 {
+        switch (bytes) {
+            1 => {
+                const callback = self.hooks.memory.read8 orelse return error.MissingRead;
+                return @as(u64, callback(address, self.hooks.context));
+            },
+            2 => {
+                const callback = self.hooks.memory.read16 orelse return error.MissingRead;
+                return @as(u64, callback(address, self.hooks.context));
+            },
+            4 => {
+                const callback = self.hooks.memory.read32 orelse return error.MissingRead;
+                return @as(u64, callback(address, self.hooks.context));
+            },
+            8 => {
+                const callback = self.hooks.memory.read64 orelse return error.MissingRead;
+                return callback(address, self.hooks.context);
+            },
+            else => return error.ReservedInstruction,
+        }
+    }
+
+    fn writeMemory(self: *Core64, address: u64, bytes: usize, value: u64) Core64Error!void {
+        switch (bytes) {
+            1 => {
+                const callback = self.hooks.memory.write8 orelse return error.MissingWrite;
+                callback(address, @intCast(u8, value & 0xff), self.hooks.context);
+            },
+            2 => {
+                const callback = self.hooks.memory.write16 orelse return error.MissingWrite;
+                callback(address, @intCast(u16, value & 0xffff), self.hooks.context);
+            },
+            4 => {
+                const callback = self.hooks.memory.write32 orelse return error.MissingWrite;
+                callback(address, @intCast(u32, value & 0xffffffff), self.hooks.context);
+            },
+            8 => {
+                const callback = self.hooks.memory.write64 orelse return error.MissingWrite;
+                callback(address, value, self.hooks.context);
+            },
+            else => return error.ReservedInstruction,
+        }
     }
 
     fn conditionHolds(self: *const Core64, code: u4) bool {
