@@ -131,6 +131,9 @@ pub const Core64 = struct {
             if (try self.runLoadStore(word)) {
                 return;
             }
+            if (try self.runPairLoadStore(word)) {
+                return;
+            }
             if (try self.runLogicalImmediate(word)) {
                 return;
             }
@@ -335,6 +338,67 @@ pub const Core64 = struct {
             const value = try self.readMemory(address, bytes);
             const extended = @bitCast(u64, bits.signExtend64(value, @intCast(u6, bytes * 8)));
             self.writeSized((opcode & 1) == 0, data_reg, extended, false);
+        }
+
+        if (writeback) {
+            if (postindex) {
+                address +%= offset;
+            }
+            self.writeSized(true, base_reg, address, true);
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runPairLoadStore(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x3e000000) != 0x28000000) {
+            return false;
+        }
+
+        const opcode = @intCast(u2, word >> 30);
+        const not_postindex = ((word >> 24) & 1) != 0;
+        const writeback = ((word >> 23) & 1) != 0;
+        const load = ((word >> 22) & 1) != 0;
+        if (!not_postindex and !writeback) {
+            return error.ReservedInstruction;
+        }
+        if ((!load and (opcode & 1) != 0) or opcode == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const signed_load = (opcode & 1) != 0;
+        const bytes = if ((opcode & 2) != 0) @as(usize, 8) else @as(usize, 4);
+        const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 15) & 0x7f), 7)) << @intCast(u6, if (bytes == 8) 3 else 2);
+        const first = regFromWord(word);
+        const base_reg = regFromWord(word >> 5);
+        const second = regFromWord(word >> 10);
+
+        if (load and first == second) {
+            return error.Unpredictable;
+        }
+        if (writeback and base_reg != .sp and (base_reg == first or base_reg == second)) {
+            return error.Unpredictable;
+        }
+
+        var address = self.readSized(true, base_reg, true);
+        const postindex = !not_postindex;
+        if (!postindex) {
+            address +%= offset;
+        }
+
+        if (load) {
+            const low = try self.readMemory(address, bytes);
+            const high = try self.readMemory(address +% @intCast(u64, bytes), bytes);
+            if (signed_load) {
+                self.writeSized(true, first, @bitCast(u64, bits.signExtend64(low, 32)), false);
+                self.writeSized(true, second, @bitCast(u64, bits.signExtend64(high, 32)), false);
+            } else {
+                self.writeSized(bytes == 8, first, low, false);
+                self.writeSized(bytes == 8, second, high, false);
+            }
+        } else {
+            try self.writeMemory(address, bytes, self.readSized(bytes == 8, first, false));
+            try self.writeMemory(address +% @intCast(u64, bytes), bytes, self.readSized(bytes == 8, second, false));
         }
 
         if (writeback) {
