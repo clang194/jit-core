@@ -217,10 +217,12 @@ pub const Core64 = struct {
         const page = (word & 0x80000000) != 0;
         const immlo = (word >> 29) & 3;
         const immhi = (word >> 5) & 0x7ffff;
-        var immediate = (@as(u64, immhi) << 2) | @as(u64, immlo);
+        const raw = (@as(u64, immhi) << 2) | @as(u64, immlo);
+        const signed = bits.signExtend64(raw, 21);
+        var immediate = @bitCast(u64, signed);
         var base = self.state.pc;
         if (page) {
-            immediate <<= 12;
+            immediate = @bitCast(u64, signed << 12);
             base &= ~@as(u64, 0xfff);
         }
         self.writeSized(true, regFromWord(word), base +% immediate, false);
