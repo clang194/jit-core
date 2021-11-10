@@ -3,11 +3,18 @@ const bits = @import("bits.zig");
 
 pub const Core64Error = error{
     Busy,
+    UnallocatedEncoding,
     ReservedInstruction,
     Unpredictable,
     MissingRead,
     MissingWrite,
     MissingFallback,
+};
+
+pub const FaultKind64 = enum {
+    unallocated_encoding,
+    reserved_value,
+    unpredictable_instruction,
 };
 
 pub const MemoryHooks64 = struct {
@@ -54,6 +61,7 @@ pub const HostHooks64 = struct {
     memory: MemoryHooks64,
     fallback: ?fn (u64, usize, *a64_state.MachineState64, ?*c_void) void,
     supervisor: ?fn (u32, *a64_state.MachineState64, ?*c_void) void,
+    exception: ?fn (u64, FaultKind64, ?*c_void) void,
     cycles: CycleHooks,
     context: ?*c_void,
 
@@ -62,6 +70,7 @@ pub const HostHooks64 = struct {
             .memory = MemoryHooks64.empty(),
             .fallback = null,
             .supervisor = null,
+            .exception = null,
             .cycles = CycleHooks.empty(),
             .context = null,
         };
@@ -128,33 +137,76 @@ pub const Core64 = struct {
             if (self.runSupervisorCall(word)) {
                 return;
             }
-            if (try self.runLoadStore(word)) {
+            const load_store = self.runLoadStore(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (load_store) {
                 return;
             }
-            if (try self.runPairLoadStore(word)) {
+            const pair_load_store = self.runPairLoadStore(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (pair_load_store) {
                 return;
             }
-            if (try self.runLogicalImmediate(word)) {
+            const logical_immediate = self.runLogicalImmediate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (logical_immediate) {
                 return;
             }
-            if (try self.runLogicalShifted(word)) {
+            const logical_shifted = self.runLogicalShifted(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (logical_shifted) {
                 return;
             }
-            if (try self.runAddSubImmediate(word)) {
+            const add_sub_immediate = self.runAddSubImmediate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (add_sub_immediate) {
                 return;
             }
-            if (try self.runAddShifted(word)) {
+            const add_shifted = self.runAddShifted(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (add_shifted) {
                 return;
             }
-            if (try self.runAddSubExtended(word)) {
+            const add_sub_extended = self.runAddSubExtended(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (add_sub_extended) {
                 return;
             }
-            if (try self.runAddSubCarry(word)) {
+            const add_sub_carry = self.runAddSubCarry(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (add_sub_carry) {
                 return;
             }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
+    }
+
+    fn raiseFault(self: *Core64, err: Core64Error) Core64Error!void {
+        const kind = switch (err) {
+            error.UnallocatedEncoding => FaultKind64.unallocated_encoding,
+            error.ReservedInstruction => FaultKind64.reserved_value,
+            error.Unpredictable => FaultKind64.unpredictable_instruction,
+            else => return err,
+        };
+        const callback = self.hooks.exception orelse return err;
+        callback(self.state.pc, kind, self.hooks.context);
     }
 
     fn runPcRelative(self: *Core64, word: u32) bool {
@@ -360,10 +412,10 @@ pub const Core64 = struct {
         const writeback = ((word >> 23) & 1) != 0;
         const load = ((word >> 22) & 1) != 0;
         if (!not_postindex and !writeback) {
-            return error.ReservedInstruction;
+            return error.UnallocatedEncoding;
         }
         if ((!load and (opcode & 1) != 0) or opcode == 3) {
-            return error.ReservedInstruction;
+            return error.UnallocatedEncoding;
         }
 
         const signed_load = (opcode & 1) != 0;
