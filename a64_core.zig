@@ -604,8 +604,10 @@ pub const Core64 = struct {
 
         if (flags) {
             self.writeNzcv(wide, result);
+            self.writeSized(wide, dest, result.word, false);
+        } else {
+            self.writeSized(wide, dest, result.word, true);
         }
-        self.writeSized(wide, dest, result.word, !flags or dest == .sp);
         self.state.pc +%= 4;
         return true;
     }
