@@ -193,6 +193,13 @@ pub const Core64 = struct {
             if (add_sub_carry) {
                 return;
             }
+            const wide_move = self.runWideMove(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (wide_move) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -629,6 +636,36 @@ pub const Core64 = struct {
             self.writeNzcv(wide, result);
         }
         self.writeSized(wide, regFromWord(word), result.word, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runWideMove(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1f800000) != 0x12800000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const opcode = @intCast(u2, (word >> 29) & 3);
+        if (opcode == 1) {
+            return error.UnallocatedEncoding;
+        }
+
+        const half = @intCast(u2, (word >> 21) & 3);
+        if (!wide and (half & 2) != 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const shift = @as(u6, half) * 16;
+        const dest = regFromWord(word);
+        const value = @as(u64, (word >> 5) & 0xffff) << shift;
+        const mask = @as(u64, 0xffff) << shift;
+        const result = switch (opcode) {
+            0 => ~value,
+            2 => value,
+            else => (self.readSized(wide, dest, false) & ~mask) | value,
+        };
+        self.writeSized(wide, dest, result, false);
         self.state.pc +%= 4;
         return true;
     }
