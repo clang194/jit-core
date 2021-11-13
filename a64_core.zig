@@ -200,6 +200,13 @@ pub const Core64 = struct {
             if (wide_move) {
                 return;
             }
+            const bitfield_move = self.runBitfieldMove(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (bitfield_move) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -670,6 +677,45 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runBitfieldMove(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x1f800000) != 0x13000000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const opcode = @intCast(u2, (word >> 29) & 3);
+        if (opcode == 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const n = (word & 0x00400000) != 0;
+        const rotate = @intCast(u6, (word >> 16) & 0x3f);
+        const last = @intCast(u6, (word >> 10) & 0x3f);
+        if ((wide and !n) or (!wide and (n or (rotate & 0x20) != 0 or (last & 0x20) != 0))) {
+            return error.ReservedInstruction;
+        }
+
+        const masks = decodeBitPattern(n, last, rotate, false) orelse return error.ReservedInstruction;
+        const source = self.readSized(wide, regFromWord(word >> 5), false);
+        const rotated = rotateRightSized(wide, source, rotate);
+        const dest = regFromWord(word);
+        const result = switch (opcode) {
+            0 => blk: {
+                const fill = if (((source >> last) & 1) != 0) ~@as(u64, 0) else @as(u64, 0);
+                break :blk (fill & ~masks.limit) | (rotated & masks.write & masks.limit);
+            },
+            1 => blk: {
+                const prior = self.readSized(wide, dest, false);
+                const bottom = (prior & ~masks.write) | (rotated & masks.write);
+                break :blk (prior & ~masks.limit) | (bottom & masks.limit);
+            },
+            else => rotated & masks.write & masks.limit,
+        };
+        self.writeSized(wide, dest, result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn extendedReg(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, option: u3, amount: u3) u64 {
         const value = self.readSized(wide, reg, false);
         var extended: u64 = switch (option) {
@@ -968,6 +1014,16 @@ fn logicalOp(wide: bool, opcode: u2, left: u64, right: u64, invert: bool) u64 {
 }
 
 fn decodeLogicalMask(n: bool, imms: u6, immr: u6) ?u64 {
+    const decoded = decodeBitPattern(n, imms, immr, true) orelse return null;
+    return decoded.write;
+}
+
+const BitPattern = struct {
+    write: u64,
+    limit: u64,
+};
+
+fn decodeBitPattern(n: bool, imms: u6, immr: u6, reject_full: bool) ?BitPattern {
     const marker = (if (n) @as(u64, 1) << 6 else @as(u64, 0)) | @as(u64, imms ^ 0x3f);
     const len = highestSetBit(marker);
     if (len < 1) {
@@ -975,15 +1031,20 @@ fn decodeLogicalMask(n: bool, imms: u6, immr: u6) ?u64 {
     }
 
     const levels = ones(@intCast(u6, len));
-    if ((@as(u64, imms) & levels) == levels) {
+    if (reject_full and (@as(u64, imms) & levels) == levels) {
         return null;
     }
 
     const s = @as(u64, imms) & levels;
     const r = @as(u64, immr) & levels;
+    const d = (s -% r) & levels;
     const size = @as(u6, 1) << @intCast(u3, len);
-    const element = ones(@intCast(u6, s + 1));
-    return rotateRight64(replicate64(element, size), @intCast(u6, r));
+    const write = rotateRight64(replicate64(ones(@intCast(u6, s + 1)), size), @intCast(u6, r));
+    const limit = replicate64(ones(@intCast(u6, d + 1)), size);
+    return BitPattern{
+        .write = write,
+        .limit = limit,
+    };
 }
 
 fn highestSetBit(value: u64) i8 {
@@ -1019,6 +1080,13 @@ fn rotateRight64(value: u64, amount: u6) u64 {
         return value;
     }
     return (value >> shift) | (value << @intCast(u6, 64 - shift));
+}
+
+fn rotateRightSized(wide: bool, value: u64, amount: u6) u64 {
+    if (wide) {
+        return rotateRight64(value, amount);
+    }
+    return @as(u64, rotateRight32(@intCast(u32, value), @intCast(u5, amount & 31)));
 }
 
 fn regFromWord(value: u32) a64_state.GeneralReg {
