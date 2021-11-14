@@ -207,6 +207,9 @@ pub const Core64 = struct {
             if (bitfield_move) {
                 return;
             }
+            if (self.runConditionalSelect(word)) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -712,6 +715,21 @@ pub const Core64 = struct {
             else => rotated & masks.write & masks.limit,
         };
         self.writeSized(wide, dest, result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runConditionalSelect(self: *Core64, word: u32) bool {
+        if ((word & 0x7fe00c00) != 0x1a800000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const value = if (self.conditionHolds(@intCast(u4, (word >> 12) & 0xf)))
+            self.readSized(wide, regFromWord(word >> 5), false)
+        else
+            self.readSized(wide, regFromWord(word >> 16), false);
+        self.writeSized(wide, regFromWord(word), value, false);
         self.state.pc +%= 4;
         return true;
     }
