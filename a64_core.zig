@@ -210,6 +210,13 @@ pub const Core64 = struct {
             if (self.runConditionalSelect(word)) {
                 return;
             }
+            const byte_reverse = self.runByteReverse(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (byte_reverse) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -734,6 +741,27 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runByteReverse(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xfffffc00;
+        const wide = (word & 0x80000000) != 0;
+        const source = self.readSized(wide, regFromWord(word >> 5), false);
+        const result = if ((masked & 0x7fffffff) == 0x5ac00400)
+            reverseHalfBytes(source)
+        else if (masked == 0xdac00800)
+            (@as(u64, reverseBytes32(@intCast(u32, source >> 32))) << 32) | @as(u64, reverseBytes32(@intCast(u32, source)))
+        else if (masked == 0x5ac00800)
+            @as(u64, reverseBytes32(@intCast(u32, source)))
+        else if (masked == 0xdac00c00)
+            reverseBytes64(source)
+        else if (masked == 0x5ac00c00)
+            return error.UnallocatedEncoding
+        else
+            return false;
+        self.writeSized(wide, regFromWord(word), result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn extendedReg(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, option: u3, amount: u3) u64 {
         const value = self.readSized(wide, reg, false);
         var extended: u64 = switch (option) {
@@ -1105,6 +1133,22 @@ fn rotateRightSized(wide: bool, value: u64, amount: u6) u64 {
         return rotateRight64(value, amount);
     }
     return @as(u64, rotateRight32(@intCast(u32, value), @intCast(u5, amount & 31)));
+}
+
+fn reverseHalfBytes(value: u64) u64 {
+    return ((value & 0x00ff00ff00ff00ff) << 8) | ((value & 0xff00ff00ff00ff00) >> 8);
+}
+
+fn reverseBytes32(value: u32) u32 {
+    return ((value & 0x000000ff) << 24) |
+        ((value & 0x0000ff00) << 8) |
+        ((value & 0x00ff0000) >> 8) |
+        ((value & 0xff000000) >> 24);
+}
+
+fn reverseBytes64(value: u64) u64 {
+    return (@as(u64, reverseBytes32(@intCast(u32, value))) << 32) |
+        @as(u64, reverseBytes32(@intCast(u32, value >> 32)));
 }
 
 fn regFromWord(value: u32) a64_state.GeneralReg {
