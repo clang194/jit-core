@@ -217,6 +217,13 @@ pub const Core64 = struct {
             if (byte_reverse) {
                 return;
             }
+            const vector_add = self.runVectorAdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_add) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -762,6 +769,29 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x0e208400) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u6, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = addVectorLanes(left.low, right.low, lane),
+            .high = if (full) addVectorLanes(left.high, right.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn extendedReg(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, option: u3, amount: u3) u64 {
         const value = self.readSized(wide, reg, false);
         var extended: u64 = switch (option) {
@@ -1151,8 +1181,28 @@ fn reverseBytes64(value: u64) u64 {
         @as(u64, reverseBytes32(@intCast(u32, value >> 32)));
 }
 
+fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
+    if (lane == 64) {
+        return left +% right;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const sum = ((left >> amount) & mask) +% ((right >> amount) & mask);
+        result |= (sum & mask) << amount;
+    }
+    return result;
+}
+
 fn regFromWord(value: u32) a64_state.GeneralReg {
     return @intToEnum(a64_state.GeneralReg, @intCast(u5, value & 0x1f));
+}
+
+fn vectorRegFromWord(value: u32) a64_state.VectorReg {
+    return @intToEnum(a64_state.VectorReg, @intCast(u5, value & 0x1f));
 }
 
 fn shift32(value: u32, shift: u2, amount: u5) u32 {
