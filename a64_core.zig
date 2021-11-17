@@ -737,15 +737,22 @@ pub const Core64 = struct {
     }
 
     fn runConditionalSelect(self: *Core64, word: u32) bool {
-        if ((word & 0x7fe00c00) != 0x1a800000) {
+        if ((word & 0x3fe00800) != 0x1a800000) {
             return false;
         }
 
         const wide = (word & 0x80000000) != 0;
+        const fallback = self.readSized(wide, regFromWord(word >> 16), false);
+        const altered = switch (@intCast(u2, ((word >> 29) & 2) | ((word >> 10) & 1))) {
+            0 => fallback,
+            1 => fallback +% 1,
+            2 => ~fallback,
+            else => ~fallback +% 1,
+        };
         const value = if (self.conditionHolds(@intCast(u4, (word >> 12) & 0xf)))
             self.readSized(wide, regFromWord(word >> 5), false)
         else
-            self.readSized(wide, regFromWord(word >> 16), false);
+            altered;
         self.writeSized(wide, regFromWord(word), value, false);
         self.state.pc +%= 4;
         return true;
