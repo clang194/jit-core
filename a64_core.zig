@@ -224,6 +224,9 @@ pub const Core64 = struct {
             if (vector_add) {
                 return;
             }
+            if (self.runVectorAnd(word)) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -786,6 +789,23 @@ pub const Core64 = struct {
         const result = a64_state.VectorValue{
             .low = addVectorLanes(left.low, right.low, lane),
             .high = if (full) addVectorLanes(left.high, right.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runVectorAnd(self: *Core64, word: u32) bool {
+        if ((word & 0xbfe0fc00) != 0x0e201c00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = left.low & right.low,
+            .high = if (full) left.high & right.high else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
