@@ -230,6 +230,9 @@ pub const Core64 = struct {
             if (self.runVariableShift(word)) {
                 return;
             }
+            if (self.runSystemHint(word)) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -837,6 +840,14 @@ pub const Core64 = struct {
             else => rotateRightSized(wide, value, amount),
         };
         self.writeSized(wide, regFromWord(word), result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runSystemHint(self: *Core64, word: u32) bool {
+        if ((word & 0xfffff01f) != 0xd503201f) {
+            return false;
+        }
         self.state.pc +%= 4;
         return true;
     }
