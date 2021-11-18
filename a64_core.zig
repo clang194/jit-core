@@ -227,6 +227,9 @@ pub const Core64 = struct {
             if (self.runVectorAnd(word)) {
                 return;
             }
+            if (self.runVariableShift(word)) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -815,6 +818,25 @@ pub const Core64 = struct {
             .high = if (full) left.high & right.high else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runVariableShift(self: *Core64, word: u32) bool {
+        if ((word & 0x7fe0f000) != 0x1ac02000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const value = self.readSized(wide, regFromWord(word >> 5), false);
+        const amount = @intCast(u6, self.readSized(wide, regFromWord(word >> 16), false) & if (wide) @as(u64, 63) else @as(u64, 31));
+        const result = switch (@intCast(u2, (word >> 10) & 3)) {
+            0 => if (wide) value << amount else @as(u64, @intCast(u32, value) << @intCast(u5, amount)),
+            1 => if (wide) value >> amount else @as(u64, @intCast(u32, value) >> @intCast(u5, amount)),
+            2 => if (wide) @bitCast(u64, @bitCast(i64, value) >> amount) else @as(u64, @bitCast(u32, @bitCast(i32, @intCast(u32, value)) >> @intCast(u5, amount))),
+            else => rotateRightSized(wide, value, amount),
+        };
+        self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
     }
