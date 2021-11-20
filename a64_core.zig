@@ -239,6 +239,9 @@ pub const Core64 = struct {
             if (self.runMultiplyAdd(word)) {
                 return;
             }
+            if (self.runLongMultiplyAdd(word)) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -883,6 +886,24 @@ pub const Core64 = struct {
         const product = if (wide) left *% right else @as(u64, @intCast(u32, @intCast(u32, left) *% @intCast(u32, right)));
         const result = if ((word & 0x00008000) == 0) addend +% product else addend -% product;
         self.writeSized(wide, regFromWord(word), result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runLongMultiplyAdd(self: *Core64, word: u32) bool {
+        if ((word & 0xff600000) != 0x9b200000) {
+            return false;
+        }
+
+        const left = @intCast(u32, self.readSized(false, regFromWord(word >> 5), false));
+        const right = @intCast(u32, self.readSized(false, regFromWord(word >> 16), false));
+        const product = if ((word & 0x00800000) == 0)
+            @bitCast(u64, @as(i64, @bitCast(i32, left)) *% @as(i64, @bitCast(i32, right)))
+        else
+            @as(u64, left) *% @as(u64, right);
+        const addend = self.readSized(true, regFromWord(word >> 10), false);
+        const result = if ((word & 0x00008000) == 0) addend +% product else addend -% product;
+        self.writeSized(true, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
     }
