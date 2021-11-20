@@ -236,6 +236,9 @@ pub const Core64 = struct {
             if (self.runLeadingZeroCount(word)) {
                 return;
             }
+            if (self.runMultiplyAdd(word)) {
+                return;
+            }
         }
         const callback = self.hooks.fallback orelse return error.MissingFallback;
         callback(self.state.pc, 1, &self.state, self.hooks.context);
@@ -863,6 +866,22 @@ pub const Core64 = struct {
         const wide = (word & 0x80000000) != 0;
         const value = self.readSized(wide, regFromWord(word >> 5), false);
         const result = if (wide) countLeadingZeroes64(value) else @as(u64, countLeadingZeroes32(@intCast(u32, value)));
+        self.writeSized(wide, regFromWord(word), result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runMultiplyAdd(self: *Core64, word: u32) bool {
+        if ((word & 0x7fe00000) != 0x1b000000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const left = self.readSized(wide, regFromWord(word >> 5), false);
+        const right = self.readSized(wide, regFromWord(word >> 16), false);
+        const addend = self.readSized(wide, regFromWord(word >> 10), false);
+        const product = if (wide) left *% right else @as(u64, @intCast(u32, @intCast(u32, left) *% @intCast(u32, right)));
+        const result = if ((word & 0x00008000) == 0) addend +% product else addend -% product;
         self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
