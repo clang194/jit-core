@@ -224,6 +224,13 @@ pub const Core64 = struct {
             if (vector_add) {
                 return;
             }
+            const vector_pair_add = self.runVectorPairAdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_pair_add) {
+                return;
+            }
             if (self.runVectorAnd(word)) {
                 return;
             }
@@ -817,6 +824,35 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorPairAdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x0e20bc00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u6, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = if (full)
+            a64_state.VectorValue{
+                .low = pairVectorHalves(left.low, left.high, lane),
+                .high = pairVectorHalves(right.low, right.high, lane),
+            }
+        else
+            a64_state.VectorValue{
+                .low = pairVectorHalves(left.low, right.low, lane),
+                .high = 0,
+            };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorAnd(self: *Core64, word: u32) bool {
         if ((word & 0xbfe0fc00) != 0x0e201c00) {
             return false;
@@ -1309,6 +1345,32 @@ fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
         const amount = @intCast(u6, shift);
         const sum = ((left >> amount) & mask) +% ((right >> amount) & mask);
         result |= (sum & mask) << amount;
+    }
+    return result;
+}
+
+fn pairVectorHalves(first: u64, second: u64, lane: u6) u64 {
+    if (lane == 64) {
+        return first +% second;
+    }
+
+    return pairVectorHalf(first, lane) | (pairVectorHalf(second, lane) << @intCast(u6, 32));
+}
+
+fn pairVectorHalf(value: u64, lane: u6) u64 {
+    const mask = ones(lane);
+    const lane_step = @intCast(u8, lane);
+    var result: u64 = 0;
+    var input_shift: u8 = 0;
+    var output_shift: u8 = 0;
+    while (input_shift < 64) {
+        const first_shift = @intCast(u6, input_shift);
+        const second_shift = @intCast(u6, input_shift + lane_step);
+        const output_amount = @intCast(u6, output_shift);
+        const sum = ((value >> first_shift) & mask) +% ((value >> second_shift) & mask);
+        result |= (sum & mask) << output_amount;
+        input_shift += lane_step * 2;
+        output_shift += lane_step;
     }
     return result;
 }
