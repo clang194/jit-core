@@ -898,13 +898,18 @@ pub const Core64 = struct {
     }
 
     fn runLeadingZeroCount(self: *Core64, word: u32) bool {
-        if ((word & 0x7ffffc00) != 0x5ac01000) {
+        const masked = word & 0x7ffffc00;
+        if (masked != 0x5ac01000 and masked != 0x5ac01400) {
             return false;
         }
 
         const wide = (word & 0x80000000) != 0;
         const value = self.readSized(wide, regFromWord(word >> 5), false);
-        const result = if (wide) countLeadingZeroes64(value) else @as(u64, countLeadingZeroes32(@intCast(u32, value)));
+        const sign = masked == 0x5ac01400;
+        const result = if (sign)
+            if (wide) countLeadingSignBits64(value) else @as(u64, countLeadingSignBits32(@intCast(u32, value)))
+        else
+            if (wide) countLeadingZeroes64(value) else @as(u64, countLeadingZeroes32(@intCast(u32, value)));
         self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
@@ -1399,6 +1404,16 @@ fn countLeadingZeroes64(value: u64) u64 {
         count += 1;
     }
     return count;
+}
+
+fn countLeadingSignBits32(value: u32) u32 {
+    const folded = if ((value & 0x80000000) != 0) ~value else value;
+    return countLeadingZeroes32(folded) - 1;
+}
+
+fn countLeadingSignBits64(value: u64) u64 {
+    const folded = if ((value & 0x8000000000000000) != 0) ~value else value;
+    return countLeadingZeroes64(folded) - 1;
 }
 
 fn regFromWord(value: u32) a64_state.GeneralReg {
