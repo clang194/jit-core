@@ -784,7 +784,9 @@ pub const Core64 = struct {
         const masked = word & 0xfffffc00;
         const wide = (word & 0x80000000) != 0;
         const source = self.readSized(wide, regFromWord(word >> 5), false);
-        const result = if ((masked & 0x7fffffff) == 0x5ac00400)
+        const result = if ((masked & 0x7fffffff) == 0x5ac00000)
+            if (wide) reverseBits64(source) else @as(u64, reverseBits32(@intCast(u32, source)))
+        else if ((masked & 0x7fffffff) == 0x5ac00400)
             reverseHalfBytes(source)
         else if (masked == 0xdac00800)
             (@as(u64, reverseBytes32(@intCast(u32, source >> 32))) << 32) | @as(u64, reverseBytes32(@intCast(u32, source)))
@@ -1336,6 +1338,18 @@ fn reverseBytes32(value: u32) u32 {
 fn reverseBytes64(value: u64) u64 {
     return (@as(u64, reverseBytes32(@intCast(u32, value))) << 32) |
         @as(u64, reverseBytes32(@intCast(u32, value >> 32)));
+}
+
+fn reverseBits32(value: u32) u32 {
+    var result = ((value & 0x55555555) << 1) | ((value >> 1) & 0x55555555);
+    result = ((result & 0x33333333) << 2) | ((result >> 2) & 0x33333333);
+    result = ((result & 0x0f0f0f0f) << 4) | ((result >> 4) & 0x0f0f0f0f);
+    return reverseBytes32(result);
+}
+
+fn reverseBits64(value: u64) u64 {
+    return (@as(u64, reverseBits32(@intCast(u32, value))) << 32) |
+        @as(u64, reverseBits32(@intCast(u32, value >> 32)));
 }
 
 fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
