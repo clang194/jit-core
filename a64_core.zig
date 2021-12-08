@@ -245,6 +245,9 @@ pub const Core64 = struct {
             if (self.runVectorAnd(word)) {
                 return;
             }
+            if (self.runDivide(word)) {
+                return;
+            }
             if (self.runVariableShift(word)) {
                 return;
             }
@@ -969,6 +972,25 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runDivide(self: *Core64, word: u32) bool {
+        const masked = word & 0x7fe0fc00;
+        if (masked != 0x1ac00800 and masked != 0x1ac00c00) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const left = self.readSized(wide, regFromWord(word >> 5), false);
+        const right = self.readSized(wide, regFromWord(word >> 16), false);
+        const signed = masked == 0x1ac00c00;
+        const result = if (signed)
+            signedDivideSized(wide, left, right)
+        else
+            unsignedDivideSized(wide, left, right);
+        self.writeSized(wide, regFromWord(word), result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVariableShift(self: *Core64, word: u32) bool {
         if ((word & 0x7fe0f000) != 0x1ac02000) {
             return false;
@@ -1481,6 +1503,43 @@ fn spreadVectorElement(value: u64, lane: u6) u64 {
         result |= lane_value << @intCast(u6, shift);
     }
     return result;
+}
+
+fn unsignedDivideSized(wide: bool, left: u64, right: u64) u64 {
+    if (right == 0) {
+        return 0;
+    }
+
+    if (wide) {
+        return @divTrunc(left, right);
+    }
+    return @as(u64, @divTrunc(@intCast(u32, left), @intCast(u32, right)));
+}
+
+fn signedDivideSized(wide: bool, left: u64, right: u64) u64 {
+    if (wide) {
+        const divisor = @bitCast(i64, right);
+        if (divisor == 0) {
+            return 0;
+        }
+
+        const dividend = @bitCast(i64, left);
+        if (dividend == @as(i64, -9223372036854775808) and divisor == -1) {
+            return left;
+        }
+        return @bitCast(u64, @divTrunc(dividend, divisor));
+    }
+
+    const divisor = @bitCast(i32, @intCast(u32, right));
+    if (divisor == 0) {
+        return 0;
+    }
+
+    const dividend = @bitCast(i32, @intCast(u32, left));
+    if (dividend == @as(i32, -2147483648) and divisor == -1) {
+        return @as(u64, @intCast(u32, dividend));
+    }
+    return @as(u64, @intCast(u32, @divTrunc(dividend, divisor)));
 }
 
 fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
