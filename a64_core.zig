@@ -217,6 +217,13 @@ pub const Core64 = struct {
             if (byte_reverse) {
                 return;
             }
+            const vector_duplicate = self.runVectorDuplicate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_duplicate) {
+                return;
+            }
             const vector_add = self.runVectorAdd(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -803,6 +810,37 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorDuplicate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfe0fc00) != 0x0e000c00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const imm5 = @intCast(u5, (word >> 16) & 0x1f);
+        if (imm5 == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const size = lowestSetBit5(imm5);
+        if (size > 3) {
+            return error.UnallocatedEncoding;
+        }
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u6, 8) << size;
+        const value = self.readSized(lane == 64, regFromWord(word >> 5), false) & ones(lane);
+        const half = spreadVectorElement(value, lane);
+        const result = a64_state.VectorValue{
+            .low = half,
+            .high = if (full) half else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf20fc00) != 0x0e208400) {
             return false;
@@ -1350,6 +1388,30 @@ fn reverseBits32(value: u32) u32 {
 fn reverseBits64(value: u64) u64 {
     return (@as(u64, reverseBits32(@intCast(u32, value))) << 32) |
         @as(u64, reverseBits32(@intCast(u32, value >> 32)));
+}
+
+fn lowestSetBit5(value: u5) u3 {
+    var probe = value;
+    var bit: u3 = 0;
+    while ((probe & 1) == 0) {
+        probe >>= 1;
+        bit += 1;
+    }
+    return bit;
+}
+
+fn spreadVectorElement(value: u64, lane: u6) u64 {
+    if (lane == 64) {
+        return value;
+    }
+
+    const lane_value = value & ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        result |= lane_value << @intCast(u6, shift);
+    }
+    return result;
 }
 
 fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
