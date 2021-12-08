@@ -23,10 +23,12 @@ pub const MemoryHooks64 = struct {
     read16: ?fn (u64, ?*c_void) u16,
     read32: ?fn (u64, ?*c_void) u32,
     read64: ?fn (u64, ?*c_void) u64,
+    read128: ?fn (u64, ?*c_void) a64_state.VectorValue,
     write8: ?fn (u64, u8, ?*c_void) void,
     write16: ?fn (u64, u16, ?*c_void) void,
     write32: ?fn (u64, u32, ?*c_void) void,
     write64: ?fn (u64, u64, ?*c_void) void,
+    write128: ?fn (u64, a64_state.VectorValue, ?*c_void) void,
     readOnly: ?fn (u64, ?*c_void) bool,
 
     pub fn empty() MemoryHooks64 {
@@ -36,10 +38,12 @@ pub const MemoryHooks64 = struct {
             .read16 = null,
             .read32 = null,
             .read64 = null,
+            .read128 = null,
             .write8 = null,
             .write16 = null,
             .write32 = null,
             .write64 = null,
+            .write128 = null,
             .readOnly = null,
         };
     }
