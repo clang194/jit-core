@@ -495,7 +495,8 @@ pub const Core64 = struct {
         const base_reg = regFromWord(word >> 5);
         const data_reg = regFromWord(word);
         const bytes = @as(usize, 1) << size;
-        const address = self.readSized(true, base_reg, true) +% @as(u64, (word >> 12) & 0x1ff);
+        const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 12) & 0x1ff), 9));
+        const address = self.readSized(true, base_reg, true) +% offset;
 
         if ((opcode & 2) == 0) {
             if ((opcode & 1) == 0) {
