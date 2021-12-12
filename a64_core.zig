@@ -242,6 +242,13 @@ pub const Core64 = struct {
             if (vector_pair_add) {
                 return;
             }
+            const vector_equal = self.runVectorEqual(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_equal) {
+                return;
+            }
             if (self.runVectorAnd(word)) {
                 return;
             }
@@ -989,6 +996,29 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorEqual(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x2e208c00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u6, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = equalVectorLanes(left.low, right.low, lane),
+            .high = if (full) equalVectorLanes(left.high, right.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorAnd(self: *Core64, word: u32) bool {
         const masked = word & 0xbfe0fc00;
         if (masked != 0x0e201c00 and masked != 0x0ea01c00 and masked != 0x0ee01c00 and masked != 0x2e201c00) {
@@ -1601,6 +1631,23 @@ fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
         const amount = @intCast(u6, shift);
         const sum = ((left >> amount) & mask) +% ((right >> amount) & mask);
         result |= (sum & mask) << amount;
+    }
+    return result;
+}
+
+fn equalVectorLanes(left: u64, right: u64, lane: u6) u64 {
+    if (lane == 64) {
+        return if (left == right) ~@as(u64, 0) else 0;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        if (((left >> amount) & mask) == ((right >> amount) & mask)) {
+            result |= mask << amount;
+        }
     }
     return result;
 }
