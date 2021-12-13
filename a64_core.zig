@@ -218,6 +218,13 @@ pub const Core64 = struct {
             if (bitfield_move) {
                 return;
             }
+            const extract_register = self.runExtractRegister(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (extract_register) {
+                return;
+            }
             if (self.runConditionalSelect(word)) {
                 return;
             }
@@ -945,6 +952,29 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runExtractRegister(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x7fa00000) != 0x13800000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const n = (word & 0x00400000) != 0;
+        if (n != wide) {
+            return error.UnallocatedEncoding;
+        }
+
+        const amount = @intCast(u6, (word >> 10) & 0x3f);
+        if (!wide and (amount & 0x20) != 0) {
+            return error.ReservedInstruction;
+        }
+
+        const lower = self.readSized(wide, regFromWord(word >> 16), false);
+        const upper = self.readSized(wide, regFromWord(word >> 5), false);
+        self.writeSized(wide, regFromWord(word), extractRegisterBits(wide, lower, upper, amount), false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runConditionalSelect(self: *Core64, word: u32) bool {
         if ((word & 0x3fe00800) != 0x1a800000) {
             return false;
@@ -1605,6 +1635,19 @@ fn rotateRightSized(wide: bool, value: u64, amount: u6) u64 {
         return rotateRight64(value, amount);
     }
     return @as(u64, rotateRight32(@intCast(u32, value), @intCast(u5, amount & 31)));
+}
+
+fn extractRegisterBits(wide: bool, lower: u64, upper: u64, amount: u6) u64 {
+    if (amount == 0) {
+        return lower;
+    }
+
+    if (wide) {
+        return (lower >> amount) | (upper << @intCast(u6, 64 - amount));
+    }
+
+    const shift = @intCast(u5, amount);
+    return @as(u64, (@intCast(u32, lower) >> shift) | (@intCast(u32, upper) << @intCast(u5, 32 - shift)));
 }
 
 fn reverseHalfBytes(value: u64) u64 {
