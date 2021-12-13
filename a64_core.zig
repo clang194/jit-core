@@ -269,6 +269,13 @@ pub const Core64 = struct {
             if (self.runDivide(word)) {
                 return;
             }
+            const crc = self.runCrc(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (crc) {
+                return;
+            }
             if (self.runVariableShift(word)) {
                 return;
             }
@@ -1175,6 +1182,24 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runCrc(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x7fe0f000) != 0x1ac05000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const size = @intCast(u2, (word >> 10) & 3);
+        if (wide != (size == 3)) {
+            return error.UnallocatedEncoding;
+        }
+
+        const accumulator = @intCast(u32, self.readSized(false, regFromWord(word >> 5), false));
+        const value = self.readSized(wide, regFromWord(word >> 16), false);
+        self.writeSized(false, regFromWord(word), crc32c(accumulator, value, @as(u4, 1) << size), false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVariableShift(self: *Core64, word: u32) bool {
         if ((word & 0x7fe0f000) != 0x1ac02000) {
             return false;
@@ -1737,6 +1762,22 @@ fn signedDivideSized(wide: bool, left: u64, right: u64) u64 {
         return @as(u64, @intCast(u32, dividend));
     }
     return @as(u64, @intCast(u32, @divTrunc(dividend, divisor)));
+}
+
+fn crc32c(crc: u32, value: u64, bytes: u4) u32 {
+    var result = crc;
+    var remaining = value;
+    var byte_index: u4 = 0;
+    while (byte_index < bytes) : (byte_index += 1) {
+        result ^= @intCast(u32, remaining & 0xff);
+        var bit_index: u4 = 0;
+        while (bit_index < 8) : (bit_index += 1) {
+            const mask = if ((result & 1) != 0) @as(u32, 0x82f63b78) else @as(u32, 0);
+            result = (result >> 1) ^ mask;
+        }
+        remaining >>= 8;
+    }
+    return result;
 }
 
 fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
