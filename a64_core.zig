@@ -155,6 +155,13 @@ pub const Core64 = struct {
             if (pair_load_store) {
                 return;
             }
+            const vector_pair_load_store = self.runVectorPairLoadStore(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_pair_load_store) {
+                return;
+            }
             const logical_immediate = self.runLogicalImmediate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -629,6 +636,76 @@ pub const Core64 = struct {
         }
         self.state.pc +%= 4;
         return true;
+    }
+
+    fn runVectorPairLoadStore(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x3e000000) != 0x2c000000) {
+            return false;
+        }
+
+        const opcode = @intCast(u2, word >> 30);
+        const not_postindex = ((word >> 24) & 1) != 0;
+        const writeback = ((word >> 23) & 1) != 0;
+        const load = ((word >> 22) & 1) != 0;
+        if (!not_postindex and !writeback) {
+            return error.UnallocatedEncoding;
+        }
+        if (opcode == 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const bytes = @as(usize, 4) << opcode;
+        const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 15) & 0x7f), 7)) << @intCast(u6, 2 + opcode);
+        const first = vectorRegFromWord(word);
+        const base_reg = regFromWord(word >> 5);
+        const second = vectorRegFromWord(word >> 10);
+
+        if (load and first == second) {
+            return error.Unpredictable;
+        }
+
+        var address = self.readSized(true, base_reg, true);
+        const postindex = !not_postindex;
+        if (!postindex) {
+            address +%= offset;
+        }
+
+        if (load) {
+            const low = try self.readVectorPairMemory(address, bytes);
+            const high = try self.readVectorPairMemory(address +% @intCast(u64, bytes), bytes);
+            self.state.writeVector(first, low);
+            self.state.writeVector(second, high);
+        } else {
+            try self.writeVectorPairMemory(address, bytes, self.state.readVector(first));
+            try self.writeVectorPairMemory(address +% @intCast(u64, bytes), bytes, self.state.readVector(second));
+        }
+
+        if (writeback) {
+            if (postindex) {
+                address +%= offset;
+            }
+            self.writeSized(true, base_reg, address, true);
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn readVectorPairMemory(self: *Core64, address: u64, bytes: usize) Core64Error!a64_state.VectorValue {
+        if (bytes == 16) {
+            return try self.readMemoryVector(address);
+        }
+        return a64_state.VectorValue{
+            .low = try self.readMemory(address, bytes),
+            .high = 0,
+        };
+    }
+
+    fn writeVectorPairMemory(self: *Core64, address: u64, bytes: usize, value: a64_state.VectorValue) Core64Error!void {
+        if (bytes == 16) {
+            try self.writeMemoryVector(address, value);
+            return;
+        }
+        try self.writeMemory(address, bytes, value.low);
     }
 
     fn runLogicalImmediate(self: *Core64, word: u32) Core64Error!bool {
