@@ -280,6 +280,10 @@ pub fn supervisorImmediate(word: u32) u32 {
     return word & 0x00ffffff;
 }
 
+pub fn isUndefinedInstruction(word: u32) bool {
+    return (word & 0xfff000f0) == 0xe7f000f0;
+}
+
 pub fn isBranchImmediate(word: u32) bool {
     return (word & 0x0e000000) == 0x0a000000 and armCondition(word) != null;
 }
@@ -1140,6 +1144,14 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
             callback(supervisorImmediate(word), state);
             return;
         }
+    }
+
+    if (isUndefinedInstruction(word)) {
+        if (hooks.exception) |callback| {
+            callback(pc, .undefined_instruction, state, hooks.context);
+            return;
+        }
+        return error.UnknownInstruction;
     }
 
     return runExternalArmHandler(state, hooks, pc);

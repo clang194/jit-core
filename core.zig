@@ -71,7 +71,18 @@ pub const Core = struct {
         var used: usize = 0;
         while (self.hasCycles(budget, used) and !self.halt) {
             if (!self.state.thumb()) {
-                try arm_exec.runArmWithHooks(&self.state, self.hooks);
+                const pc = self.state.read(.pc);
+                arm_exec.runArmWithHooks(&self.state, self.hooks) catch |err| switch (err) {
+                    error.Unpredictable => {
+                        try self.raiseFault(pc, .unpredictable_instruction, error.Unpredictable);
+                        used += 1;
+                        self.addCycles(1);
+                        continue;
+                    },
+                    error.UnknownInstruction => return error.UnknownInstruction,
+                    error.MissingRead => return error.MissingRead,
+                    error.MissingWrite => return error.MissingWrite,
+                };
                 used += 1;
                 self.addCycles(1);
                 continue;
@@ -120,6 +131,14 @@ pub const Core = struct {
             self.addCycles(1);
         }
         return used;
+    }
+
+    fn raiseFault(self: *Core, pc: u32, kind: arm_state.FaultKind, fallback: CoreError) CoreError!void {
+        if (self.hooks.exception) |callback| {
+            callback(pc, kind, &self.state, self.hooks.context);
+            return;
+        }
+        return fallback;
     }
 
     fn interpretOne(self: *Core, pc: u32) CoreError!void {

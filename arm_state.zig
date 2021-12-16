@@ -311,6 +311,12 @@ pub const MemoryHooks = struct {
     }
 };
 
+pub const FaultKind = enum {
+    undefined_instruction,
+    unpredictable_instruction,
+    breakpoint,
+};
+
 pub const HostHooks = struct {
     pub const CycleHooks = struct {
         add: ?fn (usize, ?*c_void) void,
@@ -329,6 +335,7 @@ pub const HostHooks = struct {
     context: ?*c_void,
     trap: ?fn (u32) bool,
     supervisor: ?fn (u32, *MachineState) void,
+    exception: ?fn (u32, FaultKind, *MachineState, ?*c_void) void,
     coprocessors: [16]?CoprocessorHooks,
     cycles: CycleHooks,
 
@@ -339,6 +346,7 @@ pub const HostHooks = struct {
             .context = null,
             .trap = null,
             .supervisor = null,
+            .exception = null,
             .coprocessors = [_]?CoprocessorHooks{null} ** 16,
             .cycles = CycleHooks.empty(),
         };
