@@ -1183,7 +1183,8 @@ pub const Core64 = struct {
     }
 
     fn runCrc(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0x7fe0f000) != 0x1ac05000) {
+        const masked = word & 0x7fe0f000;
+        if (masked != 0x1ac04000 and masked != 0x1ac05000) {
             return false;
         }
 
@@ -1195,7 +1196,11 @@ pub const Core64 = struct {
 
         const accumulator = @intCast(u32, self.readSized(false, regFromWord(word >> 5), false));
         const value = self.readSized(wide, regFromWord(word >> 16), false);
-        self.writeSized(false, regFromWord(word), crc32c(accumulator, value, @as(u4, 1) << size), false);
+        const result = if (masked == 0x1ac04000)
+            crc32(accumulator, value, @as(u4, 1) << size)
+        else
+            crc32c(accumulator, value, @as(u4, 1) << size);
+        self.writeSized(false, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
     }
@@ -1764,7 +1769,15 @@ fn signedDivideSized(wide: bool, left: u64, right: u64) u64 {
     return @as(u64, @intCast(u32, @divTrunc(dividend, divisor)));
 }
 
+fn crc32(crc: u32, value: u64, bytes: u4) u32 {
+    return crc32WithPolynomial(crc, value, bytes, 0xedb88320);
+}
+
 fn crc32c(crc: u32, value: u64, bytes: u4) u32 {
+    return crc32WithPolynomial(crc, value, bytes, 0x82f63b78);
+}
+
+fn crc32WithPolynomial(crc: u32, value: u64, bytes: u4, polynomial: u32) u32 {
     var result = crc;
     var remaining = value;
     var byte_index: u4 = 0;
@@ -1772,7 +1785,7 @@ fn crc32c(crc: u32, value: u64, bytes: u4) u32 {
         result ^= @intCast(u32, remaining & 0xff);
         var bit_index: u4 = 0;
         while (bit_index < 8) : (bit_index += 1) {
-            const mask = if ((result & 1) != 0) @as(u32, 0x82f63b78) else @as(u32, 0);
+            const mask = if ((result & 1) != 0) polynomial else @as(u32, 0);
             result = (result >> 1) ^ mask;
         }
         remaining >>= 8;
