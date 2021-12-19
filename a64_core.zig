@@ -235,6 +235,9 @@ pub const Core64 = struct {
             if (byte_reverse) {
                 return;
             }
+            if (self.runAesMix(word)) {
+                return;
+            }
             const vector_duplicate = self.runVectorDuplicate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1027,6 +1030,19 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runAesMix(self: *Core64, word: u32) bool {
+        const masked = word & 0xfffffc00;
+        if (masked != 0x4e286800 and masked != 0x4e287800) {
+            return false;
+        }
+
+        const input = self.state.readVector(vectorRegFromWord(word >> 5));
+        const output = mixAesVector(input, masked == 0x4e287800);
+        self.state.writeVector(vectorRegFromWord(word), output);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorDuplicate(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbfe0fc00) != 0x0e000c00) {
             return false;
@@ -1791,6 +1807,66 @@ fn crc32WithPolynomial(crc: u32, value: u64, bytes: u4, polynomial: u32) u32 {
         remaining >>= 8;
     }
     return result;
+}
+
+fn aesDouble(value: u8) u8 {
+    const shifted = (@as(u16, value) << 1) & 0xff;
+    const reduced = if ((value & 0x80) != 0) shifted ^ 0x1b else shifted;
+    return @intCast(u8, reduced);
+}
+
+fn aesProduct(value: u8, factor: u8) u8 {
+    var left = value;
+    var right = factor;
+    var result: u8 = 0;
+    while (right != 0) : (right >>= 1) {
+        if ((right & 1) != 0) {
+            result ^= left;
+        }
+        left = aesDouble(left);
+    }
+    return result;
+}
+
+fn vectorByte(value: a64_state.VectorValue, index: usize) u8 {
+    const shift = @intCast(u6, (index & 7) * 8);
+    const word = if (index < 8) value.low else value.high;
+    return @intCast(u8, (word >> shift) & 0xff);
+}
+
+fn setVectorByte(value: *a64_state.VectorValue, index: usize, byte: u8) void {
+    const shift = @intCast(u6, (index & 7) * 8);
+    const mask = @as(u64, 0xff) << shift;
+    const shifted = @as(u64, byte) << shift;
+    if (index < 8) {
+        value.low = (value.low & ~mask) | shifted;
+    } else {
+        value.high = (value.high & ~mask) | shifted;
+    }
+}
+
+fn mixAesVector(input: a64_state.VectorValue, inverse: bool) a64_state.VectorValue {
+    var output = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var column: usize = 0;
+    while (column < 16) : (column += 4) {
+        const a = vectorByte(input, column);
+        const b = vectorByte(input, column + 1);
+        const c = vectorByte(input, column + 2);
+        const d = vectorByte(input, column + 3);
+        if (inverse) {
+            setVectorByte(&output, column, aesProduct(a, 0x0e) ^ aesProduct(b, 0x0b) ^ aesProduct(c, 0x0d) ^ aesProduct(d, 0x09));
+            setVectorByte(&output, column + 1, aesProduct(a, 0x09) ^ aesProduct(b, 0x0e) ^ aesProduct(c, 0x0b) ^ aesProduct(d, 0x0d));
+            setVectorByte(&output, column + 2, aesProduct(a, 0x0d) ^ aesProduct(b, 0x09) ^ aesProduct(c, 0x0e) ^ aesProduct(d, 0x0b));
+            setVectorByte(&output, column + 3, aesProduct(a, 0x0b) ^ aesProduct(b, 0x0d) ^ aesProduct(c, 0x09) ^ aesProduct(d, 0x0e));
+        } else {
+            const fold = a ^ b ^ c ^ d;
+            setVectorByte(&output, column, a ^ aesDouble(a ^ b) ^ fold);
+            setVectorByte(&output, column + 1, b ^ aesDouble(b ^ c) ^ fold);
+            setVectorByte(&output, column + 2, c ^ aesDouble(c ^ d) ^ fold);
+            setVectorByte(&output, column + 3, d ^ aesDouble(d ^ a) ^ fold);
+        }
+    }
+    return output;
 }
 
 fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
