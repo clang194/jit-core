@@ -242,6 +242,13 @@ pub const Core64 = struct {
             if (byte_reverse) {
                 return;
             }
+            const float_immediate = self.runFloatImmediate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_immediate) {
+                return;
+            }
             const float_binary = self.runFloatBinary(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1151,6 +1158,24 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runFloatImmediate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff201fe0) != 0x1e201000) {
+            return false;
+        }
+
+        const mode = @intCast(u2, (word >> 22) & 3);
+        const encoded = @intCast(u8, (word >> 13) & 0xff);
+        const value = switch (mode) {
+            0 => @as(u64, expandFloatConstant32(encoded)),
+            1 => expandFloatConstant64(encoded),
+            3 => @as(u64, expandFloatConstant16(encoded)),
+            else => return error.UnallocatedEncoding,
+        };
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
         if (masked != 0x1e200800 and masked != 0x1e201800 and masked != 0x1e202800 and masked != 0x1e203800 and masked != 0x1e208800) {
@@ -2010,6 +2035,30 @@ fn floatOutput64(control: a64_state.FloatControl, value: u64) u64 {
         return 0x7ff8000000000000;
     }
     return value;
+}
+
+fn expandFloatConstant16(encoded: u8) u16 {
+    const sign = @as(u16, encoded >> 7);
+    const exponent_base = if (((encoded >> 6) & 1) != 0) @as(u16, 0x0c) else @as(u16, 0x10);
+    const exponent = exponent_base | @as(u16, (encoded >> 4) & 3);
+    const fraction = @as(u16, encoded & 0xf) << 6;
+    return (sign << 15) | (exponent << 10) | fraction;
+}
+
+fn expandFloatConstant32(encoded: u8) u32 {
+    const sign = @as(u32, encoded >> 7);
+    const exponent_base = if (((encoded >> 6) & 1) != 0) @as(u32, 0x7c) else @as(u32, 0x80);
+    const exponent = exponent_base | @as(u32, (encoded >> 4) & 3);
+    const fraction = @as(u32, encoded & 0xf) << 19;
+    return (sign << 31) | (exponent << 23) | fraction;
+}
+
+fn expandFloatConstant64(encoded: u8) u64 {
+    const sign = @as(u64, encoded >> 7);
+    const exponent_base = if (((encoded >> 6) & 1) != 0) @as(u64, 0x3fc) else @as(u64, 0x400);
+    const exponent = exponent_base | @as(u64, (encoded >> 4) & 3);
+    const fraction = @as(u64, encoded & 0xf) << 48;
+    return (sign << 63) | (exponent << 52) | fraction;
 }
 
 fn floatAdd(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
