@@ -469,6 +469,11 @@ pub const Core64 = struct {
             return try self.runVectorLoadStoreRegister(word, offset, false, false);
         }
 
+        if ((word & 0x3f200c00) == 0x3c000000) {
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 12) & 0x1ff), 9));
+            return try self.runVectorLoadStoreRegister(word, offset, false, false);
+        }
+
         if ((word & 0x3f200c00) == 0x38000800) {
             return try self.runLoadStoreUnprivileged(word);
         }
