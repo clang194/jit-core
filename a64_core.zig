@@ -242,6 +242,13 @@ pub const Core64 = struct {
             if (byte_reverse) {
                 return;
             }
+            const float_binary = self.runFloatBinary(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_binary) {
+                return;
+            }
             if (self.runAesMix(word)) {
                 return;
             }
@@ -1132,6 +1139,33 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runFloatBinary(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xff20fc00;
+        if (masked != 0x1e200800 and masked != 0x1e201800 and masked != 0x1e202800 and masked != 0x1e203800 and masked != 0x1e208800) {
+            return false;
+        }
+
+        const mode = (word >> 22) & 3;
+        if (mode > 1) {
+            return error.UnallocatedEncoding;
+        }
+
+        const double = mode == 1;
+        const control = self.state.floatControl();
+        const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (double) @as(usize, 8) else @as(usize, 4));
+        const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, if (double) @as(usize, 8) else @as(usize, 4));
+        const result = switch (masked) {
+            0x1e200800 => floatMul(control, double, left, right),
+            0x1e201800 => floatDiv(control, double, left, right),
+            0x1e202800 => floatAdd(control, double, left, right),
+            0x1e203800 => floatSub(control, double, left, right),
+            else => negateFloat(double, floatMul(control, double, left, right)),
+        };
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runAesMix(self: *Core64, word: u32) bool {
         const masked = word & 0xfffffc00;
         if (masked != 0x4e286800 and masked != 0x4e287800) {
@@ -1909,6 +1943,97 @@ fn crc32WithPolynomial(crc: u32, value: u64, bytes: u4, polynomial: u32) u32 {
         remaining >>= 8;
     }
     return result;
+}
+
+fn floatInput32(control: a64_state.FloatControl, value: u32) u32 {
+    if (control.fz() and isDenormal32(value)) {
+        return 0;
+    }
+    return value;
+}
+
+fn floatInput64(control: a64_state.FloatControl, value: u64) u64 {
+    if (control.fz() and isDenormal64(value)) {
+        return 0;
+    }
+    return value;
+}
+
+fn floatOutput32(control: a64_state.FloatControl, value: u32) u32 {
+    if (control.fz() and isDenormal32(value)) {
+        return 0;
+    }
+    if (control.dn() and isNan32(value)) {
+        return 0x7fc00000;
+    }
+    return value;
+}
+
+fn floatOutput64(control: a64_state.FloatControl, value: u64) u64 {
+    if (control.fz() and isDenormal64(value)) {
+        return 0;
+    }
+    if (control.dn() and isNan64(value)) {
+        return 0x7ff8000000000000;
+    }
+    return value;
+}
+
+fn floatAdd(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+    if (double) {
+        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) + @bitCast(f64, floatInput64(control, right))));
+    }
+    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) + @bitCast(f32, floatInput32(control, @intCast(u32, right))));
+    return @as(u64, floatOutput32(control, result));
+}
+
+fn floatDiv(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+    if (double) {
+        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) / @bitCast(f64, floatInput64(control, right))));
+    }
+    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) / @bitCast(f32, floatInput32(control, @intCast(u32, right))));
+    return @as(u64, floatOutput32(control, result));
+}
+
+fn floatMul(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+    if (double) {
+        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) * @bitCast(f64, floatInput64(control, right))));
+    }
+    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) * @bitCast(f32, floatInput32(control, @intCast(u32, right))));
+    return @as(u64, floatOutput32(control, result));
+}
+
+fn floatSub(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+    if (double) {
+        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) - @bitCast(f64, floatInput64(control, right))));
+    }
+    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) - @bitCast(f32, floatInput32(control, @intCast(u32, right))));
+    return @as(u64, floatOutput32(control, result));
+}
+
+fn negateFloat(double: bool, value: u64) u64 {
+    if (double) {
+        return value ^ 0x8000000000000000;
+    }
+    return @as(u64, @intCast(u32, value) ^ 0x80000000);
+}
+
+fn isDenormal32(value: u32) bool {
+    const magnitude = value & 0x7fffffff;
+    return magnitude != 0 and magnitude <= 0x007fffff;
+}
+
+fn isDenormal64(value: u64) bool {
+    const magnitude = value & 0x7fffffffffffffff;
+    return magnitude != 0 and magnitude <= 0x000fffffffffffff;
+}
+
+fn isNan32(value: u32) bool {
+    return (value & 0x7fffffff) > 0x7f800000;
+}
+
+fn isNan64(value: u64) bool {
+    return (value & 0x7fffffffffffffff) > 0x7ff0000000000000;
 }
 
 fn aesDouble(value: u8) u8 {
