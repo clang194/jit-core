@@ -249,6 +249,13 @@ pub const Core64 = struct {
             if (float_binary) {
                 return;
             }
+            const float_compare = self.runFloatCompare(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_compare) {
+                return;
+            }
             if (self.runAesMix(word)) {
                 return;
             }
@@ -1166,6 +1173,27 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runFloatCompare(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xff20fc17;
+        if (masked != 0x1e202000 and masked != 0x1e202010) {
+            return false;
+        }
+
+        const mode = (word >> 22) & 3;
+        if (mode > 1) {
+            return error.UnallocatedEncoding;
+        }
+
+        const double = mode == 1;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const control = self.state.floatControl();
+        const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const right = if ((word & 0x8) != 0) @as(u64, 0) else vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
+        self.state.writeNzcv(compareFloat(control, double, left, right));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runAesMix(self: *Core64, word: u32) bool {
         const masked = word & 0xfffffc00;
         if (masked != 0x4e286800 and masked != 0x4e287800) {
@@ -2016,6 +2044,40 @@ fn negateFloat(double: bool, value: u64) u64 {
         return value ^ 0x8000000000000000;
     }
     return @as(u64, @intCast(u32, value) ^ 0x80000000);
+}
+
+fn compareFloat(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u32 {
+    if (double) {
+        const left_word = floatInput64(control, left);
+        const right_word = floatInput64(control, right);
+        if (isNan64(left_word) or isNan64(right_word)) {
+            return 0x30000000;
+        }
+        const left_value = @bitCast(f64, left_word);
+        const right_value = @bitCast(f64, right_word);
+        if (left_value == right_value) {
+            return 0x60000000;
+        }
+        if (left_value < right_value) {
+            return 0x80000000;
+        }
+        return 0x20000000;
+    }
+
+    const left_word = floatInput32(control, @intCast(u32, left));
+    const right_word = floatInput32(control, @intCast(u32, right));
+    if (isNan32(left_word) or isNan32(right_word)) {
+        return 0x30000000;
+    }
+    const left_value = @bitCast(f32, left_word);
+    const right_value = @bitCast(f32, right_word);
+    if (left_value == right_value) {
+        return 0x60000000;
+    }
+    if (left_value < right_value) {
+        return 0x80000000;
+    }
+    return 0x20000000;
 }
 
 fn isDenormal32(value: u32) bool {
