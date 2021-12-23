@@ -249,6 +249,13 @@ pub const Core64 = struct {
             if (float_immediate) {
                 return;
             }
+            const float_convert = self.runFloatConvert(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_convert) {
+                return;
+            }
             const float_binary = self.runFloatBinary(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1176,6 +1183,31 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runFloatConvert(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff3e7c00) != 0x1e224000) {
+            return false;
+        }
+
+        const source_mode = @intCast(u2, (word >> 22) & 3);
+        const target_mode = @intCast(u2, (word >> 15) & 3);
+        if (source_mode == 2 or target_mode == 2 or source_mode == target_mode) {
+            return error.UnallocatedEncoding;
+        }
+        if (source_mode == 3 or target_mode == 3) {
+            return false;
+        }
+
+        const control = self.state.floatControl();
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const value = if (source_mode == 0)
+            float32To64(control, @intCast(u32, source.low))
+        else
+            @as(u64, float64To32(control, source.low));
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
         if (masked != 0x1e200800 and masked != 0x1e201800 and masked != 0x1e202800 and masked != 0x1e203800 and masked != 0x1e208800) {
@@ -2059,6 +2091,16 @@ fn expandFloatConstant64(encoded: u8) u64 {
     const exponent = exponent_base | @as(u64, (encoded >> 4) & 3);
     const fraction = @as(u64, encoded & 0xf) << 48;
     return (sign << 63) | (exponent << 52) | fraction;
+}
+
+fn float32To64(control: a64_state.FloatControl, value: u32) u64 {
+    const input = @bitCast(f32, floatInput32(control, value));
+    return floatOutput64(control, @bitCast(u64, @floatCast(f64, input)));
+}
+
+fn float64To32(control: a64_state.FloatControl, value: u64) u32 {
+    const input = @bitCast(f64, floatInput64(control, value));
+    return floatOutput32(control, @bitCast(u32, @floatCast(f32, input)));
 }
 
 fn floatAdd(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
