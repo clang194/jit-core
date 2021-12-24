@@ -1308,10 +1308,12 @@ pub const Core64 = struct {
     }
 
     fn runVectorExtractToRegister(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfe0fc00) != 0x0e003c00) {
+        const masked = word & 0xbfe0fc00;
+        if (masked != 0x0e002c00 and masked != 0x0e003c00) {
             return false;
         }
 
+        const signed = masked == 0x0e002c00;
         const wide = (word & 0x40000000) != 0;
         const imm5 = @intCast(u5, (word >> 16) & 0x1f);
         if (imm5 == 0) {
@@ -1319,13 +1321,20 @@ pub const Core64 = struct {
         }
 
         const size = lowestSetBit5(imm5);
-        if ((size < 3 and wide) or (size == 3 and !wide) or size > 3) {
-            return error.UnallocatedEncoding;
+        if (signed) {
+            if ((size == 2 and !wide) or size > 2) {
+                return error.UnallocatedEncoding;
+            }
+        } else {
+            if ((size < 3 and wide) or (size == 3 and !wide) or size > 3) {
+                return error.UnallocatedEncoding;
+            }
         }
 
         const bytes = @as(usize, 1) << size;
         const index = @as(usize, imm5) >> @intCast(u3, size + 1);
-        const value = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), index, bytes);
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), index, bytes);
+        const value = if (signed) signExtendRuntime(element, @intCast(u6, bytes * 8)) else element;
         self.writeSized(wide, regFromWord(word), value, false);
         self.state.pc +%= 4;
         return true;
@@ -2003,6 +2012,16 @@ fn spreadVectorElement(value: u64, lane: u6) u64 {
         result |= lane_value << @intCast(u6, shift);
     }
     return result;
+}
+
+fn signExtendRuntime(value: u64, width: u6) u64 {
+    const high = @as(u64, 1) << @intCast(u6, width - 1);
+    const mask = ones(width);
+    const narrowed = value & mask;
+    if ((narrowed & high) != 0) {
+        return narrowed | ~mask;
+    }
+    return narrowed;
 }
 
 fn unsignedDivideSized(wide: bool, left: u64, right: u64) u64 {
