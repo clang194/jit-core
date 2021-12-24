@@ -287,6 +287,13 @@ pub const Core64 = struct {
             if (vector_extract) {
                 return;
             }
+            const vector_insert = self.runVectorInsertElement(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_insert) {
+                return;
+            }
             const vector_add = self.runVectorAdd(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1340,6 +1347,32 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorInsertElement(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffe08400) != 0x6e000400) {
+            return false;
+        }
+
+        const imm5 = @intCast(u5, (word >> 16) & 0x1f);
+        if (imm5 == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const size = lowestSetBit5(imm5);
+        if (size > 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const bytes = @as(usize, 1) << size;
+        const target_index = @as(usize, imm5) >> @intCast(u3, size + 1);
+        const source_index = @as(usize, (word >> 11) & 0xf) >> size;
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), source_index, bytes);
+        var result = self.state.readVector(vectorRegFromWord(word));
+        setVectorElement(&result, target_index, bytes, element);
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf20fc00) != 0x0e208400) {
             return false;
@@ -2276,6 +2309,13 @@ fn vectorElement(value: a64_state.VectorValue, index: usize, bytes: usize) u64 {
         result |= @as(u64, vectorByte(value, index * bytes + byte_index)) << @intCast(u6, byte_index * 8);
     }
     return result;
+}
+
+fn setVectorElement(value: *a64_state.VectorValue, index: usize, bytes: usize, element: u64) void {
+    var byte_index: usize = 0;
+    while (byte_index < bytes) : (byte_index += 1) {
+        setVectorByte(value, index * bytes + byte_index, @intCast(u8, (element >> @intCast(u6, byte_index * 8)) & 0xff));
+    }
 }
 
 fn setVectorByte(value: *a64_state.VectorValue, index: usize, byte: u8) void {
