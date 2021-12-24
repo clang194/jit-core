@@ -287,6 +287,13 @@ pub const Core64 = struct {
             if (vector_extract) {
                 return;
             }
+            const register_insert = self.runRegisterInsertElement(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (register_insert) {
+                return;
+            }
             const vector_insert = self.runVectorInsertElement(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1343,6 +1350,31 @@ pub const Core64 = struct {
         const element = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), index, bytes);
         const value = if (signed) signExtendRuntime(element, @intCast(u6, bytes * 8)) else element;
         self.writeSized(wide, regFromWord(word), value, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runRegisterInsertElement(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffe0fc00) != 0x4e001c00) {
+            return false;
+        }
+
+        const imm5 = @intCast(u5, (word >> 16) & 0x1f);
+        if (imm5 == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const size = lowestSetBit5(imm5);
+        if (size > 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const bytes = @as(usize, 1) << size;
+        const index = @as(usize, imm5) >> @intCast(u3, size + 1);
+        const element = self.readSized(bytes == 8, regFromWord(word >> 5), false);
+        var result = self.state.readVector(vectorRegFromWord(word));
+        setVectorElement(&result, index, bytes, element);
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }
