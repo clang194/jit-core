@@ -256,6 +256,13 @@ pub const Core64 = struct {
             if (float_convert) {
                 return;
             }
+            const float_to_integer = self.runFloatToInteger(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_to_integer) {
+                return;
+            }
             const float_binary = self.runFloatBinary(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1273,6 +1280,31 @@ pub const Core64 = struct {
         else
             @as(u64, float64To32(control, source.low));
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runFloatToInteger(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0x7f3ffc00;
+        if (masked != 0x1e380000 and masked != 0x1e390000) {
+            return false;
+        }
+
+        const mode = @intCast(u2, (word >> 22) & 3);
+        if (mode > 1) {
+            return error.UnallocatedEncoding;
+        }
+        if ((word & 0x80000000) != 0) {
+            return false;
+        }
+
+        const control = self.state.floatControl();
+        const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (mode == 1) @as(usize, 8) else @as(usize, 4));
+        const result = if (masked == 0x1e380000)
+            floatToSignedWord(control, mode == 1, input)
+        else
+            floatToUnsignedWord(control, mode == 1, input);
+        self.writeSized(false, regFromWord(word), @as(u64, result), false);
         self.state.pc +%= 4;
         return true;
     }
@@ -2311,6 +2343,37 @@ fn float32To64(control: a64_state.FloatControl, value: u32) u64 {
 fn float64To32(control: a64_state.FloatControl, value: u64) u32 {
     const input = @bitCast(f64, floatInput64(control, value));
     return floatOutput32(control, @bitCast(u32, @floatCast(f32, input)));
+}
+
+fn floatToSignedWord(control: a64_state.FloatControl, double: bool, value: u64) u32 {
+    const number = if (double)
+        @bitCast(f64, floatInput64(control, value))
+    else
+        @as(f64, @bitCast(f32, floatInput32(control, @intCast(u32, value))));
+    if (number != number) {
+        return 0;
+    }
+    if (number <= @as(f64, -2147483648.0)) {
+        return 0x80000000;
+    }
+    if (number >= @as(f64, 2147483647.0)) {
+        return 0x7fffffff;
+    }
+    return @bitCast(u32, @floatToInt(i32, number));
+}
+
+fn floatToUnsignedWord(control: a64_state.FloatControl, double: bool, value: u64) u32 {
+    const number = if (double)
+        @bitCast(f64, floatInput64(control, value))
+    else
+        @as(f64, @bitCast(f32, floatInput32(control, @intCast(u32, value))));
+    if (number != number or number <= @as(f64, 0.0)) {
+        return 0;
+    }
+    if (number >= @as(f64, 4294967295.0)) {
+        return 0xffffffff;
+    }
+    return @floatToInt(u32, number);
 }
 
 fn floatAdd(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
