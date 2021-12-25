@@ -249,6 +249,13 @@ pub const Core64 = struct {
             if (float_immediate) {
                 return;
             }
+            const float_unary = self.runFloatUnary(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_unary) {
+                return;
+            }
             const float_convert = self.runFloatConvert(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1269,6 +1276,23 @@ pub const Core64 = struct {
             else => return error.UnallocatedEncoding,
         };
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runFloatUnary(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff3ffc00) != 0x1e20c000) {
+            return false;
+        }
+
+        const mode = @intCast(u2, (word >> 22) & 3);
+        if (mode > 1) {
+            return error.UnallocatedEncoding;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        const result = if (mode == 1) source & 0x7fffffffffffffff else @as(u64, @intCast(u32, source) & 0x7fffffff);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
     }
