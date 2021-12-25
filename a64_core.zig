@@ -284,6 +284,13 @@ pub const Core64 = struct {
             if (float_compare) {
                 return;
             }
+            const float_select = self.runFloatSelect(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_select) {
+                return;
+            }
             if (self.runAesRound(word)) {
                 return;
             }
@@ -1384,6 +1391,25 @@ pub const Core64 = struct {
         const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
         const right = if ((word & 0x8) != 0) @as(u64, 0) else vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
         self.state.writeNzcv(compareFloat(control, double, left, right));
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runFloatSelect(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff200c00) != 0x1e200c00) {
+            return false;
+        }
+
+        const mode = @intCast(u2, (word >> 22) & 3);
+        if (mode > 1) {
+            return error.UnallocatedEncoding;
+        }
+
+        const bytes = if (mode == 1) @as(usize, 8) else @as(usize, 4);
+        const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
+        const result = if (self.conditionHolds(@intCast(u4, (word >> 12) & 0xf))) left else right;
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
     }
