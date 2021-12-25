@@ -235,6 +235,9 @@ pub const Core64 = struct {
             if (self.runConditionalSelect(word)) {
                 return;
             }
+            if (self.runConditionalCompare(word)) {
+                return;
+            }
             const byte_reverse = self.runByteReverse(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1235,6 +1238,23 @@ pub const Core64 = struct {
         else
             altered;
         self.writeSized(wide, regFromWord(word), value, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runConditionalCompare(self: *Core64, word: u32) bool {
+        if ((word & 0x7fe00c10) != 0x3a400000) {
+            return false;
+        }
+
+        if (self.conditionHolds(@intCast(u4, (word >> 12) & 0xf))) {
+            const wide = (word & 0x80000000) != 0;
+            const left = self.readSized(wide, regFromWord(word >> 5), false);
+            const right = self.readSized(wide, regFromWord(word >> 16), false);
+            self.writeNzcv(wide, mathAdd(wide, left, right, false));
+        } else {
+            self.state.writeNzcv(@as(u32, word & 0xf) << 28);
+        }
         self.state.pc +%= 4;
         return true;
     }
