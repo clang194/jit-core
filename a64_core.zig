@@ -509,6 +509,10 @@ pub const Core64 = struct {
             return try self.runVectorLoadStoreRegister(word, offset, false, false);
         }
 
+        if ((word & 0x3f200c00) == 0x38200800) {
+            return try self.runLoadStoreRegisterOffset(word);
+        }
+
         if ((word & 0x3f200c00) == 0x38000800) {
             return try self.runLoadStoreUnprivileged(word);
         }
@@ -577,6 +581,50 @@ pub const Core64 = struct {
             }
             self.writeSized(true, base_reg, address, true);
         }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runLoadStoreRegisterOffset(self: *Core64, word: u32) Core64Error!bool {
+        const option = @intCast(u3, (word >> 13) & 7);
+        if ((option & 2) == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const size = @intCast(u2, word >> 30);
+        const opcode = @intCast(u2, (word >> 22) & 3);
+        const base_reg = regFromWord(word >> 5);
+        const data_reg = regFromWord(word);
+        const bytes = @as(usize, 1) << size;
+
+        if ((opcode & 2) != 0 and size == 3) {
+            if ((opcode & 1) != 0) {
+                return error.UnallocatedEncoding;
+            }
+            self.state.pc +%= 4;
+            return true;
+        }
+        if ((opcode & 2) != 0 and size == 2 and (opcode & 1) != 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const shift = if (((word >> 12) & 1) != 0) @intCast(u3, size) else @as(u3, 0);
+        const offset = self.extendedReg(true, regFromWord(word >> 16), option, shift);
+        const address = self.readSized(true, base_reg, true) +% offset;
+
+        if ((opcode & 2) == 0) {
+            if ((opcode & 1) == 0) {
+                try self.writeMemory(address, bytes, self.readSized(size == 3, data_reg, false));
+            } else {
+                const value = try self.readMemory(address, bytes);
+                self.writeSized(size == 3, data_reg, value, false);
+            }
+        } else {
+            const value = try self.readMemory(address, bytes);
+            const extended = @bitCast(u64, bits.signExtend64(value, @intCast(u6, bytes * 8)));
+            self.writeSized((opcode & 1) == 0, data_reg, extended, false);
+        }
+
         self.state.pc +%= 4;
         return true;
     }
