@@ -1244,15 +1244,15 @@ pub const Core64 = struct {
 
     fn runConditionalCompare(self: *Core64, word: u32) bool {
         const masked = word & 0x7fe00c10;
-        if (masked != 0x3a400000 and masked != 0x7a400000 and masked != 0x3a400800) {
+        if (masked != 0x3a400000 and masked != 0x7a400000 and masked != 0x3a400800 and masked != 0x7a400800) {
             return false;
         }
 
         if (self.conditionHolds(@intCast(u4, (word >> 12) & 0xf))) {
             const wide = (word & 0x80000000) != 0;
             const left = self.readSized(wide, regFromWord(word >> 5), false);
-            const right = if (masked == 0x3a400800) @as(u64, (word >> 16) & 0x1f) else self.readSized(wide, regFromWord(word >> 16), false);
-            const result = if (masked == 0x7a400000) mathSub(wide, left, right, true) else mathAdd(wide, left, right, false);
+            const right = if ((masked & 0x800) != 0) @as(u64, (word >> 16) & 0x1f) else self.readSized(wide, regFromWord(word >> 16), false);
+            const result = if ((masked & 0x40000000) != 0) mathSub(wide, left, right, true) else mathAdd(wide, left, right, false);
             self.writeNzcv(wide, result);
         } else {
             self.state.writeNzcv(@as(u32, word & 0xf) << 28);
