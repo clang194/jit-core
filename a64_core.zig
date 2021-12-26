@@ -1475,7 +1475,7 @@ pub const Core64 = struct {
     }
 
     fn runFloatConditionalCompare(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xff200c10) != 0x1e200400) {
+        if ((word & 0xff200c00) != 0x1e200400) {
             return false;
         }
 
