@@ -1326,7 +1326,7 @@ pub const Core64 = struct {
 
     fn runFloatUnary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff3ffc00;
-        if (masked != 0x1e20c000 and masked != 0x1e214000) {
+        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000) {
             return false;
         }
 
@@ -1337,9 +1337,9 @@ pub const Core64 = struct {
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const result = if (mode == 1)
-            if (masked == 0x1e20c000) source & 0x7fffffffffffffff else source ^ 0x8000000000000000
+            if (masked == 0x1e204000) source else if (masked == 0x1e20c000) source & 0x7fffffffffffffff else source ^ 0x8000000000000000
         else
-            @as(u64, if (masked == 0x1e20c000) @intCast(u32, source) & 0x7fffffff else @intCast(u32, source) ^ 0x80000000);
+            @as(u64, if (masked == 0x1e204000) @intCast(u32, source) else if (masked == 0x1e20c000) @intCast(u32, source) & 0x7fffffff else @intCast(u32, source) ^ 0x80000000);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
