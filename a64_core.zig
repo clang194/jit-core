@@ -508,7 +508,7 @@ pub const Core64 = struct {
     }
 
     fn runLoadStore(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0x3ffffc00) == 0x089ffc00 or (word & 0x3ffffc00) == 0x08dffc00) {
+        if ((word & 0x3ffffc00) == 0x089f7c00 or (word & 0x3ffffc00) == 0x089ffc00 or (word & 0x3ffffc00) == 0x08df7c00 or (word & 0x3ffffc00) == 0x08dffc00) {
             return try self.runOrderedLoadStore(word);
         }
 
@@ -585,7 +585,8 @@ pub const Core64 = struct {
         const bytes = @as(usize, 1) << size;
         const address = self.readSized(true, base_reg, true);
 
-        if ((word & 0x3ffffc00) == 0x089ffc00) {
+        const masked = word & 0x3ffffc00;
+        if (masked == 0x089f7c00 or masked == 0x089ffc00) {
             try self.writeMemory(address, bytes, self.readSized(size == 3, data_reg, false));
         } else {
             const value = try self.readMemory(address, bytes);
