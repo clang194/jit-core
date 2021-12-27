@@ -1783,7 +1783,7 @@ pub const Core64 = struct {
 
     fn runVectorAnd(self: *Core64, word: u32) bool {
         const masked = word & 0xbfe0fc00;
-        if (masked != 0x0e201c00 and masked != 0x0ea01c00 and masked != 0x0ee01c00 and masked != 0x2e201c00) {
+        if (masked != 0x0e201c00 and masked != 0x0e601c00 and masked != 0x0ea01c00 and masked != 0x0ee01c00 and masked != 0x2e201c00) {
             return false;
         }
 
@@ -1792,12 +1792,14 @@ pub const Core64 = struct {
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const low = switch (masked) {
             0x0e201c00 => left.low & right.low,
+            0x0e601c00 => left.low & ~right.low,
             0x0ea01c00 => left.low | right.low,
             0x0ee01c00 => left.low | ~right.low,
             else => left.low ^ right.low,
         };
         const high = switch (masked) {
             0x0e201c00 => left.high & right.high,
+            0x0e601c00 => left.high & ~right.high,
             0x0ea01c00 => left.high | right.high,
             0x0ee01c00 => left.high | ~right.high,
             else => left.high ^ right.high,
