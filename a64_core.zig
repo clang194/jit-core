@@ -273,6 +273,13 @@ pub const Core64 = struct {
             if (integer_to_float) {
                 return;
             }
+            const float_general_move = self.runFloatGeneralMove(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_general_move) {
+                return;
+            }
             const float_to_integer = self.runFloatToInteger(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1398,6 +1405,49 @@ pub const Core64 = struct {
         else
             if (masked == 0x1e220000) signedWordToFloat64(input) else unsignedWordToFloat64(input);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runFloatGeneralMove(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x7f36fc00) != 0x1e260000) {
+            return false;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const mode = @intCast(u2, (word >> 22) & 3);
+        const upper = ((word >> 19) & 1) != 0;
+        const to_vector = ((word >> 16) & 1) != 0;
+        const bytes: usize = switch (mode) {
+            0 => 4,
+            1 => 8,
+            2 => if (upper) @as(usize, 8) else return error.UnallocatedEncoding,
+            else => return error.UnallocatedEncoding,
+        };
+
+        if (upper) {
+            if (!wide or mode != 2) {
+                return error.UnallocatedEncoding;
+            }
+        } else if (wide != (bytes == 8)) {
+            return error.UnallocatedEncoding;
+        }
+
+        if (to_vector) {
+            const value = self.readSized(wide, regFromWord(word >> 5), false);
+            if (upper) {
+                var result = self.state.readVector(vectorRegFromWord(word));
+                result.high = value;
+                self.state.writeVector(vectorRegFromWord(word), result);
+            } else {
+                self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value & ones(@intCast(u6, bytes * 8)), .high = 0 });
+            }
+        } else {
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            const value = if (upper) source.high else vectorElement(source, 0, bytes);
+            self.writeSized(wide, regFromWord(word), value, false);
+        }
+
         self.state.pc +%= 4;
         return true;
     }
