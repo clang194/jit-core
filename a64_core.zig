@@ -406,6 +406,9 @@ pub const Core64 = struct {
             if (self.runMultiplyAdd(word)) {
                 return;
             }
+            if (self.runMultiplyHigh(word)) {
+                return;
+            }
             if (self.runLongMultiplyAdd(word)) {
                 return;
             }
@@ -1989,6 +1992,23 @@ pub const Core64 = struct {
         const product = if (wide) left *% right else @as(u64, @intCast(u32, @intCast(u32, left) *% @intCast(u32, right)));
         const result = if ((word & 0x00008000) == 0) addend +% product else addend -% product;
         self.writeSized(wide, regFromWord(word), result, false);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runMultiplyHigh(self: *Core64, word: u32) bool {
+        const masked = word & 0xffe0fc00;
+        if (masked != 0x9b407c00 and masked != 0x9bc07c00) {
+            return false;
+        }
+
+        const left = self.readSized(true, regFromWord(word >> 5), false);
+        const right = self.readSized(true, regFromWord(word >> 16), false);
+        const result = if (masked == 0x9bc07c00)
+            @intCast(u64, (@as(u128, left) * @as(u128, right)) >> 64)
+        else
+            @bitCast(u64, @intCast(i64, (@as(i128, @bitCast(i64, left)) * @as(i128, @bitCast(i64, right))) >> 64));
+        self.writeSized(true, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
     }
