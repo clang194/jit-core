@@ -346,6 +346,13 @@ pub const Core64 = struct {
             if (vector_insert) {
                 return;
             }
+            const vector_immediate = self.runVectorModifiedImmediate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_immediate) {
+                return;
+            }
             const scalar_vector_arithmetic = self.runScalarVectorArithmetic(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1713,6 +1720,50 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorModifiedImmediate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x9ff80c00) != 0x0f000400) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const op = (word & 0x20000000) != 0;
+        const cmode = @intCast(u4, (word >> 12) & 0xf);
+        const imm8 = @intCast(u8, ((word >> 11) & 0xe0) | ((word >> 5) & 0x1f));
+        const selector = (@as(u5, cmode) << 1) | @as(u5, if (op) 1 else 0);
+        const expanded = expandVectorImmediate(op, cmode, imm8);
+        const immediate = a64_state.VectorValue{
+            .low = expanded,
+            .high = if (full) expanded else 0,
+        };
+        const dest = vectorRegFromWord(word);
+        const prior = self.state.readVector(dest);
+        const result = switch (selector) {
+            0, 4, 8, 12, 16, 20, 24, 26, 28, 29, 30 => immediate,
+            31 => blk: {
+                if (!full) {
+                    return error.UnallocatedEncoding;
+                }
+                break :blk immediate;
+            },
+            1, 5, 9, 13, 17, 21, 25, 27 => a64_state.VectorValue{
+                .low = ~expanded,
+                .high = if (full) ~expanded else 0,
+            },
+            2, 6, 10, 14, 18, 22 => a64_state.VectorValue{
+                .low = prior.low | expanded,
+                .high = if (full) prior.high | expanded else 0,
+            },
+            3, 7, 11, 15, 19, 23 => a64_state.VectorValue{
+                .low = prior.low & ~expanded,
+                .high = if (full) prior.high & ~expanded else 0,
+            },
+            else => return error.UnallocatedEncoding,
+        };
+        self.state.writeVector(dest, result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runScalarVectorArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
         if (masked != 0x5e208400 and masked != 0x7e208400) {
@@ -2326,6 +2377,51 @@ fn replicate64(value: u64, element_size: u6) u64 {
         size *= 2;
     }
     return result;
+}
+
+fn expandVectorImmediate(op: bool, cmode: u4, imm8: u8) u64 {
+    const value = @as(u64, imm8);
+    switch (cmode >> 1) {
+        0 => return replicate64(value, 32),
+        1 => return replicate64(value << 8, 32),
+        2 => return replicate64(value << 16, 32),
+        3 => return replicate64(value << 24, 32),
+        4 => return replicate64(value, 16),
+        5 => return replicate64(value << 8, 16),
+        6 => {
+            if ((cmode & 1) == 0) {
+                return replicate64((value << 8) | 0xff, 32);
+            }
+            return replicate64((value << 16) | 0xffff, 32);
+        },
+        else => {
+            if ((cmode & 1) == 0 and !op) {
+                return replicate64(value, 8);
+            }
+            if ((cmode & 1) == 0 and op) {
+                var result: u64 = 0;
+                var index: u3 = 0;
+                while (index < 8) : (index += 1) {
+                    if (((imm8 >> index) & 1) != 0) {
+                        result |= @as(u64, 0xff) << @intCast(u6, @as(u16, index) * 8);
+                    }
+                }
+                return result;
+            }
+            if (!op) {
+                var result: u64 = 0;
+                result |= if ((imm8 & 0x80) != 0) @as(u64, 0x80000000) else 0;
+                result |= if ((imm8 & 0x40) != 0) @as(u64, 0x3e000000) else @as(u64, 0x40000000);
+                result |= @as(u64, imm8 & 0x3f) << 19;
+                return replicate64(result, 32);
+            }
+            var result: u64 = 0;
+            result |= if ((imm8 & 0x80) != 0) @as(u64, 0x8000000000000000) else 0;
+            result |= if ((imm8 & 0x40) != 0) @as(u64, 0x3fc0000000000000) else @as(u64, 0x4000000000000000);
+            result |= @as(u64, imm8 & 0x3f) << 48;
+            return result;
+        },
+    }
 }
 
 fn rotateRight64(value: u64, amount: u6) u64 {
