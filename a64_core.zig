@@ -346,6 +346,13 @@ pub const Core64 = struct {
             if (vector_insert) {
                 return;
             }
+            const scalar_vector_add = self.runScalarVectorAdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_vector_add) {
+                return;
+            }
             const vector_add = self.runVectorAdd(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1702,6 +1709,23 @@ pub const Core64 = struct {
         var result = self.state.readVector(vectorRegFromWord(word));
         setVectorElement(&result, target_index, bytes, element);
         self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runScalarVectorAdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff20fc00) != 0x5e208400) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size != 3) {
+            return error.ReservedInstruction;
+        }
+
+        const left = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        const right = self.state.readVector(vectorRegFromWord(word >> 16)).low;
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = left +% right, .high = 0 });
         self.state.pc +%= 4;
         return true;
     }
