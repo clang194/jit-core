@@ -353,6 +353,13 @@ pub const Core64 = struct {
             if (vector_immediate) {
                 return;
             }
+            const vector_interleave = self.runVectorInterleave(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_interleave) {
+                return;
+            }
             const scalar_vector_arithmetic = self.runScalarVectorArithmetic(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1767,6 +1774,25 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorInterleave(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfe0fc00) != 0x0e003800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const bytes = @as(usize, 1) << size;
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        self.state.writeVector(vectorRegFromWord(word), interleaveLowerVector(left, right, bytes, if (full) @as(usize, 16) else @as(usize, 8)));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runScalarVectorArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
         if (masked != 0x5e208400 and masked != 0x7e208400) {
@@ -2890,6 +2916,17 @@ fn setVectorElement(value: *a64_state.VectorValue, index: usize, bytes: usize, e
         const byte = @intCast(u8, (element >> @intCast(u6, byte_index * 8)) & 0xff);
         setVectorByte(value, index * bytes + byte_index, byte);
     }
+}
+
+fn interleaveLowerVector(left: a64_state.VectorValue, right: a64_state.VectorValue, bytes: usize, total: usize) a64_state.VectorValue {
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    const pairs = total / bytes / 2;
+    var index: usize = 0;
+    while (index < pairs) : (index += 1) {
+        setVectorElement(&result, index * 2, bytes, vectorElement(left, index, bytes));
+        setVectorElement(&result, index * 2 + 1, bytes, vectorElement(right, index, bytes));
+    }
+    return result;
 }
 
 fn encryptAesVector(input: a64_state.VectorValue) a64_state.VectorValue {
