@@ -1889,26 +1889,33 @@ pub const Core64 = struct {
 
     fn runVectorAnd(self: *Core64, word: u32) bool {
         const masked = word & 0xbfe0fc00;
-        if (masked != 0x0e201c00 and masked != 0x0e601c00 and masked != 0x0ea01c00 and masked != 0x0ee01c00 and masked != 0x2e201c00) {
+        if (masked != 0x0e201c00 and masked != 0x0e601c00 and masked != 0x0ea01c00 and masked != 0x0ee01c00 and masked != 0x2e201c00 and masked != 0x2e601c00 and masked != 0x2ea01c00 and masked != 0x2ee01c00) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const prior = self.state.readVector(vectorRegFromWord(word));
         const low = switch (masked) {
             0x0e201c00 => left.low & right.low,
             0x0e601c00 => left.low & ~right.low,
             0x0ea01c00 => left.low | right.low,
             0x0ee01c00 => left.low | ~right.low,
-            else => left.low ^ right.low,
+            0x2e201c00 => left.low ^ right.low,
+            0x2e601c00 => right.low ^ ((right.low ^ left.low) & prior.low),
+            0x2ea01c00 => prior.low ^ ((prior.low ^ left.low) & right.low),
+            else => prior.low ^ ((prior.low ^ left.low) & ~right.low),
         };
         const high = switch (masked) {
             0x0e201c00 => left.high & right.high,
             0x0e601c00 => left.high & ~right.high,
             0x0ea01c00 => left.high | right.high,
             0x0ee01c00 => left.high | ~right.high,
-            else => left.high ^ right.high,
+            0x2e201c00 => left.high ^ right.high,
+            0x2e601c00 => right.high ^ ((right.high ^ left.high) & prior.high),
+            0x2ea01c00 => prior.high ^ ((prior.high ^ left.high) & right.high),
+            else => prior.high ^ ((prior.high ^ left.high) & ~right.high),
         };
         const result = a64_state.VectorValue{
             .low = low,
