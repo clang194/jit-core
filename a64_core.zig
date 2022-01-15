@@ -1802,7 +1802,7 @@ pub const Core64 = struct {
 
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f00a400) {
+        if (masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -1831,15 +1831,23 @@ pub const Core64 = struct {
 
         const lane = @as(u6, 8) << @intCast(u3, highestSetBit(immh));
         const immediate = @intCast(u8, (word >> 16) & 0x7f);
-        const amount = if (masked == 0x2f000400)
+        const right = masked == 0x2f000400 or masked == 0x2f001400;
+        const amount = if (right)
             @intCast(u6, @intCast(u8, @as(u16, lane) * 2) - immediate)
         else
             @intCast(u6, immediate - @intCast(u8, lane));
         const input = self.state.readVector(vectorRegFromWord(word >> 5));
-        const result = a64_state.VectorValue{
-            .low = if (masked == 0x2f000400) shiftRightVectorLanes(input.low, lane, amount) else shiftLeftVectorLanes(input.low, lane, amount),
-            .high = if (full) if (masked == 0x2f000400) shiftRightVectorLanes(input.high, lane, amount) else shiftLeftVectorLanes(input.high, lane, amount) else 0,
+        const shifted = a64_state.VectorValue{
+            .low = if (right) shiftRightVectorLanes(input.low, lane, amount) else shiftLeftVectorLanes(input.low, lane, amount),
+            .high = if (full) if (right) shiftRightVectorLanes(input.high, lane, amount) else shiftLeftVectorLanes(input.high, lane, amount) else 0,
         };
+        const result = if (masked == 0x2f001400) blk: {
+            const target = self.state.readVector(vectorRegFromWord(word));
+            break :blk a64_state.VectorValue{
+                .low = addVectorLanes(target.low, shifted.low, lane),
+                .high = if (full) addVectorLanes(target.high, shifted.high, lane) else 0,
+            };
+        } else shifted;
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
@@ -3156,6 +3164,22 @@ fn shiftRightVectorLanes(value: u64, lane: u6, amount: u6) u64 {
         const position = @intCast(u6, shift);
         const element = (value >> position) & mask;
         result |= (element >> amount) << position;
+    }
+    return result;
+}
+
+fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
+    if (lane == 64) {
+        return left +% right;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const sum = ((left >> position) & mask) +% ((right >> position) & mask);
+        result |= (sum & mask) << position;
     }
     return result;
 }
