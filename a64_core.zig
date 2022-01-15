@@ -1802,7 +1802,7 @@ pub const Core64 = struct {
 
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f005400 and masked != 0x2f00a400) {
+        if (masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -1831,11 +1831,14 @@ pub const Core64 = struct {
 
         const lane = @as(u6, 8) << @intCast(u3, highestSetBit(immh));
         const immediate = @intCast(u8, (word >> 16) & 0x7f);
-        const amount = @intCast(u6, immediate - @intCast(u8, lane));
+        const amount = if (masked == 0x2f000400)
+            @intCast(u6, @intCast(u8, @as(u16, lane) * 2) - immediate)
+        else
+            @intCast(u6, immediate - @intCast(u8, lane));
         const input = self.state.readVector(vectorRegFromWord(word >> 5));
         const result = a64_state.VectorValue{
-            .low = shiftLeftVectorLanes(input.low, lane, amount),
-            .high = if (full) shiftLeftVectorLanes(input.high, lane, amount) else 0,
+            .low = if (masked == 0x2f000400) shiftRightVectorLanes(input.low, lane, amount) else shiftLeftVectorLanes(input.low, lane, amount),
+            .high = if (full) if (masked == 0x2f000400) shiftRightVectorLanes(input.high, lane, amount) else shiftLeftVectorLanes(input.high, lane, amount) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
@@ -3134,6 +3137,25 @@ fn shiftLeftVectorLanes(value: u64, lane: u6, amount: u6) u64 {
         const position = @intCast(u6, shift);
         const element = (value >> position) & mask;
         result |= ((element << amount) & mask) << position;
+    }
+    return result;
+}
+
+fn shiftRightVectorLanes(value: u64, lane: u6, amount: u6) u64 {
+    if (amount >= lane) {
+        return 0;
+    }
+    if (lane == 64) {
+        return value >> amount;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        result |= (element >> amount) << position;
     }
     return result;
 }
