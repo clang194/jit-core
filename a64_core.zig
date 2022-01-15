@@ -1801,7 +1801,8 @@ pub const Core64 = struct {
     }
 
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf80fc00) != 0x0f005400) {
+        const masked = word & 0xbf80fc00;
+        if (masked != 0x0f005400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -1809,6 +1810,20 @@ pub const Core64 = struct {
         const immh = @intCast(u4, (word >> 19) & 0xf);
         if (immh == 0) {
             return error.UnallocatedEncoding;
+        }
+        if (masked == 0x2f00a400) {
+            if ((immh & 8) != 0) {
+                return error.ReservedInstruction;
+            }
+
+            const lane = @as(u6, 8) << @intCast(u3, highestSetBit(immh));
+            const immediate = @intCast(u8, (word >> 16) & 0x7f);
+            const amount = @intCast(u6, immediate - @intCast(u8, lane));
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            const half = if (full) source.high else source.low;
+            self.state.writeVector(vectorRegFromWord(word), widenShiftLeftVectorHalf(half, lane, amount));
+            self.state.pc +%= 4;
+            return true;
         }
         if ((immh & 8) != 0 and !full) {
             return error.ReservedInstruction;
@@ -3119,6 +3134,21 @@ fn shiftLeftVectorLanes(value: u64, lane: u6, amount: u6) u64 {
         const position = @intCast(u6, shift);
         const element = (value >> position) & mask;
         result |= ((element << amount) & mask) << position;
+    }
+    return result;
+}
+
+fn widenShiftLeftVectorHalf(value: u64, lane: u6, amount: u6) a64_state.VectorValue {
+    const output_lane = @intCast(u6, @as(u8, lane) * 2);
+    const input_mask = ones(lane);
+    const output_mask = ones(output_lane);
+    const output_bytes = @intCast(usize, output_lane / 8);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < 64 / @as(usize, lane)) : (index += 1) {
+        const input_shift = @intCast(u6, index * @as(usize, lane));
+        const element = (value >> input_shift) & input_mask;
+        setVectorElement(&result, index, output_bytes, (element << amount) & output_mask);
     }
     return result;
 }
