@@ -1478,7 +1478,7 @@ pub const Core64 = struct {
                 result.high = value;
                 self.state.writeVector(vectorRegFromWord(word), result);
             } else {
-                self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value & ones(@intCast(u6, bytes * 8)), .high = 0 });
+                self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value & ones(@intCast(u8, bytes * 8)), .high = 0 });
             }
         } else {
             const source = self.state.readVector(vectorRegFromWord(word >> 5));
@@ -1648,7 +1648,7 @@ pub const Core64 = struct {
             return error.ReservedInstruction;
         }
 
-        const lane = @as(u6, 8) << size;
+        const lane = @as(u8, 8) << size;
         const value = self.readSized(lane == 64, regFromWord(word >> 5), false) & ones(lane);
         const half = spreadVectorElement(value, lane);
         const result = a64_state.VectorValue{
@@ -1833,7 +1833,7 @@ pub const Core64 = struct {
 
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
+        if (masked != 0x0f000400 and masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -1847,7 +1847,7 @@ pub const Core64 = struct {
                 return error.ReservedInstruction;
             }
 
-            const lane = @as(u6, 8) << @intCast(u3, highestSetBit(immh));
+            const lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));
             const immediate = @intCast(u8, (word >> 16) & 0x7f);
             const amount = @intCast(u6, immediate - @intCast(u8, lane));
             const source = self.state.readVector(vectorRegFromWord(word >> 5));
@@ -1860,17 +1860,18 @@ pub const Core64 = struct {
             return error.ReservedInstruction;
         }
 
-        const lane = @as(u6, 8) << @intCast(u3, highestSetBit(immh));
+        const lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));
         const immediate = @intCast(u8, (word >> 16) & 0x7f);
-        const right = masked == 0x2f000400 or masked == 0x2f001400;
+        const signed_right = masked == 0x0f000400;
+        const right = signed_right or masked == 0x2f000400 or masked == 0x2f001400;
         const amount = if (right)
-            @intCast(u6, @intCast(u8, @as(u16, lane) * 2) - immediate)
+            @intCast(u8, @as(u16, lane) * 2 - immediate)
         else
-            @intCast(u6, immediate - @intCast(u8, lane));
+            immediate - @intCast(u8, lane);
         const input = self.state.readVector(vectorRegFromWord(word >> 5));
         const shifted = a64_state.VectorValue{
-            .low = if (right) shiftRightVectorLanes(input.low, lane, amount) else shiftLeftVectorLanes(input.low, lane, amount),
-            .high = if (full) if (right) shiftRightVectorLanes(input.high, lane, amount) else shiftLeftVectorLanes(input.high, lane, amount) else 0,
+            .low = if (signed_right) shiftRightSignedVectorLanes(input.low, lane, amount) else if (right) shiftRightVectorLanes(input.low, lane, amount) else shiftLeftVectorLanes(input.low, lane, amount),
+            .high = if (full) if (signed_right) shiftRightSignedVectorLanes(input.high, lane, amount) else if (right) shiftRightVectorLanes(input.high, lane, amount) else shiftLeftVectorLanes(input.high, lane, amount) else 0,
         };
         const result = if (masked == 0x2f001400) blk: {
             const target = self.state.readVector(vectorRegFromWord(word));
@@ -1914,7 +1915,7 @@ pub const Core64 = struct {
             return error.ReservedInstruction;
         }
 
-        const lane = @as(u6, 8) << @intCast(u3, size);
+        const lane = @as(u8, 8) << @intCast(u3, size);
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = a64_state.VectorValue{
@@ -1937,7 +1938,7 @@ pub const Core64 = struct {
             return error.ReservedInstruction;
         }
 
-        const lane = @as(u6, 8) << @intCast(u3, size);
+        const lane = @as(u8, 8) << @intCast(u3, size);
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = if (full)
@@ -1966,7 +1967,7 @@ pub const Core64 = struct {
             return error.ReservedInstruction;
         }
 
-        const lane = @as(u6, 8) << @intCast(u3, size);
+        const lane = @as(u8, 8) << @intCast(u3, size);
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = a64_state.VectorValue{
@@ -2479,7 +2480,7 @@ fn decodeBitPattern(n: bool, imms: u6, immr: u6, reject_full: bool) ?BitPattern 
         return null;
     }
 
-    const levels = ones(@intCast(u6, len));
+    const levels = ones(@intCast(u8, len));
     if (reject_full and (@as(u64, imms) & levels) == levels) {
         return null;
     }
@@ -2488,8 +2489,8 @@ fn decodeBitPattern(n: bool, imms: u6, immr: u6, reject_full: bool) ?BitPattern 
     const r = @as(u64, immr) & levels;
     const d = (s -% r) & levels;
     const size = @as(u6, 1) << @intCast(u3, len);
-    const write = rotateRight64(replicate64(ones(@intCast(u6, s + 1)), size), @intCast(u6, r));
-    const limit = replicate64(ones(@intCast(u6, d + 1)), size);
+    const write = rotateRight64(replicate64(ones(@intCast(u8, s + 1)), size), @intCast(u6, r));
+    const limit = replicate64(ones(@intCast(u8, d + 1)), size);
     return BitPattern{
         .write = write,
         .limit = limit,
@@ -2506,11 +2507,11 @@ fn highestSetBit(value: u64) i8 {
     return result;
 }
 
-fn ones(count: u6) u64 {
-    if (count == 64) {
+fn ones(count: u8) u64 {
+    if (count >= 64) {
         return ~@as(u64, 0);
     }
-    return (@as(u64, 1) << count) - 1;
+    return (@as(u64, 1) << @intCast(u6, count)) - 1;
 }
 
 fn replicate64(value: u64, element_size: u6) u64 {
@@ -2634,7 +2635,7 @@ fn lowestSetBit5(value: u5) u3 {
     return bit;
 }
 
-fn spreadVectorElement(value: u64, lane: u6) u64 {
+fn spreadVectorElement(value: u64, lane: u8) u64 {
     if (lane == 64) {
         return value;
     }
@@ -3029,7 +3030,7 @@ fn interleaveLowerVector(left: a64_state.VectorValue, right: a64_state.VectorVal
 
 fn narrowVectorLanes(value: a64_state.VectorValue, bytes: usize) u64 {
     var result: u64 = 0;
-    const mask = ones(@intCast(u6, bytes * 8));
+    const mask = ones(@intCast(u8, bytes * 8));
     var index: usize = 0;
     while (index < 8 / bytes) : (index += 1) {
         const element = vectorElement(value, index, bytes * 2) & mask;
@@ -3116,7 +3117,7 @@ fn mixAesVector(input: a64_state.VectorValue, inverse: bool) a64_state.VectorVal
     return output;
 }
 
-fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
+fn addVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return left +% right;
     }
@@ -3132,7 +3133,7 @@ fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
     return result;
 }
 
-fn equalVectorLanes(left: u64, right: u64, lane: u6) u64 {
+fn equalVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return if (left == right) ~@as(u64, 0) else 0;
     }
@@ -3149,7 +3150,7 @@ fn equalVectorLanes(left: u64, right: u64, lane: u6) u64 {
     return result;
 }
 
-fn pairVectorHalves(first: u64, second: u64, lane: u6) u64 {
+fn pairVectorHalves(first: u64, second: u64, lane: u8) u64 {
     if (lane == 64) {
         return first +% second;
     }
@@ -3157,7 +3158,7 @@ fn pairVectorHalves(first: u64, second: u64, lane: u6) u64 {
     return pairVectorHalf(first, lane) | (pairVectorHalf(second, lane) << @intCast(u6, 32));
 }
 
-fn pairVectorHalf(value: u64, lane: u6) u64 {
+fn pairVectorHalf(value: u64, lane: u8) u64 {
     const mask = ones(lane);
     const lane_step = @intCast(u8, lane);
     var result: u64 = 0;
@@ -3175,28 +3176,12 @@ fn pairVectorHalf(value: u64, lane: u6) u64 {
     return result;
 }
 
-fn shiftLeftVectorLanes(value: u64, lane: u6, amount: u6) u64 {
-    if (lane == 64) {
-        return value << amount;
-    }
-
-    const mask = ones(lane);
-    var result: u64 = 0;
-    var shift: u8 = 0;
-    while (shift < 64) : (shift += lane) {
-        const position = @intCast(u6, shift);
-        const element = (value >> position) & mask;
-        result |= ((element << amount) & mask) << position;
-    }
-    return result;
-}
-
-fn shiftRightVectorLanes(value: u64, lane: u6, amount: u6) u64 {
+fn shiftLeftVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     if (amount >= lane) {
         return 0;
     }
     if (lane == 64) {
-        return value >> amount;
+        return value << @intCast(u6, amount);
     }
 
     const mask = ones(lane);
@@ -3205,13 +3190,49 @@ fn shiftRightVectorLanes(value: u64, lane: u6, amount: u6) u64 {
     while (shift < 64) : (shift += lane) {
         const position = @intCast(u6, shift);
         const element = (value >> position) & mask;
-        result |= (element >> amount) << position;
+        result |= ((element << @intCast(u6, amount)) & mask) << position;
     }
     return result;
 }
 
-fn widenShiftLeftVectorHalf(value: u64, lane: u6, amount: u6) a64_state.VectorValue {
-    const output_lane = @intCast(u6, @as(u8, lane) * 2);
+fn shiftRightVectorLanes(value: u64, lane: u8, amount: u8) u64 {
+    if (amount >= lane) {
+        return 0;
+    }
+    if (lane == 64) {
+        return value >> @intCast(u6, amount);
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        result |= (element >> @intCast(u6, amount)) << position;
+    }
+    return result;
+}
+
+fn shiftRightSignedVectorLanes(value: u64, lane: u8, amount: u8) u64 {
+    const mask = ones(lane);
+    const sign = @as(u64, 1) << @intCast(u6, lane - 1);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const shifted = if ((element & sign) == 0)
+            if (amount >= lane) @as(u64, 0) else element >> @intCast(u6, amount)
+        else
+            if (amount >= lane) mask else (element >> @intCast(u6, amount)) | (mask ^ (mask >> @intCast(u6, amount)));
+        result |= shifted << position;
+    }
+    return result;
+}
+
+fn widenShiftLeftVectorHalf(value: u64, lane: u8, amount: u6) a64_state.VectorValue {
+    const output_lane = lane * 2;
     const input_mask = ones(lane);
     const output_mask = ones(output_lane);
     const output_bytes = @intCast(usize, output_lane / 8);
