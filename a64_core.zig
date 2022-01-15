@@ -360,6 +360,13 @@ pub const Core64 = struct {
             if (vector_interleave) {
                 return;
             }
+            const vector_narrow = self.runVectorNarrow(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_narrow) {
+                return;
+            }
             const vector_shift_immediate = self.runVectorShiftImmediate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1800,6 +1807,30 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorNarrow(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x0e212800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const bytes = @as(usize, 1) << size;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const narrowed = narrowVectorLanes(source, bytes);
+        const result = if (full) blk: {
+            var target = self.state.readVector(vectorRegFromWord(word));
+            target.high = narrowed;
+            break :blk target;
+        } else a64_state.VectorValue{ .low = narrowed, .high = 0 };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
         if (masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
@@ -2996,6 +3027,17 @@ fn interleaveLowerVector(left: a64_state.VectorValue, right: a64_state.VectorVal
     return result;
 }
 
+fn narrowVectorLanes(value: a64_state.VectorValue, bytes: usize) u64 {
+    var result: u64 = 0;
+    const mask = ones(@intCast(u6, bytes * 8));
+    var index: usize = 0;
+    while (index < 8 / bytes) : (index += 1) {
+        const element = vectorElement(value, index, bytes * 2) & mask;
+        result |= element << @intCast(u6, index * bytes * 8);
+    }
+    return result;
+}
+
 fn encryptAesVector(input: a64_state.VectorValue) a64_state.VectorValue {
     var shifted = a64_state.VectorValue{ .low = 0, .high = 0 };
     setVectorByte(&shifted, 0, vectorByte(input, 0));
@@ -3164,22 +3206,6 @@ fn shiftRightVectorLanes(value: u64, lane: u6, amount: u6) u64 {
         const position = @intCast(u6, shift);
         const element = (value >> position) & mask;
         result |= (element >> amount) << position;
-    }
-    return result;
-}
-
-fn addVectorLanes(left: u64, right: u64, lane: u6) u64 {
-    if (lane == 64) {
-        return left +% right;
-    }
-
-    const mask = ones(lane);
-    var result: u64 = 0;
-    var shift: u8 = 0;
-    while (shift < 64) : (shift += lane) {
-        const position = @intCast(u6, shift);
-        const sum = ((left >> position) & mask) +% ((right >> position) & mask);
-        result |= (sum & mask) << position;
     }
     return result;
 }
