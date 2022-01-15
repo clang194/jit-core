@@ -1833,7 +1833,7 @@ pub const Core64 = struct {
 
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f000400 and masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
+        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -1862,7 +1862,7 @@ pub const Core64 = struct {
 
         const lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));
         const immediate = @intCast(u8, (word >> 16) & 0x7f);
-        const signed_right = masked == 0x0f000400;
+        const signed_right = masked == 0x0f000400 or masked == 0x0f001400;
         const right = signed_right or masked == 0x2f000400 or masked == 0x2f001400;
         const amount = if (right)
             @intCast(u8, @as(u16, lane) * 2 - immediate)
@@ -1873,7 +1873,7 @@ pub const Core64 = struct {
             .low = if (signed_right) shiftRightSignedVectorLanes(input.low, lane, amount) else if (right) shiftRightVectorLanes(input.low, lane, amount) else shiftLeftVectorLanes(input.low, lane, amount),
             .high = if (full) if (signed_right) shiftRightSignedVectorLanes(input.high, lane, amount) else if (right) shiftRightVectorLanes(input.high, lane, amount) else shiftLeftVectorLanes(input.high, lane, amount) else 0,
         };
-        const result = if (masked == 0x2f001400) blk: {
+        const result = if (masked == 0x0f001400 or masked == 0x2f001400) blk: {
             const target = self.state.readVector(vectorRegFromWord(word));
             break :blk a64_state.VectorValue{
                 .low = addVectorLanes(target.low, shifted.low, lane),
