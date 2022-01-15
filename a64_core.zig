@@ -360,6 +360,13 @@ pub const Core64 = struct {
             if (vector_interleave) {
                 return;
             }
+            const vector_shift_immediate = self.runVectorShiftImmediate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_shift_immediate) {
+                return;
+            }
             const scalar_vector_arithmetic = self.runScalarVectorArithmetic(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1793,6 +1800,33 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf80fc00) != 0x0f005400) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const immh = @intCast(u4, (word >> 19) & 0xf);
+        if (immh == 0) {
+            return error.UnallocatedEncoding;
+        }
+        if ((immh & 8) != 0 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u6, 8) << @intCast(u3, highestSetBit(immh));
+        const immediate = @intCast(u8, (word >> 16) & 0x7f);
+        const amount = @intCast(u6, immediate - @intCast(u8, lane));
+        const input = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = a64_state.VectorValue{
+            .low = shiftLeftVectorLanes(input.low, lane, amount),
+            .high = if (full) shiftLeftVectorLanes(input.high, lane, amount) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runScalarVectorArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
         if (masked != 0x5e208400 and masked != 0x7e208400) {
@@ -3069,6 +3103,22 @@ fn pairVectorHalf(value: u64, lane: u6) u64 {
         result |= (sum & mask) << output_amount;
         input_shift += lane_step * 2;
         output_shift += lane_step;
+    }
+    return result;
+}
+
+fn shiftLeftVectorLanes(value: u64, lane: u6, amount: u6) u64 {
+    if (lane == 64) {
+        return value << amount;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        result |= ((element << amount) & mask) << position;
     }
     return result;
 }
