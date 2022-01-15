@@ -1905,7 +1905,8 @@ pub const Core64 = struct {
     }
 
     fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf20fc00) != 0x0e208400) {
+        const masked = word & 0xbf20fc00;
+        if (masked != 0x0e208400 and masked != 0x2e208400) {
             return false;
         }
 
@@ -1919,8 +1920,8 @@ pub const Core64 = struct {
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = a64_state.VectorValue{
-            .low = addVectorLanes(left.low, right.low, lane),
-            .high = if (full) addVectorLanes(left.high, right.high, lane) else 0,
+            .low = if (masked == 0x0e208400) addVectorLanes(left.low, right.low, lane) else subtractVectorLanes(left.low, right.low, lane),
+            .high = if (full) if (masked == 0x0e208400) addVectorLanes(left.high, right.high, lane) else subtractVectorLanes(left.high, right.high, lane) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
@@ -3129,6 +3130,22 @@ fn addVectorLanes(left: u64, right: u64, lane: u8) u64 {
         const amount = @intCast(u6, shift);
         const sum = ((left >> amount) & mask) +% ((right >> amount) & mask);
         result |= (sum & mask) << amount;
+    }
+    return result;
+}
+
+fn subtractVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return left -% right;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const difference = ((left >> amount) & mask) -% ((right >> amount) & mask);
+        result |= (difference & mask) << amount;
     }
     return result;
 }
