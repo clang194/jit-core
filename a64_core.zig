@@ -17,6 +17,18 @@ pub const FaultKind64 = enum {
     unpredictable_instruction,
 };
 
+pub const CacheAction64 = enum {
+    clean_invalidate_set_way,
+    clean_invalidate_address,
+    clean_set_way,
+    clean_address_inner,
+    clean_address_unified,
+    clean_address_persistent,
+    invalidate_set_way,
+    invalidate_address,
+    zero_address,
+};
+
 pub const MemoryHooks64 = struct {
     readCode: ?fn (u64, ?*c_void) u32,
     read8: ?fn (u64, ?*c_void) u8,
@@ -66,6 +78,8 @@ pub const HostHooks64 = struct {
     fallback: ?fn (u64, usize, *a64_state.MachineState64, ?*c_void) void,
     supervisor: ?fn (u32, *a64_state.MachineState64, ?*c_void) void,
     exception: ?fn (u64, FaultKind64, ?*c_void) void,
+    cache: ?fn (CacheAction64, u64, ?*c_void) void,
+    zero_cache_block_words_log2: u4,
     cycles: CycleHooks,
     context: ?*c_void,
 
@@ -75,6 +89,8 @@ pub const HostHooks64 = struct {
             .fallback = null,
             .supervisor = null,
             .exception = null,
+            .cache = null,
+            .zero_cache_block_words_log2 = 4,
             .cycles = CycleHooks.empty(),
             .context = null,
         };
@@ -433,6 +449,13 @@ pub const Core64 = struct {
                 return;
             }
             if (self.runVariableShift(word)) {
+                return;
+            }
+            const cache_maintenance = self.runCacheMaintenance(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (cache_maintenance) {
                 return;
             }
             if (self.runSystemHint(word)) {
@@ -2216,6 +2239,45 @@ pub const Core64 = struct {
     fn runSystemHint(self: *Core64, word: u32) bool {
         if ((word & 0xfffff01f) != 0xd503201f) {
             return false;
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runCacheMaintenance(self: *Core64, word: u32) Core64Error!bool {
+        const action = switch (word & 0xffffffe0) {
+            0xd5087620 => CacheAction64.invalidate_address,
+            0xd5087640 => CacheAction64.invalidate_set_way,
+            0xd5087a40 => CacheAction64.clean_set_way,
+            0xd5087e40 => CacheAction64.clean_invalidate_set_way,
+            0xd50b7420 => CacheAction64.zero_address,
+            0xd50b7a20 => CacheAction64.clean_address_inner,
+            0xd50b7b20 => CacheAction64.clean_address_unified,
+            0xd50b7c20 => CacheAction64.clean_address_persistent,
+            0xd50b7e20 => CacheAction64.clean_invalidate_address,
+            else => return false,
+        };
+        const address = self.readSized(true, regFromWord(word), false);
+        if (self.hooks.cache) |callback| {
+            callback(action, address, self.hooks.context);
+        } else if (action == .zero_address) {
+            var current = address;
+            var remaining = @intCast(usize, @as(u64, 4) << @intCast(u6, self.hooks.zero_cache_block_words_log2));
+            while (remaining >= 16) {
+                try self.writeMemoryVector(current, a64_state.VectorValue{ .low = 0, .high = 0 });
+                current +%= 16;
+                remaining -= 16;
+            }
+            while (remaining >= 8) {
+                try self.writeMemory(current, 8, 0);
+                current +%= 8;
+                remaining -= 8;
+            }
+            while (remaining >= 4) {
+                try self.writeMemory(current, 4, 0);
+                current +%= 4;
+                remaining -= 4;
+            }
         }
         self.state.pc +%= 4;
         return true;
