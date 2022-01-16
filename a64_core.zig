@@ -458,6 +458,9 @@ pub const Core64 = struct {
             if (cache_maintenance) {
                 return;
             }
+            if (self.runBarrier(word)) {
+                return;
+            }
             if (self.runSystemHint(word)) {
                 return;
             }
@@ -2238,6 +2241,15 @@ pub const Core64 = struct {
 
     fn runSystemHint(self: *Core64, word: u32) bool {
         if ((word & 0xfffff01f) != 0xd503201f) {
+            return false;
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runBarrier(self: *Core64, word: u32) bool {
+        const masked = word & 0xfffff0ff;
+        if (masked != 0xd503309f and masked != 0xd50330bf) {
             return false;
         }
         self.state.pc +%= 4;
