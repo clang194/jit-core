@@ -1950,20 +1950,26 @@ pub const Core64 = struct {
 
     fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
-        if (masked != 0x0e208400 and masked != 0x0e209c00 and masked != 0x2e208400) {
+        if (masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e208400) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const size = @intCast(u2, (word >> 22) & 3);
-        if (size == 3 and (masked == 0x0e209c00 or !full)) {
+        if (size == 3 and (masked == 0x0e209400 or masked == 0x0e209c00 or !full)) {
             return error.ReservedInstruction;
         }
 
         const lane = @as(u8, 8) << @intCast(u3, size);
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
-        const result = a64_state.VectorValue{
+        const result = if (masked == 0x0e209400) blk: {
+            const prior = self.state.readVector(vectorRegFromWord(word));
+            break :blk a64_state.VectorValue{
+                .low = addVectorLanes(prior.low, multiplyVectorLanes(left.low, right.low, lane), lane),
+                .high = if (full) addVectorLanes(prior.high, multiplyVectorLanes(left.high, right.high, lane), lane) else 0,
+            };
+        } else a64_state.VectorValue{
             .low = if (masked == 0x0e208400) addVectorLanes(left.low, right.low, lane) else if (masked == 0x0e209c00) multiplyVectorLanes(left.low, right.low, lane) else subtractVectorLanes(left.low, right.low, lane),
             .high = if (full) if (masked == 0x0e208400) addVectorLanes(left.high, right.high, lane) else if (masked == 0x0e209c00) multiplyVectorLanes(left.high, right.high, lane) else subtractVectorLanes(left.high, right.high, lane) else 0,
         };
