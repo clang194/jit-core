@@ -596,6 +596,10 @@ pub const Core64 = struct {
             return try self.runVectorLoadStoreRegister(word, offset, false, false);
         }
 
+        if ((word & 0x3f200c00) == 0x3c200800) {
+            return try self.runVectorLoadStoreRegisterOffset(word);
+        }
+
         if ((word & 0x3f200c00) == 0x38200800) {
             return try self.runLoadStoreRegisterOffset(word);
         }
@@ -729,6 +733,46 @@ pub const Core64 = struct {
             const value = try self.readMemory(address, bytes);
             const extended = @bitCast(u64, bits.signExtend64(value, @intCast(u6, bytes * 8)));
             self.writeSized((opcode & 1) == 0, data_reg, extended, false);
+        }
+
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runVectorLoadStoreRegisterOffset(self: *Core64, word: u32) Core64Error!bool {
+        const option = @intCast(u3, (word >> 13) & 7);
+        if ((option & 2) == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const scale = @intCast(u3, ((word >> 30) & 3) | (((word >> 23) & 1) << 2));
+        if (scale > 4) {
+            return error.UnallocatedEncoding;
+        }
+
+        const base_reg = regFromWord(word >> 5);
+        const data_reg = vectorRegFromWord(word);
+        const bytes = @as(usize, 1) << scale;
+        const shift = if (((word >> 12) & 1) != 0) scale else @as(u3, 0);
+        const offset = self.extendedReg(true, regFromWord(word >> 16), option, shift);
+        const address = self.readSized(true, base_reg, true) +% offset;
+
+        if (((word >> 22) & 1) != 0) {
+            const value = if (bytes == 16)
+                try self.readMemoryVector(address)
+            else
+                a64_state.VectorValue{
+                    .low = try self.readMemory(address, bytes),
+                    .high = 0,
+                };
+            self.state.writeVector(data_reg, value);
+        } else {
+            const value = self.state.readVector(data_reg);
+            if (bytes == 16) {
+                try self.writeMemoryVector(address, value);
+            } else {
+                try self.writeMemory(address, bytes, value.low);
+            }
         }
 
         self.state.pc +%= 4;
