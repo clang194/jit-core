@@ -1950,13 +1950,13 @@ pub const Core64 = struct {
 
     fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
-        if (masked != 0x0e208400 and masked != 0x2e208400) {
+        if (masked != 0x0e208400 and masked != 0x0e209c00 and masked != 0x2e208400) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const size = @intCast(u2, (word >> 22) & 3);
-        if (size == 3 and !full) {
+        if (size == 3 and (masked == 0x0e209c00 or !full)) {
             return error.ReservedInstruction;
         }
 
@@ -1964,8 +1964,8 @@ pub const Core64 = struct {
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = a64_state.VectorValue{
-            .low = if (masked == 0x0e208400) addVectorLanes(left.low, right.low, lane) else subtractVectorLanes(left.low, right.low, lane),
-            .high = if (full) if (masked == 0x0e208400) addVectorLanes(left.high, right.high, lane) else subtractVectorLanes(left.high, right.high, lane) else 0,
+            .low = if (masked == 0x0e208400) addVectorLanes(left.low, right.low, lane) else if (masked == 0x0e209c00) multiplyVectorLanes(left.low, right.low, lane) else subtractVectorLanes(left.low, right.low, lane),
+            .high = if (full) if (masked == 0x0e208400) addVectorLanes(left.high, right.high, lane) else if (masked == 0x0e209c00) multiplyVectorLanes(left.high, right.high, lane) else subtractVectorLanes(left.high, right.high, lane) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
@@ -3190,6 +3190,22 @@ fn subtractVectorLanes(left: u64, right: u64, lane: u8) u64 {
         const amount = @intCast(u6, shift);
         const difference = ((left >> amount) & mask) -% ((right >> amount) & mask);
         result |= (difference & mask) << amount;
+    }
+    return result;
+}
+
+fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return left *% right;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const product = ((left >> amount) & mask) *% ((right >> amount) & mask);
+        result |= (product & mask) << amount;
     }
     return result;
 }
