@@ -1933,7 +1933,7 @@ pub const Core64 = struct {
 
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
+        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f005400 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -1942,7 +1942,7 @@ pub const Core64 = struct {
         if (immh == 0) {
             return error.UnallocatedEncoding;
         }
-        if (masked == 0x2f00a400) {
+        if (masked == 0x0f00a400 or masked == 0x2f00a400) {
             if ((immh & 8) != 0) {
                 return error.ReservedInstruction;
             }
@@ -1952,7 +1952,11 @@ pub const Core64 = struct {
             const amount = @intCast(u6, immediate - @intCast(u8, lane));
             const source = self.state.readVector(vectorRegFromWord(word >> 5));
             const half = if (full) source.high else source.low;
-            self.state.writeVector(vectorRegFromWord(word), widenShiftLeftVectorHalf(half, lane, amount));
+            const result = if (masked == 0x0f00a400)
+                widenSignedShiftLeftVectorHalf(half, lane, amount)
+            else
+                widenShiftLeftVectorHalf(half, lane, amount);
+            self.state.writeVector(vectorRegFromWord(word), result);
             self.state.pc +%= 4;
             return true;
         }
@@ -3410,6 +3414,21 @@ fn widenShiftLeftVectorHalf(value: u64, lane: u8, amount: u6) a64_state.VectorVa
     while (index < 64 / @as(usize, lane)) : (index += 1) {
         const input_shift = @intCast(u6, index * @as(usize, lane));
         const element = (value >> input_shift) & input_mask;
+        setVectorElement(&result, index, output_bytes, (element << amount) & output_mask);
+    }
+    return result;
+}
+
+fn widenSignedShiftLeftVectorHalf(value: u64, lane: u8, amount: u6) a64_state.VectorValue {
+    const output_lane = lane * 2;
+    const input_mask = ones(lane);
+    const output_mask = ones(output_lane);
+    const output_bytes = @intCast(usize, output_lane / 8);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < 64 / @as(usize, lane)) : (index += 1) {
+        const input_shift = @intCast(u6, index * @as(usize, lane));
+        const element = signExtendRuntime((value >> input_shift) & input_mask, @intCast(u6, lane));
         setVectorElement(&result, index, output_bytes, (element << amount) & output_mask);
     }
     return result;
