@@ -1914,7 +1914,8 @@ pub const Core64 = struct {
     }
 
     fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfa0fc00) != 0x0ea0d400) {
+        const masked = word & 0xbfa0fc00;
+        if (masked != 0x0e20d400 and masked != 0x0ea0d400) {
             return false;
         }
 
@@ -1926,7 +1927,11 @@ pub const Core64 = struct {
 
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
-        self.state.writeVector(vectorRegFromWord(word), subtractFloatVector(self.state.floatControl(), double, full, left, right));
+        const result = if (masked == 0x0e20d400)
+            addFloatVector(self.state.floatControl(), double, full, left, right)
+        else
+            subtractFloatVector(self.state.floatControl(), double, full, left, right);
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }
@@ -3293,6 +3298,17 @@ fn countByteBits(value: u8) u8 {
         count += remaining & 1;
     }
     return count;
+}
+
+fn addFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, floatAdd(control, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+    }
+    return result;
 }
 
 fn subtractFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
