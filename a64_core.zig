@@ -367,6 +367,13 @@ pub const Core64 = struct {
             if (vector_narrow) {
                 return;
             }
+            const vector_count = self.runVectorCount(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_count) {
+                return;
+            }
             const vector_shift_immediate = self.runVectorShiftImmediate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1875,6 +1882,26 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorCount(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x0e205800) {
+            return false;
+        }
+
+        if (((word >> 22) & 3) != 0) {
+            return error.ReservedInstruction;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = a64_state.VectorValue{
+            .low = countVectorBytes(source.low),
+            .high = if (full) countVectorBytes(source.high) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
         if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
@@ -3214,6 +3241,25 @@ fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
         result |= (product & mask) << amount;
     }
     return result;
+}
+
+fn countVectorBytes(value: u64) u64 {
+    var result: u64 = 0;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        const shift = @intCast(u6, index * 8);
+        result |= @as(u64, countByteBits(@intCast(u8, (value >> shift) & 0xff))) << shift;
+    }
+    return result;
+}
+
+fn countByteBits(value: u8) u8 {
+    var remaining = value;
+    var count: u8 = 0;
+    while (remaining != 0) : (remaining >>= 1) {
+        count += remaining & 1;
+    }
+    return count;
 }
 
 fn equalVectorLanes(left: u64, right: u64, lane: u8) u64 {
