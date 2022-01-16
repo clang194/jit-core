@@ -1688,7 +1688,8 @@ pub const Core64 = struct {
     }
 
     fn runVectorDuplicate(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfe0fc00) != 0x0e000c00) {
+        const masked = word & 0xbfe0fc00;
+        if (masked != 0x0e000400 and masked != 0x0e000c00) {
             return false;
         }
 
@@ -1707,7 +1708,10 @@ pub const Core64 = struct {
         }
 
         const lane = @as(u8, 8) << size;
-        const value = self.readSized(lane == 64, regFromWord(word >> 5), false) & ones(lane);
+        const value = if (masked == 0x0e000c00)
+            self.readSized(lane == 64, regFromWord(word >> 5), false) & ones(lane)
+        else
+            vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), @as(usize, imm5) >> (@as(usize, size) + 1), @as(usize, lane) / 8);
         const half = spreadVectorElement(value, lane);
         const result = a64_state.VectorValue{
             .low = half,
