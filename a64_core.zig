@@ -416,6 +416,9 @@ pub const Core64 = struct {
             if (vector_equal) {
                 return;
             }
+            if (self.runVectorNot(word)) {
+                return;
+            }
             if (self.runVectorAnd(word)) {
                 return;
             }
@@ -2130,6 +2133,21 @@ pub const Core64 = struct {
             .high = if (full) high else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runVectorNot(self: *Core64, word: u32) bool {
+        if ((word & 0xbffffc00) != 0x2e205800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{
+            .low = ~source.low,
+            .high = if (full) ~source.high else 0,
+        });
         self.state.pc +%= 4;
         return true;
     }
