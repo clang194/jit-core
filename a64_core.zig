@@ -374,6 +374,13 @@ pub const Core64 = struct {
             if (vector_count) {
                 return;
             }
+            const vector_float = self.runVectorFloatBinary(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_float) {
+                return;
+            }
             const vector_shift_immediate = self.runVectorShiftImmediate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1902,6 +1909,24 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfa0fc00) != 0x0ea0d400) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        self.state.writeVector(vectorRegFromWord(word), subtractFloatVector(self.state.floatControl(), double, full, left, right));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
         if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f005400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
@@ -3260,6 +3285,17 @@ fn countByteBits(value: u8) u8 {
         count += remaining & 1;
     }
     return count;
+}
+
+fn subtractFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, floatSub(control, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+    }
+    return result;
 }
 
 fn equalVectorLanes(left: u64, right: u64, lane: u8) u64 {
