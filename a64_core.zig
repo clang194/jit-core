@@ -42,6 +42,7 @@ pub const MemoryHooks64 = struct {
     write64: ?fn (u64, u64, ?*c_void) void,
     write128: ?fn (u64, a64_state.VectorValue, ?*c_void) void,
     readOnly: ?fn (u64, ?*c_void) bool,
+    direct: ?fn (u64, usize, ?*c_void) ?[*]u8,
 
     pub fn empty() MemoryHooks64 {
         return MemoryHooks64{
@@ -57,6 +58,7 @@ pub const MemoryHooks64 = struct {
             .write64 = null,
             .write128 = null,
             .readOnly = null,
+            .direct = null,
         };
     }
 };
@@ -2448,6 +2450,9 @@ pub const Core64 = struct {
     }
 
     fn readMemory(self: *Core64, address: u64, bytes: usize) Core64Error!u64 {
+        if (self.readDirect(address, bytes)) |value| {
+            return value;
+        }
         switch (bytes) {
             1 => {
                 const callback = self.hooks.memory.read8 orelse return error.MissingRead;
@@ -2470,11 +2475,20 @@ pub const Core64 = struct {
     }
 
     fn readMemoryVector(self: *Core64, address: u64) Core64Error!a64_state.VectorValue {
+        if (self.directPointer(address, 16)) |memory| {
+            return a64_state.VectorValue{
+                .low = readLittle64(memory, 0),
+                .high = readLittle64(memory, 8),
+            };
+        }
         const callback = self.hooks.memory.read128 orelse return error.MissingRead;
         return callback(address, self.hooks.context);
     }
 
     fn writeMemory(self: *Core64, address: u64, bytes: usize, value: u64) Core64Error!void {
+        if (self.writeDirect(address, bytes, value)) {
+            return;
+        }
         switch (bytes) {
             1 => {
                 const callback = self.hooks.memory.write8 orelse return error.MissingWrite;
@@ -2497,8 +2511,37 @@ pub const Core64 = struct {
     }
 
     fn writeMemoryVector(self: *Core64, address: u64, value: a64_state.VectorValue) Core64Error!void {
+        if (self.directPointer(address, 16)) |memory| {
+            writeLittle64(memory, 0, value.low);
+            writeLittle64(memory, 8, value.high);
+            return;
+        }
         const callback = self.hooks.memory.write128 orelse return error.MissingWrite;
         callback(address, value, self.hooks.context);
+    }
+
+    fn directPointer(self: *Core64, address: u64, bytes: usize) ?[*]u8 {
+        const callback = self.hooks.memory.direct orelse return null;
+        return callback(address, bytes, self.hooks.context);
+    }
+
+    fn readDirect(self: *Core64, address: u64, bytes: usize) ?u64 {
+        const memory = self.directPointer(address, bytes) orelse return null;
+        var value: u64 = 0;
+        var index: usize = 0;
+        while (index < bytes) : (index += 1) {
+            value |= @as(u64, memory[index]) << @intCast(u6, index * 8);
+        }
+        return value;
+    }
+
+    fn writeDirect(self: *Core64, address: u64, bytes: usize, value: u64) bool {
+        const memory = self.directPointer(address, bytes) orelse return false;
+        var index: usize = 0;
+        while (index < bytes) : (index += 1) {
+            memory[index] = @intCast(u8, (value >> @intCast(u6, index * 8)) & 0xff);
+        }
+        return true;
     }
 
     fn conditionHolds(self: *const Core64, code: u4) bool {
@@ -3593,6 +3636,22 @@ fn countLeadingSignBits32(value: u32) u32 {
 fn countLeadingSignBits64(value: u64) u64 {
     const folded = if ((value & 0x8000000000000000) != 0) ~value else value;
     return countLeadingZeroes64(folded) - 1;
+}
+
+fn readLittle64(memory: [*]u8, offset: usize) u64 {
+    var value: u64 = 0;
+    var index: usize = 0;
+    while (index < 8) : (index += 1) {
+        value |= @as(u64, memory[offset + index]) << @intCast(u6, index * 8);
+    }
+    return value;
+}
+
+fn writeLittle64(memory: [*]u8, offset: usize, value: u64) void {
+    var index: usize = 0;
+    while (index < 8) : (index += 1) {
+        memory[offset + index] = @intCast(u8, (value >> @intCast(u6, index * 8)) & 0xff);
+    }
 }
 
 fn regFromWord(value: u32) a64_state.GeneralReg {
