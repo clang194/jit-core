@@ -80,6 +80,7 @@ pub const HostHooks64 = struct {
     exception: ?fn (u64, FaultKind64, ?*c_void) void,
     cache: ?fn (CacheAction64, u64, ?*c_void) void,
     zero_cache_block_words_log2: u4,
+    read_only_thread_value: ?*const u64,
     cycles: CycleHooks,
     context: ?*c_void,
 
@@ -91,6 +92,7 @@ pub const HostHooks64 = struct {
             .exception = null,
             .cache = null,
             .zero_cache_block_words_log2 = 4,
+            .read_only_thread_value = null,
             .cycles = CycleHooks.empty(),
             .context = null,
         };
@@ -459,6 +461,9 @@ pub const Core64 = struct {
                 return;
             }
             if (self.runBarrier(word)) {
+                return;
+            }
+            if (self.runSystemRegisterRead(word)) {
                 return;
             }
             if (self.runSystemHint(word)) {
@@ -2252,6 +2257,18 @@ pub const Core64 = struct {
         if (masked != 0xd503309f and masked != 0xd50330bf) {
             return false;
         }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runSystemRegisterRead(self: *Core64, word: u32) bool {
+        const masked = word & 0xffffffe0;
+        const value = switch (masked) {
+            0xd53b00e0 => @as(u64, self.hooks.zero_cache_block_words_log2),
+            0xd53bd060 => if (self.hooks.read_only_thread_value) |cell| cell.* else @as(u64, 0),
+            else => return false,
+        };
+        self.writeSized(masked != 0xd53b00e0, regFromWord(word), value, false);
         self.state.pc +%= 4;
         return true;
     }
