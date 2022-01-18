@@ -689,36 +689,75 @@ pub const Core64 = struct {
 
     fn runExclusiveLoadStore(self: *Core64, word: u32) Core64Error!bool {
         const masked_store = word & 0x3fe0fc00;
-        const store = masked_store == 0x08007c00 or masked_store == 0x0800fc00;
+        const single_store = masked_store == 0x08007c00 or masked_store == 0x0800fc00;
         const masked_load = word & 0x3ffffc00;
-        const load = masked_load == 0x085f7c00 or masked_load == 0x085ffc00;
+        const single_load = masked_load == 0x085f7c00 or masked_load == 0x085ffc00;
+        const masked_pair_store = word & 0xbfe08000;
+        const pair_store = masked_pair_store == 0x88200000 or masked_pair_store == 0x88208000;
+        const masked_pair_load = word & 0xbfff8000;
+        const pair_load = masked_pair_load == 0x887f0000 or masked_pair_load == 0x887f8000;
+        const store = single_store or pair_store;
+        const load = single_load or pair_load;
+        const pair = pair_store or pair_load;
         if (!store and !load) {
             return false;
         }
 
-        const size = @intCast(u2, word >> 30);
-        const bytes = @as(usize, 1) << size;
+        const size = if (pair) @intCast(u2, 2 | ((word >> 30) & 1)) else @intCast(u2, word >> 30);
         const base_reg = regFromWord(word >> 5);
         const data_reg = regFromWord(word);
         const address = self.readSized(true, base_reg, true);
 
         if (store) {
             const status_reg = regFromWord(word >> 16);
+            const second_reg = regFromWord(word >> 10);
+            if (pair and (status_reg == data_reg or status_reg == second_reg)) {
+                return error.Unpredictable;
+            }
             if (status_reg == base_reg and base_reg != .sp) {
                 return error.Unpredictable;
             }
             if (self.exclusiveHolds(address)) {
                 self.state.exclusive = false;
-                try self.writeMemory(address, bytes, self.readSized(size == 3, data_reg, false));
+                if (pair) {
+                    if (size == 3) {
+                        try self.writeMemoryVector(address, a64_state.VectorValue{
+                            .low = self.readSized(true, data_reg, false),
+                            .high = self.readSized(true, second_reg, false),
+                        });
+                    } else {
+                        const low = @intCast(u32, self.readSized(false, data_reg, false));
+                        const high = @intCast(u32, self.readSized(false, second_reg, false));
+                        try self.writeMemory(address, 8, @as(u64, low) | (@as(u64, high) << 32));
+                    }
+                } else {
+                    try self.writeMemory(address, @as(usize, 1) << size, self.readSized(size == 3, data_reg, false));
+                }
                 self.writeSized(false, status_reg, 0, false);
             } else {
                 self.writeSized(false, status_reg, 1, false);
             }
         } else {
+            const second_reg = regFromWord(word >> 10);
+            if (pair and data_reg == second_reg) {
+                return error.Unpredictable;
+            }
             self.state.exclusive = true;
             self.state.exclusive_address = address;
-            const value = try self.readMemory(address, bytes);
-            self.writeSized(size == 3, data_reg, value, false);
+            if (pair) {
+                if (size == 3) {
+                    const value = try self.readMemoryVector(address);
+                    self.writeSized(true, data_reg, value.low, false);
+                    self.writeSized(true, second_reg, value.high, false);
+                } else {
+                    const value = try self.readMemory(address, 8);
+                    self.writeSized(false, data_reg, value, false);
+                    self.writeSized(false, second_reg, value >> 32, false);
+                }
+            } else {
+                const value = try self.readMemory(address, @as(usize, 1) << size);
+                self.writeSized(size == 3, data_reg, value, false);
+            }
         }
 
         self.state.pc +%= 4;
