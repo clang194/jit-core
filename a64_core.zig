@@ -443,6 +443,13 @@ pub const Core64 = struct {
             if (vector_greater) {
                 return;
             }
+            const vector_min_max = self.runVectorMinMax(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_min_max) {
+                return;
+            }
             if (self.runVectorNot(word)) {
                 return;
             }
@@ -2248,6 +2255,36 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorMinMax(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbf20fc00;
+        const signed_max = masked == 0x0e206400;
+        const signed_min = masked == 0x0e206c00;
+        const unsigned_max = masked == 0x2e206400;
+        const unsigned_min = masked == 0x2e206c00;
+        if (!signed_max and !signed_min and !unsigned_max and !unsigned_min) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const signed = signed_max or signed_min;
+        const maximum = signed_max or unsigned_max;
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = minMaxVectorLanes(left.low, right.low, lane, signed, maximum),
+            .high = if (full) minMaxVectorLanes(left.high, right.high, lane, signed, maximum) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorAnd(self: *Core64, word: u32) bool {
         const masked = word & 0xbfe0fc00;
         if (masked != 0x0e201c00 and masked != 0x0e601c00 and masked != 0x0ea01c00 and masked != 0x0ee01c00 and masked != 0x2e201c00 and masked != 0x2e601c00 and masked != 0x2ea01c00 and masked != 0x2ee01c00) {
@@ -3636,6 +3673,24 @@ fn greaterSignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
         if (left_signed > right_signed) {
             result |= mask << amount;
         }
+    }
+    return result;
+}
+
+fn minMaxVectorLanes(left: u64, right: u64, lane: u8, signed: bool, maximum: bool) u64 {
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_element = (left >> amount) & mask;
+        const right_element = (right >> amount) & mask;
+        const take_left = if (signed) blk: {
+            const left_signed = @bitCast(i64, signExtendRuntime(left_element, @intCast(u6, lane)));
+            const right_signed = @bitCast(i64, signExtendRuntime(right_element, @intCast(u6, lane)));
+            break :blk if (maximum) left_signed > right_signed else left_signed < right_signed;
+        } else if (maximum) left_element > right_element else left_element < right_element;
+        result |= (if (take_left) left_element else right_element) << amount;
     }
     return result;
 }
