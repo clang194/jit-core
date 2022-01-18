@@ -2240,7 +2240,10 @@ pub const Core64 = struct {
     }
 
     fn runVectorGreaterSigned(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf20fc00) != 0x0e203400) {
+        const masked = word & 0xbf20fc00;
+        const strict = masked == 0x0e203400;
+        const inclusive = masked == 0x0e203c00;
+        if (!strict and !inclusive) {
             return false;
         }
 
@@ -2254,8 +2257,8 @@ pub const Core64 = struct {
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = a64_state.VectorValue{
-            .low = greaterSignedVectorLanes(left.low, right.low, lane),
-            .high = if (full) greaterSignedVectorLanes(left.high, right.high, lane) else 0,
+            .low = greaterSignedVectorLanes(left.low, right.low, lane, inclusive),
+            .high = if (full) greaterSignedVectorLanes(left.high, right.high, lane, inclusive) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
@@ -3691,9 +3694,11 @@ fn equalVectorLanes(left: u64, right: u64, lane: u8) u64 {
     return result;
 }
 
-fn greaterSignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
+fn greaterSignedVectorLanes(left: u64, right: u64, lane: u8, inclusive: bool) u64 {
     if (lane == 64) {
-        return if (@bitCast(i64, left) > @bitCast(i64, right)) ~@as(u64, 0) else 0;
+        const left_signed = @bitCast(i64, left);
+        const right_signed = @bitCast(i64, right);
+        return if (if (inclusive) left_signed >= right_signed else left_signed > right_signed) ~@as(u64, 0) else 0;
     }
 
     const mask = ones(lane);
@@ -3703,7 +3708,7 @@ fn greaterSignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
         const amount = @intCast(u6, shift);
         const left_signed = @bitCast(i64, signExtendRuntime((left >> amount) & mask, @intCast(u6, lane)));
         const right_signed = @bitCast(i64, signExtendRuntime((right >> amount) & mask, @intCast(u6, lane)));
-        if (left_signed > right_signed) {
+        if (if (inclusive) left_signed >= right_signed else left_signed > right_signed) {
             result |= mask << amount;
         }
     }
