@@ -603,6 +603,13 @@ pub const Core64 = struct {
     }
 
     fn runLoadStore(self: *Core64, word: u32) Core64Error!bool {
+        const exclusive = self.runExclusiveLoadStore(word) catch |err| {
+            return err;
+        };
+        if (exclusive) {
+            return true;
+        }
+
         if ((word & 0x3ffffc00) == 0x089f7c00 or (word & 0x3ffffc00) == 0x089ffc00 or (word & 0x3ffffc00) == 0x08df7c00 or (word & 0x3ffffc00) == 0x08dffc00) {
             return try self.runOrderedLoadStore(word);
         }
@@ -675,6 +682,44 @@ pub const Core64 = struct {
         }
 
         return false;
+    }
+
+    fn runExclusiveLoadStore(self: *Core64, word: u32) Core64Error!bool {
+        const masked_store = word & 0x3fe0fc00;
+        const store = masked_store == 0x08007c00 or masked_store == 0x0800fc00;
+        const masked_load = word & 0x3ffffc00;
+        const load = masked_load == 0x085f7c00 or masked_load == 0x085ffc00;
+        if (!store and !load) {
+            return false;
+        }
+
+        const size = @intCast(u2, word >> 30);
+        const bytes = @as(usize, 1) << size;
+        const base_reg = regFromWord(word >> 5);
+        const data_reg = regFromWord(word);
+        const address = self.readSized(true, base_reg, true);
+
+        if (store) {
+            const status_reg = regFromWord(word >> 16);
+            if (status_reg == base_reg and base_reg != .sp) {
+                return error.Unpredictable;
+            }
+            if (self.exclusiveHolds(address)) {
+                self.state.exclusive = false;
+                try self.writeMemory(address, bytes, self.readSized(size == 3, data_reg, false));
+                self.writeSized(false, status_reg, 0, false);
+            } else {
+                self.writeSized(false, status_reg, 1, false);
+            }
+        } else {
+            self.state.exclusive = true;
+            self.state.exclusive_address = address;
+            const value = try self.readMemory(address, bytes);
+            self.writeSized(size == 3, data_reg, value, false);
+        }
+
+        self.state.pc +%= 4;
+        return true;
     }
 
     fn runOrderedLoadStore(self: *Core64, word: u32) Core64Error!bool {
@@ -2542,6 +2587,10 @@ pub const Core64 = struct {
             memory[index] = @intCast(u8, (value >> @intCast(u6, index * 8)) & 0xff);
         }
         return true;
+    }
+
+    fn exclusiveHolds(self: *const Core64, address: u64) bool {
+        return self.state.exclusive and (((address ^ self.state.exclusive_address) & 0xfffffffffffffff8) == 0);
     }
 
     fn conditionHolds(self: *const Core64, code: u4) bool {

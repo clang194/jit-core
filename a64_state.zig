@@ -195,6 +195,8 @@ pub const MachineState64 = struct {
     vectors: [32]VectorValue,
     fpcr: u32,
     nzcv: u32,
+    exclusive: bool,
+    exclusive_address: u64,
 
     pub fn zeroed() MachineState64 {
         return MachineState64{
@@ -204,6 +206,8 @@ pub const MachineState64 = struct {
             .vectors = [_]VectorValue{VectorValue{ .low = 0, .high = 0 }} ** 32,
             .fpcr = 0,
             .nzcv = 0,
+            .exclusive = false,
+            .exclusive_address = 0,
         };
     }
 
