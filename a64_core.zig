@@ -443,6 +443,13 @@ pub const Core64 = struct {
             if (vector_greater) {
                 return;
             }
+            const vector_higher = self.runVectorGreaterUnsigned(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_higher) {
+                return;
+            }
             const vector_min_max = self.runVectorMinMax(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -2255,6 +2262,32 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorGreaterUnsigned(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbf20fc00;
+        const strict = masked == 0x2e203400;
+        const inclusive = masked == 0x2e203c00;
+        if (!strict and !inclusive) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = greaterUnsignedVectorLanes(left.low, right.low, lane, inclusive),
+            .high = if (full) greaterUnsignedVectorLanes(left.high, right.high, lane, inclusive) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorMinMax(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed_max = masked == 0x0e206400;
@@ -3671,6 +3704,25 @@ fn greaterSignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
         const left_signed = @bitCast(i64, signExtendRuntime((left >> amount) & mask, @intCast(u6, lane)));
         const right_signed = @bitCast(i64, signExtendRuntime((right >> amount) & mask, @intCast(u6, lane)));
         if (left_signed > right_signed) {
+            result |= mask << amount;
+        }
+    }
+    return result;
+}
+
+fn greaterUnsignedVectorLanes(left: u64, right: u64, lane: u8, inclusive: bool) u64 {
+    if (lane == 64) {
+        return if (if (inclusive) left >= right else left > right) ~@as(u64, 0) else 0;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_element = (left >> amount) & mask;
+        const right_element = (right >> amount) & mask;
+        if (if (inclusive) left_element >= right_element else left_element > right_element) {
             result |= mask << amount;
         }
     }
