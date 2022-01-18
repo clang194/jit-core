@@ -462,6 +462,9 @@ pub const Core64 = struct {
             if (cache_maintenance) {
                 return;
             }
+            if (self.runClearExclusive(word)) {
+                return;
+            }
             if (self.runBarrier(word)) {
                 return;
             }
@@ -2304,6 +2307,15 @@ pub const Core64 = struct {
         if (masked != 0xd503309f and masked != 0xd50330bf) {
             return false;
         }
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runClearExclusive(self: *Core64, word: u32) bool {
+        if ((word & 0xfffff0ff) != 0xd503305f) {
+            return false;
+        }
+        self.state.exclusive = false;
         self.state.pc +%= 4;
         return true;
     }
