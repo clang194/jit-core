@@ -436,6 +436,13 @@ pub const Core64 = struct {
             if (vector_equal) {
                 return;
             }
+            const vector_greater = self.runVectorGreaterSigned(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_greater) {
+                return;
+            }
             if (self.runVectorNot(word)) {
                 return;
             }
@@ -2218,6 +2225,29 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorGreaterSigned(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x0e203400) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = greaterSignedVectorLanes(left.low, right.low, lane),
+            .high = if (full) greaterSignedVectorLanes(left.high, right.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorAnd(self: *Core64, word: u32) bool {
         const masked = word & 0xbfe0fc00;
         if (masked != 0x0e201c00 and masked != 0x0e601c00 and masked != 0x0ea01c00 and masked != 0x0ee01c00 and masked != 0x2e201c00 and masked != 0x2e601c00 and masked != 0x2ea01c00 and masked != 0x2ee01c00) {
@@ -3585,6 +3615,25 @@ fn equalVectorLanes(left: u64, right: u64, lane: u8) u64 {
     while (shift < 64) : (shift += lane) {
         const amount = @intCast(u6, shift);
         if (((left >> amount) & mask) == ((right >> amount) & mask)) {
+            result |= mask << amount;
+        }
+    }
+    return result;
+}
+
+fn greaterSignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return if (@bitCast(i64, left) > @bitCast(i64, right)) ~@as(u64, 0) else 0;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_signed = @bitCast(i64, signExtendRuntime((left >> amount) & mask, @intCast(u6, lane)));
+        const right_signed = @bitCast(i64, signExtendRuntime((right >> amount) & mask, @intCast(u6, lane)));
+        if (left_signed > right_signed) {
             result |= mask << amount;
         }
     }
