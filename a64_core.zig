@@ -2641,7 +2641,7 @@ pub const Core64 = struct {
     }
 
     fn exclusiveHolds(self: *const Core64, address: u64) bool {
-        return self.state.exclusive and (((address ^ self.state.exclusive_address) & 0xfffffffffffffff8) == 0);
+        return self.state.exclusive and (((address ^ self.state.exclusive_address) & 0xfffffffffffffff0) == 0);
     }
 
     fn conditionHolds(self: *const Core64, code: u4) bool {
