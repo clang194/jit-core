@@ -3296,6 +3296,22 @@ fn floatOutput64(control: a64_state.FloatControl, value: u64) u64 {
     return value;
 }
 
+fn finishFloat32(control: a64_state.FloatControl, value: u32) u32 {
+    var result = floatOutput32(control, value);
+    if (!control.dn() and isNan32(result)) {
+        result ^= 0x80000000;
+    }
+    return result;
+}
+
+fn finishFloat64(control: a64_state.FloatControl, value: u64) u64 {
+    var result = floatOutput64(control, value);
+    if (!control.dn() and isNan64(result)) {
+        result ^= 0x8000000000000000;
+    }
+    return result;
+}
+
 fn expandFloatConstant16(encoded: u8) u16 {
     const sign = @as(u16, encoded >> 7);
     const exponent_base = if (((encoded >> 6) & 1) != 0) @as(u16, 0x0c) else @as(u16, 0x10);
@@ -3379,34 +3395,74 @@ fn floatToUnsignedWord(control: a64_state.FloatControl, double: bool, value: u64
 
 fn floatAdd(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
     if (double) {
-        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) + @bitCast(f64, floatInput64(control, right))));
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+            return nan;
+        }
+        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) + @bitCast(f64, right_input)));
     }
-    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) + @bitCast(f32, floatInput32(control, @intCast(u32, right))));
-    return @as(u64, floatOutput32(control, result));
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    const result = @bitCast(u32, @bitCast(f32, left_input) + @bitCast(f32, right_input));
+    return @as(u64, finishFloat32(control, result));
 }
 
 fn floatDiv(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
     if (double) {
-        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) / @bitCast(f64, floatInput64(control, right))));
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+            return nan;
+        }
+        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) / @bitCast(f64, right_input)));
     }
-    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) / @bitCast(f32, floatInput32(control, @intCast(u32, right))));
-    return @as(u64, floatOutput32(control, result));
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    const result = @bitCast(u32, @bitCast(f32, left_input) / @bitCast(f32, right_input));
+    return @as(u64, finishFloat32(control, result));
 }
 
 fn floatMul(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
     if (double) {
-        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) * @bitCast(f64, floatInput64(control, right))));
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+            return nan;
+        }
+        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) * @bitCast(f64, right_input)));
     }
-    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) * @bitCast(f32, floatInput32(control, @intCast(u32, right))));
-    return @as(u64, floatOutput32(control, result));
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    const result = @bitCast(u32, @bitCast(f32, left_input) * @bitCast(f32, right_input));
+    return @as(u64, finishFloat32(control, result));
 }
 
 fn floatSub(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
     if (double) {
-        return floatOutput64(control, @bitCast(u64, @bitCast(f64, floatInput64(control, left)) - @bitCast(f64, floatInput64(control, right))));
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+            return nan;
+        }
+        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) - @bitCast(f64, right_input)));
     }
-    const result = @bitCast(u32, @bitCast(f32, floatInput32(control, @intCast(u32, left))) - @bitCast(f32, floatInput32(control, @intCast(u32, right))));
-    return @as(u64, floatOutput32(control, result));
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    const result = @bitCast(u32, @bitCast(f32, left_input) - @bitCast(f32, right_input));
+    return @as(u64, finishFloat32(control, result));
 }
 
 fn negateFloat(double: bool, value: u64) u64 {
@@ -3466,6 +3522,60 @@ fn isNan32(value: u32) bool {
 
 fn isNan64(value: u64) bool {
     return (value & 0x7fffffffffffffff) > 0x7ff0000000000000;
+}
+
+fn isQuietNan32(value: u32) bool {
+    return (value & 0x7fc00000) == 0x7fc00000;
+}
+
+fn isSignalingNan32(value: u32) bool {
+    return (value & 0x7fc00000) == 0x7f800000 and (value & 0x007fffff) != 0;
+}
+
+fn isQuietNan64(value: u64) bool {
+    return (value & 0x7ff8000000000000) == 0x7ff8000000000000;
+}
+
+fn isSignalingNan64(value: u64) bool {
+    return (value & 0x7ff8000000000000) == 0x7ff0000000000000 and (value & 0x0007ffffffffffff) != 0;
+}
+
+fn chooseBinaryNan32(control: a64_state.FloatControl, left: u32, right: u32) ?u32 {
+    if (control.dn()) {
+        return null;
+    }
+    if (isSignalingNan32(left)) {
+        return left | 0x00400000;
+    }
+    if (isSignalingNan32(right)) {
+        return right | 0x00400000;
+    }
+    if (isQuietNan32(left)) {
+        return left;
+    }
+    if (isQuietNan32(right)) {
+        return right;
+    }
+    return null;
+}
+
+fn chooseBinaryNan64(control: a64_state.FloatControl, left: u64, right: u64) ?u64 {
+    if (control.dn()) {
+        return null;
+    }
+    if (isSignalingNan64(left)) {
+        return left | 0x0008000000000000;
+    }
+    if (isSignalingNan64(right)) {
+        return right | 0x0008000000000000;
+    }
+    if (isQuietNan64(left)) {
+        return left;
+    }
+    if (isQuietNan64(right)) {
+        return right;
+    }
+    return null;
 }
 
 fn aesDouble(value: u8) u8 {
