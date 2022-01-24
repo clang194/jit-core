@@ -1588,7 +1588,7 @@ pub const Core64 = struct {
 
     fn runFloatUnary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff3ffc00;
-        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000) {
+        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000 and masked != 0x1e21c000) {
             return false;
         }
 
@@ -1598,7 +1598,9 @@ pub const Core64 = struct {
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
-        const result = if (mode == 1)
+        const result = if (masked == 0x1e21c000)
+            floatSqrt(self.state.floatControl(), mode == 1, source)
+        else if (mode == 1)
             if (masked == 0x1e204000) source else if (masked == 0x1e20c000) source & 0x7fffffffffffffff else source ^ 0x8000000000000000
         else
             @as(u64, if (masked == 0x1e204000) @intCast(u32, source) else if (masked == 0x1e20c000) @intCast(u32, source) & 0x7fffffff else @intCast(u32, source) ^ 0x80000000);
@@ -3465,6 +3467,21 @@ fn floatSub(control: a64_state.FloatControl, double: bool, left: u64, right: u64
     return @as(u64, finishFloat32(control, result));
 }
 
+fn floatSqrt(control: a64_state.FloatControl, double: bool, value: u64) u64 {
+    if (double) {
+        const input = floatInput64(control, value);
+        if (chooseUnaryNan64(control, input)) |nan| {
+            return nan;
+        }
+        return finishFloat64(control, @bitCast(u64, @sqrt(@bitCast(f64, input))));
+    }
+    const input = floatInput32(control, @intCast(u32, value));
+    if (chooseUnaryNan32(control, input)) |nan| {
+        return @as(u64, nan);
+    }
+    return @as(u64, finishFloat32(control, @bitCast(u32, @sqrt(@bitCast(f32, input)))));
+}
+
 fn negateFloat(double: bool, value: u64) u64 {
     if (double) {
         return value ^ 0x8000000000000000;
@@ -3574,6 +3591,32 @@ fn chooseBinaryNan64(control: a64_state.FloatControl, left: u64, right: u64) ?u6
     }
     if (isQuietNan64(right)) {
         return right;
+    }
+    return null;
+}
+
+fn chooseUnaryNan32(control: a64_state.FloatControl, value: u32) ?u32 {
+    if (control.dn()) {
+        return null;
+    }
+    if (isSignalingNan32(value)) {
+        return value | 0x00400000;
+    }
+    if (isQuietNan32(value)) {
+        return value;
+    }
+    return null;
+}
+
+fn chooseUnaryNan64(control: a64_state.FloatControl, value: u64) ?u64 {
+    if (control.dn()) {
+        return null;
+    }
+    if (isSignalingNan64(value)) {
+        return value | 0x0008000000000000;
+    }
+    if (isQuietNan64(value)) {
+        return value;
     }
     return null;
 }
