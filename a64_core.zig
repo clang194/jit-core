@@ -1736,7 +1736,7 @@ pub const Core64 = struct {
 
     fn runFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
-        if (masked != 0x1e200800 and masked != 0x1e201800 and masked != 0x1e202800 and masked != 0x1e203800 and masked != 0x1e208800) {
+        if (masked != 0x1e200800 and masked != 0x1e201800 and masked != 0x1e202800 and masked != 0x1e203800 and masked != 0x1e204800 and masked != 0x1e205800 and masked != 0x1e208800) {
             return false;
         }
 
@@ -1755,6 +1755,8 @@ pub const Core64 = struct {
             0x1e201800 => floatDiv(control, nan_mode, double, left, right),
             0x1e202800 => floatAdd(control, nan_mode, double, left, right),
             0x1e203800 => floatSub(control, nan_mode, double, left, right),
+            0x1e204800 => floatMax(control, nan_mode, double, left, right),
+            0x1e205800 => floatMin(control, nan_mode, double, left, right),
             else => negateFloat(double, floatMul(control, nan_mode, double, left, right)),
         };
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
@@ -3504,6 +3506,90 @@ fn floatSqrt(base_control: a64_state.FloatControl, mode: FloatNanMode64, double:
         return @as(u64, nan);
     }
     return @as(u64, finishFloat32(control, mode, @bitCast(u32, @sqrt(@bitCast(f32, input)))));
+}
+
+fn floatMax(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
+    if (double) {
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseBinaryNan64(control, mode, left_input, right_input)) |nan| {
+            return nan;
+        }
+        if (isNan64(left_input) or isNan64(right_input)) {
+            const selected = if (mode == .unchecked and !control.dn()) right_input else if (isNan64(left_input)) left_input else right_input;
+            return finishFloat64(control, mode, selected);
+        }
+        const left_value = @bitCast(f64, left_input);
+        const right_value = @bitCast(f64, right_input);
+        const selected = if (left_value == right_value and (left_input & 0x7fffffffffffffff) == 0 and (right_input & 0x7fffffffffffffff) == 0)
+            left_input & right_input
+        else if (left_value > right_value)
+            left_input
+        else
+            right_input;
+        return finishFloat64(control, mode, selected);
+    }
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    if (isNan32(left_input) or isNan32(right_input)) {
+        const selected = if (mode == .unchecked and !control.dn()) right_input else if (isNan32(left_input)) left_input else right_input;
+        return @as(u64, finishFloat32(control, mode, selected));
+    }
+    const left_value = @bitCast(f32, left_input);
+    const right_value = @bitCast(f32, right_input);
+    const selected = if (left_value == right_value and (left_input & 0x7fffffff) == 0 and (right_input & 0x7fffffff) == 0)
+        left_input & right_input
+    else if (left_value > right_value)
+        left_input
+    else
+        right_input;
+    return @as(u64, finishFloat32(control, mode, selected));
+}
+
+fn floatMin(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
+    if (double) {
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseBinaryNan64(control, mode, left_input, right_input)) |nan| {
+            return nan;
+        }
+        if (isNan64(left_input) or isNan64(right_input)) {
+            const selected = if (mode == .unchecked and !control.dn()) right_input else if (isNan64(left_input)) left_input else right_input;
+            return finishFloat64(control, mode, selected);
+        }
+        const left_value = @bitCast(f64, left_input);
+        const right_value = @bitCast(f64, right_input);
+        const selected = if (left_value == right_value and (left_input & 0x7fffffffffffffff) == 0 and (right_input & 0x7fffffffffffffff) == 0)
+            left_input | right_input
+        else if (left_value < right_value)
+            left_input
+        else
+            right_input;
+        return finishFloat64(control, mode, selected);
+    }
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    if (isNan32(left_input) or isNan32(right_input)) {
+        const selected = if (mode == .unchecked and !control.dn()) right_input else if (isNan32(left_input)) left_input else right_input;
+        return @as(u64, finishFloat32(control, mode, selected));
+    }
+    const left_value = @bitCast(f32, left_input);
+    const right_value = @bitCast(f32, right_input);
+    const selected = if (left_value == right_value and (left_input & 0x7fffffff) == 0 and (right_input & 0x7fffffff) == 0)
+        left_input | right_input
+    else if (left_value < right_value)
+        left_input
+    else
+        right_input;
+    return @as(u64, finishFloat32(control, mode, selected));
 }
 
 fn negateFloat(double: bool, value: u64) u64 {
