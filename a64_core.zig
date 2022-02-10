@@ -353,6 +353,13 @@ pub const Core64 = struct {
             if (vector_duplicate) {
                 return;
             }
+            const scalar_duplicate = self.runScalarDuplicate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_duplicate) {
+                return;
+            }
             const vector_extract = self.runVectorExtractToRegister(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1882,6 +1889,29 @@ pub const Core64 = struct {
             .high = if (full) half else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runScalarDuplicate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffe0fc00) != 0x5e000400) {
+            return false;
+        }
+
+        const imm5 = @intCast(u5, (word >> 16) & 0x1f);
+        if (imm5 == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const size = lowestSetBit5(imm5);
+        if (size > 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const bytes = @as(usize, 1) << size;
+        const index = @as(usize, imm5) >> @intCast(u3, size + 1);
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), index, bytes);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = element, .high = 0 });
         self.state.pc +%= 4;
         return true;
     }
