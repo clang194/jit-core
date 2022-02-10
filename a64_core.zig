@@ -29,6 +29,12 @@ pub const CacheAction64 = enum {
     zero_address,
 };
 
+pub const FloatNanMode64 = enum {
+    accurate,
+    force_default,
+    unchecked,
+};
+
 pub const MemoryHooks64 = struct {
     readCode: ?fn (u64, ?*c_void) u32,
     read8: ?fn (u64, ?*c_void) u8,
@@ -83,6 +89,7 @@ pub const HostHooks64 = struct {
     cache: ?fn (CacheAction64, u64, ?*c_void) void,
     zero_cache_block_words_log2: u4,
     read_only_thread_value: ?*const u64,
+    float_nan_mode: FloatNanMode64,
     cycles: CycleHooks,
     context: ?*c_void,
 
@@ -95,6 +102,7 @@ pub const HostHooks64 = struct {
             .cache = null,
             .zero_cache_block_words_log2 = 4,
             .read_only_thread_value = null,
+            .float_nan_mode = .accurate,
             .cycles = CycleHooks.empty(),
             .context = null,
         };
@@ -1599,7 +1607,7 @@ pub const Core64 = struct {
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const result = if (masked == 0x1e21c000)
-            floatSqrt(self.state.floatControl(), mode == 1, source)
+            floatSqrt(self.state.floatControl(), self.hooks.float_nan_mode, mode == 1, source)
         else if (mode == 1)
             if (masked == 0x1e204000) source else if (masked == 0x1e20c000) source & 0x7fffffffffffffff else source ^ 0x8000000000000000
         else
@@ -1739,14 +1747,15 @@ pub const Core64 = struct {
 
         const double = mode == 1;
         const control = self.state.floatControl();
+        const nan_mode = self.hooks.float_nan_mode;
         const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (double) @as(usize, 8) else @as(usize, 4));
         const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, if (double) @as(usize, 8) else @as(usize, 4));
         const result = switch (masked) {
-            0x1e200800 => floatMul(control, double, left, right),
-            0x1e201800 => floatDiv(control, double, left, right),
-            0x1e202800 => floatAdd(control, double, left, right),
-            0x1e203800 => floatSub(control, double, left, right),
-            else => negateFloat(double, floatMul(control, double, left, right)),
+            0x1e200800 => floatMul(control, nan_mode, double, left, right),
+            0x1e201800 => floatDiv(control, nan_mode, double, left, right),
+            0x1e202800 => floatAdd(control, nan_mode, double, left, right),
+            0x1e203800 => floatSub(control, nan_mode, double, left, right),
+            else => negateFloat(double, floatMul(control, nan_mode, double, left, right)),
         };
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
@@ -2106,10 +2115,12 @@ pub const Core64 = struct {
 
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const control = self.state.floatControl();
+        const nan_mode = self.hooks.float_nan_mode;
         const result = if (masked == 0x0e20d400)
-            addFloatVector(self.state.floatControl(), double, full, left, right)
+            addFloatVector(control, nan_mode, double, full, left, right)
         else
-            subtractFloatVector(self.state.floatControl(), double, full, left, right);
+            subtractFloatVector(control, nan_mode, double, full, left, right);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
@@ -3298,17 +3309,25 @@ fn floatOutput64(control: a64_state.FloatControl, value: u64) u64 {
     return value;
 }
 
-fn finishFloat32(control: a64_state.FloatControl, value: u32) u32 {
+fn effectiveFloatControl(control: a64_state.FloatControl, mode: FloatNanMode64) a64_state.FloatControl {
+    return if (mode == .force_default) a64_state.FloatControl.init(control.raw() | 0x02000000) else control;
+}
+
+fn useAccurateNan(mode: FloatNanMode64) bool {
+    return mode == .accurate;
+}
+
+fn finishFloat32(control: a64_state.FloatControl, mode: FloatNanMode64, value: u32) u32 {
     var result = floatOutput32(control, value);
-    if (!control.dn() and isNan32(result)) {
+    if (useAccurateNan(mode) and !control.dn() and isNan32(result)) {
         result ^= 0x80000000;
     }
     return result;
 }
 
-fn finishFloat64(control: a64_state.FloatControl, value: u64) u64 {
+fn finishFloat64(control: a64_state.FloatControl, mode: FloatNanMode64, value: u64) u64 {
     var result = floatOutput64(control, value);
-    if (!control.dn() and isNan64(result)) {
+    if (useAccurateNan(mode) and !control.dn() and isNan64(result)) {
         result ^= 0x8000000000000000;
     }
     return result;
@@ -3395,91 +3414,96 @@ fn floatToUnsignedWord(control: a64_state.FloatControl, double: bool, value: u64
     return @floatToInt(u32, number);
 }
 
-fn floatAdd(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+fn floatAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
     if (double) {
         const left_input = floatInput64(control, left);
         const right_input = floatInput64(control, right);
-        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+        if (chooseBinaryNan64(control, mode, left_input, right_input)) |nan| {
             return nan;
         }
-        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) + @bitCast(f64, right_input)));
+        return finishFloat64(control, mode, @bitCast(u64, @bitCast(f64, left_input) + @bitCast(f64, right_input)));
     }
     const left_input = floatInput32(control, @intCast(u32, left));
     const right_input = floatInput32(control, @intCast(u32, right));
-    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+    if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
         return @as(u64, nan);
     }
     const result = @bitCast(u32, @bitCast(f32, left_input) + @bitCast(f32, right_input));
-    return @as(u64, finishFloat32(control, result));
+    return @as(u64, finishFloat32(control, mode, result));
 }
 
-fn floatDiv(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+fn floatDiv(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
     if (double) {
         const left_input = floatInput64(control, left);
         const right_input = floatInput64(control, right);
-        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+        if (chooseBinaryNan64(control, mode, left_input, right_input)) |nan| {
             return nan;
         }
-        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) / @bitCast(f64, right_input)));
+        return finishFloat64(control, mode, @bitCast(u64, @bitCast(f64, left_input) / @bitCast(f64, right_input)));
     }
     const left_input = floatInput32(control, @intCast(u32, left));
     const right_input = floatInput32(control, @intCast(u32, right));
-    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+    if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
         return @as(u64, nan);
     }
     const result = @bitCast(u32, @bitCast(f32, left_input) / @bitCast(f32, right_input));
-    return @as(u64, finishFloat32(control, result));
+    return @as(u64, finishFloat32(control, mode, result));
 }
 
-fn floatMul(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+fn floatMul(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
     if (double) {
         const left_input = floatInput64(control, left);
         const right_input = floatInput64(control, right);
-        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+        if (chooseBinaryNan64(control, mode, left_input, right_input)) |nan| {
             return nan;
         }
-        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) * @bitCast(f64, right_input)));
+        return finishFloat64(control, mode, @bitCast(u64, @bitCast(f64, left_input) * @bitCast(f64, right_input)));
     }
     const left_input = floatInput32(control, @intCast(u32, left));
     const right_input = floatInput32(control, @intCast(u32, right));
-    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+    if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
         return @as(u64, nan);
     }
     const result = @bitCast(u32, @bitCast(f32, left_input) * @bitCast(f32, right_input));
-    return @as(u64, finishFloat32(control, result));
+    return @as(u64, finishFloat32(control, mode, result));
 }
 
-fn floatSub(control: a64_state.FloatControl, double: bool, left: u64, right: u64) u64 {
+fn floatSub(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
     if (double) {
         const left_input = floatInput64(control, left);
         const right_input = floatInput64(control, right);
-        if (chooseBinaryNan64(control, left_input, right_input)) |nan| {
+        if (chooseBinaryNan64(control, mode, left_input, right_input)) |nan| {
             return nan;
         }
-        return finishFloat64(control, @bitCast(u64, @bitCast(f64, left_input) - @bitCast(f64, right_input)));
+        return finishFloat64(control, mode, @bitCast(u64, @bitCast(f64, left_input) - @bitCast(f64, right_input)));
     }
     const left_input = floatInput32(control, @intCast(u32, left));
     const right_input = floatInput32(control, @intCast(u32, right));
-    if (chooseBinaryNan32(control, left_input, right_input)) |nan| {
+    if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
         return @as(u64, nan);
     }
     const result = @bitCast(u32, @bitCast(f32, left_input) - @bitCast(f32, right_input));
-    return @as(u64, finishFloat32(control, result));
+    return @as(u64, finishFloat32(control, mode, result));
 }
 
-fn floatSqrt(control: a64_state.FloatControl, double: bool, value: u64) u64 {
+fn floatSqrt(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, value: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
     if (double) {
         const input = floatInput64(control, value);
-        if (chooseUnaryNan64(control, input)) |nan| {
+        if (chooseUnaryNan64(control, mode, input)) |nan| {
             return nan;
         }
-        return finishFloat64(control, @bitCast(u64, @sqrt(@bitCast(f64, input))));
+        return finishFloat64(control, mode, @bitCast(u64, @sqrt(@bitCast(f64, input))));
     }
     const input = floatInput32(control, @intCast(u32, value));
-    if (chooseUnaryNan32(control, input)) |nan| {
+    if (chooseUnaryNan32(control, mode, input)) |nan| {
         return @as(u64, nan);
     }
-    return @as(u64, finishFloat32(control, @bitCast(u32, @sqrt(@bitCast(f32, input)))));
+    return @as(u64, finishFloat32(control, mode, @bitCast(u32, @sqrt(@bitCast(f32, input)))));
 }
 
 fn negateFloat(double: bool, value: u64) u64 {
@@ -3557,8 +3581,8 @@ fn isSignalingNan64(value: u64) bool {
     return (value & 0x7ff8000000000000) == 0x7ff0000000000000 and (value & 0x0007ffffffffffff) != 0;
 }
 
-fn chooseBinaryNan32(control: a64_state.FloatControl, left: u32, right: u32) ?u32 {
-    if (control.dn()) {
+fn chooseBinaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, left: u32, right: u32) ?u32 {
+    if (!useAccurateNan(mode) or control.dn()) {
         return null;
     }
     if (isSignalingNan32(left)) {
@@ -3576,8 +3600,8 @@ fn chooseBinaryNan32(control: a64_state.FloatControl, left: u32, right: u32) ?u3
     return null;
 }
 
-fn chooseBinaryNan64(control: a64_state.FloatControl, left: u64, right: u64) ?u64 {
-    if (control.dn()) {
+fn chooseBinaryNan64(control: a64_state.FloatControl, mode: FloatNanMode64, left: u64, right: u64) ?u64 {
+    if (!useAccurateNan(mode) or control.dn()) {
         return null;
     }
     if (isSignalingNan64(left)) {
@@ -3595,8 +3619,8 @@ fn chooseBinaryNan64(control: a64_state.FloatControl, left: u64, right: u64) ?u6
     return null;
 }
 
-fn chooseUnaryNan32(control: a64_state.FloatControl, value: u32) ?u32 {
-    if (control.dn()) {
+fn chooseUnaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, value: u32) ?u32 {
+    if (!useAccurateNan(mode) or control.dn()) {
         return null;
     }
     if (isSignalingNan32(value)) {
@@ -3608,8 +3632,8 @@ fn chooseUnaryNan32(control: a64_state.FloatControl, value: u32) ?u32 {
     return null;
 }
 
-fn chooseUnaryNan64(control: a64_state.FloatControl, value: u64) ?u64 {
-    if (control.dn()) {
+fn chooseUnaryNan64(control: a64_state.FloatControl, mode: FloatNanMode64, value: u64) ?u64 {
+    if (!useAccurateNan(mode) or control.dn()) {
         return null;
     }
     if (isSignalingNan64(value)) {
@@ -3841,24 +3865,24 @@ fn countByteBits(value: u8) u8 {
     return count;
 }
 
-fn addFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+fn addFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
-        setVectorElement(&result, index, bytes, floatAdd(control, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+        setVectorElement(&result, index, bytes, floatAdd(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
     }
     return result;
 }
 
-fn subtractFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+fn subtractFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
-        setVectorElement(&result, index, bytes, floatSub(control, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+        setVectorElement(&result, index, bytes, floatSub(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
     }
     return result;
 }
