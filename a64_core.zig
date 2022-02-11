@@ -416,6 +416,13 @@ pub const Core64 = struct {
             if (vector_compare_zero) {
                 return;
             }
+            const vector_negate = self.runVectorNegate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_negate) {
+                return;
+            }
             const vector_float = self.runVectorFloatBinary(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -2136,6 +2143,28 @@ pub const Core64 = struct {
         const result = a64_state.VectorValue{
             .low = compareZeroVectorLanes(source.low, lane, greater, equal),
             .high = if (full) compareZeroVectorLanes(source.high, lane, greater, equal) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runVectorNegate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x2e20b800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = a64_state.VectorValue{
+            .low = subtractVectorLanes(0, source.low, lane),
+            .high = if (full) subtractVectorLanes(0, source.high, lane) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
