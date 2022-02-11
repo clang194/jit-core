@@ -1750,7 +1750,7 @@ pub const Core64 = struct {
 
     fn runFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
-        if (masked != 0x1e200800 and masked != 0x1e201800 and masked != 0x1e202800 and masked != 0x1e203800 and masked != 0x1e204800 and masked != 0x1e205800 and masked != 0x1e208800) {
+        if (masked != 0x1e200800 and masked != 0x1e201800 and masked != 0x1e202800 and masked != 0x1e203800 and masked != 0x1e204800 and masked != 0x1e205800 and masked != 0x1e206800 and masked != 0x1e208800) {
             return false;
         }
 
@@ -1771,6 +1771,7 @@ pub const Core64 = struct {
             0x1e203800 => floatSub(control, nan_mode, double, left, right),
             0x1e204800 => floatMax(control, nan_mode, double, left, right),
             0x1e205800 => floatMin(control, nan_mode, double, left, right),
+            0x1e206800 => floatMaxNumber(control, nan_mode, double, left, right),
             else => negateFloat(double, floatMul(control, nan_mode, double, left, right)),
         };
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
@@ -3591,6 +3592,72 @@ fn floatMax(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: 
     if (isNan32(left_input) or isNan32(right_input)) {
         const selected = if (mode == .unchecked and !control.dn()) right_input else if (isNan32(left_input)) left_input else right_input;
         return @as(u64, finishFloat32(control, mode, selected));
+    }
+    const left_value = @bitCast(f32, left_input);
+    const right_value = @bitCast(f32, right_input);
+    const selected = if (left_value == right_value and (left_input & 0x7fffffff) == 0 and (right_input & 0x7fffffff) == 0)
+        left_input & right_input
+    else if (left_value > right_value)
+        left_input
+    else
+        right_input;
+    return @as(u64, finishFloat32(control, mode, selected));
+}
+
+fn floatMaxNumber(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
+    if (double) {
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        const left_nan = isNan64(left_input);
+        const right_nan = isNan64(right_input);
+        if (useAccurateNan(mode) and !control.dn()) {
+            if (isSignalingNan64(left_input)) {
+                return left_input | 0x0008000000000000;
+            }
+            if (isSignalingNan64(right_input)) {
+                return right_input | 0x0008000000000000;
+            }
+        }
+        if (left_nan or right_nan) {
+            if (!left_nan) {
+                return finishFloat64(control, mode, left_input);
+            }
+            if (!right_nan) {
+                return finishFloat64(control, mode, right_input);
+            }
+            return finishFloat64(control, mode, left_input);
+        }
+        const left_value = @bitCast(f64, left_input);
+        const right_value = @bitCast(f64, right_input);
+        const selected = if (left_value == right_value and (left_input & 0x7fffffffffffffff) == 0 and (right_input & 0x7fffffffffffffff) == 0)
+            left_input & right_input
+        else if (left_value > right_value)
+            left_input
+        else
+            right_input;
+        return finishFloat64(control, mode, selected);
+    }
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    const left_nan = isNan32(left_input);
+    const right_nan = isNan32(right_input);
+    if (useAccurateNan(mode) and !control.dn()) {
+        if (isSignalingNan32(left_input)) {
+            return @as(u64, left_input | 0x00400000);
+        }
+        if (isSignalingNan32(right_input)) {
+            return @as(u64, right_input | 0x00400000);
+        }
+    }
+    if (left_nan or right_nan) {
+        if (!left_nan) {
+            return @as(u64, finishFloat32(control, mode, left_input));
+        }
+        if (!right_nan) {
+            return @as(u64, finishFloat32(control, mode, right_input));
+        }
+        return @as(u64, finishFloat32(control, mode, left_input));
     }
     const left_value = @bitCast(f32, left_input);
     const right_value = @bitCast(f32, right_input);
