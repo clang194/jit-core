@@ -314,6 +314,13 @@ pub const Core64 = struct {
             if (float_general_move) {
                 return;
             }
+            const fixed_to_integer = self.runFixedToInteger(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (fixed_to_integer) {
+                return;
+            }
             const float_to_integer = self.runFloatToInteger(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1735,6 +1742,43 @@ pub const Core64 = struct {
             self.writeSized(wide, regFromWord(word), value, false);
         }
 
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runFixedToInteger(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0x7f3f0000;
+        if (masked != 0x1e180000 and masked != 0x1e190000) {
+            return false;
+        }
+
+        const mode = @intCast(u2, (word >> 22) & 3);
+        if (mode == 2 or mode == 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const scale = @intCast(u6, (word >> 10) & 0x3f);
+        if (!wide and (scale & 0x20) == 0) {
+            return error.UnallocatedEncoding;
+        }
+        if (wide) {
+            return false;
+        }
+
+        const double = mode == 1;
+        const fraction = @as(u8, 64) - scale;
+        const factor = if (double)
+            (@as(u64, fraction + 1023) << 52)
+        else
+            @as(u64, @as(u32, fraction + 127) << 23);
+        const control = self.state.floatControl();
+        const scaled = floatMul(control, self.hooks.float_nan_mode, double, vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (double) @as(usize, 8) else @as(usize, 4)), factor);
+        const result = if (masked == 0x1e180000)
+            floatToSignedWord(control, double, scaled)
+        else
+            floatToUnsignedWord(control, double, scaled);
+        self.writeSized(false, regFromWord(word), @as(u64, result), false);
         self.state.pc +%= 4;
         return true;
     }
