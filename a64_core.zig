@@ -2261,7 +2261,7 @@ pub const Core64 = struct {
 
     fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfa0fc00;
-        if (masked != 0x0e20d400 and masked != 0x0ea0d400) {
+        if (masked != 0x0e20d400 and masked != 0x0ea0d400 and masked != 0x2e20fc00) {
             return false;
         }
 
@@ -2277,6 +2277,8 @@ pub const Core64 = struct {
         const nan_mode = self.hooks.float_nan_mode;
         const result = if (masked == 0x0e20d400)
             addFloatVector(control, nan_mode, double, full, left, right)
+        else if (masked == 0x2e20fc00)
+            divideFloatVector(control, nan_mode, double, full, left, right)
         else
             subtractFloatVector(control, nan_mode, double, full, left, right);
         self.state.writeVector(vectorRegFromWord(word), result);
@@ -4336,6 +4338,17 @@ fn subtractFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, do
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
         setVectorElement(&result, index, bytes, floatSub(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+    }
+    return result;
+}
+
+fn divideFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, floatDiv(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
     }
     return result;
 }
