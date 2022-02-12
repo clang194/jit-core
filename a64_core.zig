@@ -373,6 +373,13 @@ pub const Core64 = struct {
             if (scalar_duplicate) {
                 return;
             }
+            const scalar_unsigned_float = self.runScalarUnsignedToFloat(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_unsigned_float) {
+                return;
+            }
             const vector_extract = self.runVectorExtractToRegister(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -1981,6 +1988,22 @@ pub const Core64 = struct {
         const index = @as(usize, imm5) >> @intCast(u3, size + 1);
         const element = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), index, bytes);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = element, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runScalarUnsignedToFloat(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffbffc00) != 0x7e21d800) {
+            return false;
+        }
+
+        if ((word & 0x00400000) != 0) {
+            return false;
+        }
+
+        const source = @intCast(u32, self.state.readVector(vectorRegFromWord(word >> 5)).low);
+        const result = unsignedWordToFloat32(source);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = @as(u64, result), .high = 0 });
         self.state.pc +%= 4;
         return true;
     }
