@@ -89,6 +89,7 @@ pub const HostHooks64 = struct {
     cache: ?fn (CacheAction64, u64, ?*c_void) void,
     cache_type_value: u32,
     zero_cache_block_words_log2: u4,
+    thread_value: ?*u64,
     read_only_thread_value: ?*const u64,
     float_nan_mode: FloatNanMode64,
     cycles: CycleHooks,
@@ -104,6 +105,7 @@ pub const HostHooks64 = struct {
             .cache = null,
             .cache_type_value = 0x8444c004,
             .zero_cache_block_words_log2 = 4,
+            .thread_value = null,
             .read_only_thread_value = null,
             .float_nan_mode = .accurate,
             .cycles = CycleHooks.empty(),
@@ -2607,6 +2609,7 @@ pub const Core64 = struct {
         switch (masked) {
             0xd51b4400 => self.state.writeFloatControl(value),
             0xd51b4420 => self.state.writeFloatStatus(value),
+            0xd51bd040 => if (self.hooks.thread_value) |cell| cell.* = self.readSized(true, regFromWord(word), false),
             else => return false,
         }
         self.state.pc +%= 4;
@@ -2620,11 +2623,12 @@ pub const Core64 = struct {
             0xd53b00e0 => @as(u64, self.hooks.zero_cache_block_words_log2),
             0xd53b4400 => @as(u64, self.state.floatControl().raw()),
             0xd53b4420 => @as(u64, self.state.floatStatus()),
+            0xd53bd040 => if (self.hooks.thread_value) |cell| cell.* else @as(u64, 0),
             0xd53bd060 => if (self.hooks.read_only_thread_value) |cell| cell.* else @as(u64, 0),
             0xd53be020 => if (self.hooks.counter_value) |callback| callback(self.hooks.context) else @as(u64, 0),
             else => return false,
         };
-        self.writeSized(masked == 0xd53bd060 or masked == 0xd53be020, regFromWord(word), value, false);
+        self.writeSized(masked == 0xd53bd040 or masked == 0xd53bd060 or masked == 0xd53be020, regFromWord(word), value, false);
         self.state.pc +%= 4;
         return true;
     }
