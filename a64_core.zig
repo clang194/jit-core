@@ -15,6 +15,11 @@ pub const FaultKind64 = enum {
     unallocated_encoding,
     reserved_value,
     unpredictable_instruction,
+    yield_hint,
+    wait_for_event,
+    wait_for_interrupt,
+    send_event,
+    send_event_local,
 };
 
 pub const CacheAction64 = enum {
@@ -2677,6 +2682,20 @@ pub const Core64 = struct {
     fn runSystemHint(self: *Core64, word: u32) bool {
         if ((word & 0xfffff01f) != 0xd503201f) {
             return false;
+        }
+        const kind = switch ((word >> 5) & 0x7f) {
+            1 => FaultKind64.yield_hint,
+            2 => FaultKind64.wait_for_event,
+            3 => FaultKind64.wait_for_interrupt,
+            4 => FaultKind64.send_event,
+            5 => FaultKind64.send_event_local,
+            else => blk: {
+                self.state.pc +%= 4;
+                return true;
+            },
+        };
+        if (self.hooks.exception) |callback| {
+            callback(self.state.pc, kind, self.hooks.context);
         }
         self.state.pc +%= 4;
         return true;
