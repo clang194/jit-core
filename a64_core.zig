@@ -87,6 +87,7 @@ pub const HostHooks64 = struct {
     supervisor: ?fn (u32, *a64_state.MachineState64, ?*c_void) void,
     exception: ?fn (u64, FaultKind64, ?*c_void) void,
     cache: ?fn (CacheAction64, u64, ?*c_void) void,
+    cache_type_value: u32,
     zero_cache_block_words_log2: u4,
     read_only_thread_value: ?*const u64,
     float_nan_mode: FloatNanMode64,
@@ -100,6 +101,7 @@ pub const HostHooks64 = struct {
             .supervisor = null,
             .exception = null,
             .cache = null,
+            .cache_type_value = 0x8444c004,
             .zero_cache_block_words_log2 = 4,
             .read_only_thread_value = null,
             .float_nan_mode = .accurate,
@@ -2597,11 +2599,12 @@ pub const Core64 = struct {
     fn runSystemRegisterRead(self: *Core64, word: u32) bool {
         const masked = word & 0xffffffe0;
         const value = switch (masked) {
+            0xd53b0020 => @as(u64, self.hooks.cache_type_value),
             0xd53b00e0 => @as(u64, self.hooks.zero_cache_block_words_log2),
             0xd53bd060 => if (self.hooks.read_only_thread_value) |cell| cell.* else @as(u64, 0),
             else => return false,
         };
-        self.writeSized(masked != 0xd53b00e0, regFromWord(word), value, false);
+        self.writeSized(masked == 0xd53bd060, regFromWord(word), value, false);
         self.state.pc +%= 4;
         return true;
     }
