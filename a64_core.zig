@@ -506,6 +506,13 @@ pub const Core64 = struct {
             if (vector_higher) {
                 return;
             }
+            const vector_unsigned_shift = self.runVectorUnsignedShift(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_unsigned_shift) {
+                return;
+            }
             const vector_min_max = self.runVectorMinMax(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -2499,6 +2506,29 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runVectorUnsignedShift(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x2e204400) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = variableUnsignedShiftVectorLanes(left.low, right.low, lane),
+            .high = if (full) variableUnsignedShiftVectorLanes(left.high, right.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runVectorMinMax(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed_max = masked == 0x0e206400;
@@ -4452,6 +4482,26 @@ fn shiftRightSignedVectorLanes(value: u64, lane: u8, amount: u8) u64 {
             if (amount >= lane) @as(u64, 0) else element >> @intCast(u6, amount)
         else
             if (amount >= lane) mask else (element >> @intCast(u6, amount)) | (mask ^ (mask >> @intCast(u6, amount)));
+        result |= shifted << position;
+    }
+    return result;
+}
+
+fn variableUnsignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
+    const mask = ones(lane);
+    const limit = @as(i16, lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const amount = @as(i16, @bitCast(i8, @intCast(u8, (shifts >> position) & 0xff)));
+        const shifted = if (amount <= -limit or amount >= limit)
+            @as(u64, 0)
+        else if (amount < 0)
+            element >> @intCast(u6, -amount)
+        else
+            (element << @intCast(u6, amount)) & mask;
         result |= shifted << position;
     }
     return result;
