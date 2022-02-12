@@ -9,10 +9,15 @@ pub const FloatControlMode = enum(u2) {
 
 pub const float_control_mask: u32 = 0x07f79f00;
 pub const float_control_key_mask: u32 = 0x07c00000;
+pub const float_status_mask: u32 = 0x0800009f;
 pub const pc_mask: u64 = 0x00ffffffffffffff;
 
 pub fn cleanFloatControl(value: u32) u32 {
     return value & float_control_mask;
+}
+
+pub fn cleanFloatStatus(value: u32) u32 {
+    return value & float_status_mask;
 }
 
 pub const FloatControl = struct {
@@ -194,6 +199,7 @@ pub const MachineState64 = struct {
     pc: u64,
     vectors: [32]VectorValue,
     fpcr: u32,
+    fpsr: u32,
     nzcv: u32,
     exclusive: bool,
     exclusive_address: u64,
@@ -205,6 +211,7 @@ pub const MachineState64 = struct {
             .pc = 0,
             .vectors = [_]VectorValue{VectorValue{ .low = 0, .high = 0 }} ** 32,
             .fpcr = 0,
+            .fpsr = 0,
             .nzcv = 0,
             .exclusive = false,
             .exclusive_address = 0,
@@ -240,6 +247,14 @@ pub const MachineState64 = struct {
 
     pub fn writeFloatControl(self: *MachineState64, value: u32) void {
         self.fpcr = cleanFloatControl(value);
+    }
+
+    pub fn floatStatus(self: *const MachineState64) u32 {
+        return self.fpsr & float_status_mask;
+    }
+
+    pub fn writeFloatStatus(self: *MachineState64, value: u32) void {
+        self.fpsr = cleanFloatStatus(value);
     }
 
     pub fn key(self: *const MachineState64) BlockKey {

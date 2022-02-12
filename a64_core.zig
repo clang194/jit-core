@@ -529,6 +529,9 @@ pub const Core64 = struct {
             if (self.runBarrier(word)) {
                 return;
             }
+            if (self.runSystemRegisterWrite(word)) {
+                return;
+            }
             if (self.runSystemRegisterRead(word)) {
                 return;
             }
@@ -2598,11 +2601,25 @@ pub const Core64 = struct {
         return true;
     }
 
+    fn runSystemRegisterWrite(self: *Core64, word: u32) bool {
+        const masked = word & 0xffffffe0;
+        const value = @intCast(u32, self.readSized(false, regFromWord(word), false));
+        switch (masked) {
+            0xd51b4400 => self.state.writeFloatControl(value),
+            0xd51b4420 => self.state.writeFloatStatus(value),
+            else => return false,
+        }
+        self.state.pc +%= 4;
+        return true;
+    }
+
     fn runSystemRegisterRead(self: *Core64, word: u32) bool {
         const masked = word & 0xffffffe0;
         const value = switch (masked) {
             0xd53b0020 => @as(u64, self.hooks.cache_type_value),
             0xd53b00e0 => @as(u64, self.hooks.zero_cache_block_words_log2),
+            0xd53b4400 => @as(u64, self.state.floatControl().raw()),
+            0xd53b4420 => @as(u64, self.state.floatStatus()),
             0xd53bd060 => if (self.hooks.read_only_thread_value) |cell| cell.* else @as(u64, 0),
             0xd53be020 => if (self.hooks.counter_value) |callback| callback(self.hooks.context) else @as(u64, 0),
             else => return false,
@@ -3002,6 +3019,14 @@ pub const Core64 = struct {
 
     pub fn writeFloatControl(self: *Core64, value: u32) void {
         self.state.writeFloatControl(value);
+    }
+
+    pub fn floatStatus(self: *const Core64) u32 {
+        return self.state.floatStatus();
+    }
+
+    pub fn writeFloatStatus(self: *Core64, value: u32) void {
+        self.state.writeFloatStatus(value);
     }
 
     pub fn status(self: *const Core64) u32 {
