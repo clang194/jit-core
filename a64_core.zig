@@ -92,6 +92,7 @@ pub const HostHooks64 = struct {
     read_only_thread_value: ?*const u64,
     float_nan_mode: FloatNanMode64,
     cycles: CycleHooks,
+    counter_value: ?fn (?*c_void) u64,
     context: ?*c_void,
 
     pub fn empty() HostHooks64 {
@@ -106,6 +107,7 @@ pub const HostHooks64 = struct {
             .read_only_thread_value = null,
             .float_nan_mode = .accurate,
             .cycles = CycleHooks.empty(),
+            .counter_value = null,
             .context = null,
         };
     }
@@ -2602,9 +2604,10 @@ pub const Core64 = struct {
             0xd53b0020 => @as(u64, self.hooks.cache_type_value),
             0xd53b00e0 => @as(u64, self.hooks.zero_cache_block_words_log2),
             0xd53bd060 => if (self.hooks.read_only_thread_value) |cell| cell.* else @as(u64, 0),
+            0xd53be020 => if (self.hooks.counter_value) |callback| callback(self.hooks.context) else @as(u64, 0),
             else => return false,
         };
-        self.writeSized(masked == 0xd53bd060, regFromWord(word), value, false);
+        self.writeSized(masked == 0xd53bd060 or masked == 0xd53be020, regFromWord(word), value, false);
         self.state.pc +%= 4;
         return true;
     }
