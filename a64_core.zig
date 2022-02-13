@@ -590,6 +590,7 @@ pub const Core64 = struct {
             error.Unpredictable => FaultKind64.unpredictable_instruction,
             else => return err,
         };
+        self.state.pc +%= 4;
         const callback = self.hooks.exception orelse return err;
         callback(self.state.pc, kind, self.hooks.context);
     }
@@ -2696,10 +2697,10 @@ pub const Core64 = struct {
                 return true;
             },
         };
+        self.state.pc +%= 4;
         if (self.hooks.exception) |callback| {
             callback(self.state.pc, kind, self.hooks.context);
         }
-        self.state.pc +%= 4;
         return true;
     }
 
