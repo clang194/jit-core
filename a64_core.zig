@@ -531,6 +531,9 @@ pub const Core64 = struct {
             if (self.runVectorAnd(word)) {
                 return;
             }
+            if (self.runVectorThreeInputBitwise(word)) {
+                return;
+            }
             if (self.runDivide(word)) {
                 return;
             }
@@ -2617,6 +2620,27 @@ pub const Core64 = struct {
             .low = ~source.low,
             .high = if (full) ~source.high else 0,
         });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runVectorThreeInputBitwise(self: *Core64, word: u32) bool {
+        const masked = word & 0xffe08000;
+        if (masked != 0xce000000 and masked != 0xce200000) {
+            return false;
+        }
+
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const third = self.state.readVector(vectorRegFromWord(word >> 10));
+        const result = if (masked == 0xce000000) a64_state.VectorValue{
+            .low = left.low ^ right.low ^ third.low,
+            .high = left.high ^ right.high ^ third.high,
+        } else a64_state.VectorValue{
+            .low = left.low ^ (right.low & ~third.low),
+            .high = left.high ^ (right.high & ~third.high),
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }
