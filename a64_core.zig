@@ -434,6 +434,13 @@ pub const Core64 = struct {
             if (vector_count) {
                 return;
             }
+            const vector_reverse_half = self.runVectorReverseHalfBytes(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_reverse_half) {
+                return;
+            }
             const vector_compare_zero = self.runVectorCompareZero(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -2209,6 +2216,26 @@ pub const Core64 = struct {
         const result = a64_state.VectorValue{
             .low = countVectorBytes(source.low),
             .high = if (full) countVectorBytes(source.high) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    fn runVectorReverseHalfBytes(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x0e201800) {
+            return false;
+        }
+
+        if (((word >> 22) & 3) != 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = a64_state.VectorValue{
+            .low = reverseHalfBytes(source.low),
+            .high = if (full) reverseHalfBytes(source.high) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
