@@ -1,0 +1,72 @@
+const a64_state = @import("a64_state.zig");
+const bits = @import("bits.zig");
+const main = @import("a64_core.zig");
+const FloatNanMode64 = main.FloatNanMode64;
+
+pub fn addVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return left +% right;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const sum = ((left >> amount) & mask) +% ((right >> amount) & mask);
+        result |= (sum & mask) << amount;
+    }
+    return result;
+}
+
+pub fn subtractVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return left -% right;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const difference = ((left >> amount) & mask) -% ((right >> amount) & mask);
+        result |= (difference & mask) << amount;
+    }
+    return result;
+}
+
+pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return left *% right;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const product = ((left >> amount) & mask) *% ((right >> amount) & mask);
+        result |= (product & mask) << amount;
+    }
+    return result;
+}
+
+pub fn countVectorBytes(value: u64) u64 {
+    var result: u64 = 0;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        const shift = @intCast(u6, index * 8);
+        result |= @as(u64, countByteBits(@intCast(u8, (value >> shift) & 0xff))) << shift;
+    }
+    return result;
+}
+
+pub fn countByteBits(value: u8) u8 {
+    var remaining = value;
+    var count: u8 = 0;
+    while (remaining != 0) : (remaining >>= 1) {
+        count += remaining & 1;
+    }
+    return count;
+}
+
