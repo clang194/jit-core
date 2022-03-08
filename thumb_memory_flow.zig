@@ -2,8 +2,6 @@ const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 const trace = @import("trace.zig");
 usingnamespace @import("thumb_fetch_decode.zig");
-usingnamespace @import("thumb_trace_flow.zig");
-usingnamespace @import("thumb_run_flow.zig");
 usingnamespace @import("thumb_shift_math.zig");
 usingnamespace @import("thumb_masks_reverse.zig");
 
