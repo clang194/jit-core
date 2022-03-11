@@ -176,14 +176,14 @@ pub const CoprocessorBlock = struct {
 };
 
 pub const CoprocessorHooks = struct {
-    operate: ?fn (*MachineState, CoprocessorCommand, ?*c_void) void,
-    sendWord: ?fn (*MachineState, CoprocessorWord, u32, ?*c_void) void,
-    sendPair: ?fn (*MachineState, CoprocessorPair, u32, u32, ?*c_void) void,
-    getWord: ?fn (*MachineState, CoprocessorWord, ?*c_void) u32,
-    getPair: ?fn (*MachineState, CoprocessorPair, ?*c_void) u64,
-    loadBlock: ?fn (*MachineState, CoprocessorBlock, u32, ?*c_void) void,
-    storeBlock: ?fn (*MachineState, CoprocessorBlock, u32, ?*c_void) void,
-    context: ?*c_void,
+    operate: ?fn (*MachineState, CoprocessorCommand, ?*anyopaque) void,
+    sendWord: ?fn (*MachineState, CoprocessorWord, u32, ?*anyopaque) void,
+    sendPair: ?fn (*MachineState, CoprocessorPair, u32, u32, ?*anyopaque) void,
+    getWord: ?fn (*MachineState, CoprocessorWord, ?*anyopaque) u32,
+    getPair: ?fn (*MachineState, CoprocessorPair, ?*anyopaque) u64,
+    loadBlock: ?fn (*MachineState, CoprocessorBlock, u32, ?*anyopaque) void,
+    storeBlock: ?fn (*MachineState, CoprocessorBlock, u32, ?*anyopaque) void,
+    context: ?*anyopaque,
 
     pub fn empty() CoprocessorHooks {
         return CoprocessorHooks{
@@ -319,8 +319,8 @@ pub const FaultKind = enum {
 
 pub const HostHooks = struct {
     pub const CycleHooks = struct {
-        add: ?fn (usize, ?*c_void) void,
-        remaining: ?fn (?*c_void) usize,
+        add: ?fn (usize, ?*anyopaque) void,
+        remaining: ?fn (?*anyopaque) usize,
 
         pub fn empty() CycleHooks {
             return CycleHooks{
@@ -331,11 +331,11 @@ pub const HostHooks = struct {
     };
 
     memory: MemoryHooks,
-    fallback: ?fn (u32, *MachineState, ?*c_void) void,
-    context: ?*c_void,
+    fallback: ?fn (u32, *MachineState, ?*anyopaque) void,
+    context: ?*anyopaque,
     trap: ?fn (u32) bool,
     supervisor: ?fn (u32, *MachineState) void,
-    exception: ?fn (u32, FaultKind, *MachineState, ?*c_void) void,
+    exception: ?fn (u32, FaultKind, *MachineState, ?*anyopaque) void,
     coprocessors: [16]?CoprocessorHooks,
     cycles: CycleHooks,
 

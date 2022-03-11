@@ -41,19 +41,19 @@ pub const FloatNanMode64 = enum {
 };
 
 pub const MemoryHooks64 = struct {
-    readCode: ?fn (u64, ?*c_void) u32,
-    read8: ?fn (u64, ?*c_void) u8,
-    read16: ?fn (u64, ?*c_void) u16,
-    read32: ?fn (u64, ?*c_void) u32,
-    read64: ?fn (u64, ?*c_void) u64,
-    read128: ?fn (u64, ?*c_void) a64_state.VectorValue,
-    write8: ?fn (u64, u8, ?*c_void) void,
-    write16: ?fn (u64, u16, ?*c_void) void,
-    write32: ?fn (u64, u32, ?*c_void) void,
-    write64: ?fn (u64, u64, ?*c_void) void,
-    write128: ?fn (u64, a64_state.VectorValue, ?*c_void) void,
-    readOnly: ?fn (u64, ?*c_void) bool,
-    direct: ?fn (u64, usize, ?*c_void) ?[*]u8,
+    readCode: ?fn (u64, ?*anyopaque) u32,
+    read8: ?fn (u64, ?*anyopaque) u8,
+    read16: ?fn (u64, ?*anyopaque) u16,
+    read32: ?fn (u64, ?*anyopaque) u32,
+    read64: ?fn (u64, ?*anyopaque) u64,
+    read128: ?fn (u64, ?*anyopaque) a64_state.VectorValue,
+    write8: ?fn (u64, u8, ?*anyopaque) void,
+    write16: ?fn (u64, u16, ?*anyopaque) void,
+    write32: ?fn (u64, u32, ?*anyopaque) void,
+    write64: ?fn (u64, u64, ?*anyopaque) void,
+    write128: ?fn (u64, a64_state.VectorValue, ?*anyopaque) void,
+    readOnly: ?fn (u64, ?*anyopaque) bool,
+    direct: ?fn (u64, usize, ?*anyopaque) ?[*]u8,
 
     pub fn empty() MemoryHooks64 {
         return MemoryHooks64{
@@ -76,8 +76,8 @@ pub const MemoryHooks64 = struct {
 
 pub const HostHooks64 = struct {
     pub const CycleHooks = struct {
-        add: ?fn (u64, ?*c_void) void,
-        remaining: ?fn (?*c_void) u64,
+        add: ?fn (u64, ?*anyopaque) void,
+        remaining: ?fn (?*anyopaque) u64,
 
         pub fn empty() CycleHooks {
             return CycleHooks{
@@ -88,18 +88,18 @@ pub const HostHooks64 = struct {
     };
 
     memory: MemoryHooks64,
-    fallback: ?fn (u64, usize, *a64_state.MachineState64, ?*c_void) void,
-    supervisor: ?fn (u32, *a64_state.MachineState64, ?*c_void) void,
-    exception: ?fn (u64, FaultKind64, ?*c_void) void,
-    cache: ?fn (CacheAction64, u64, ?*c_void) void,
+    fallback: ?fn (u64, usize, *a64_state.MachineState64, ?*anyopaque) void,
+    supervisor: ?fn (u32, *a64_state.MachineState64, ?*anyopaque) void,
+    exception: ?fn (u64, FaultKind64, ?*anyopaque) void,
+    cache: ?fn (CacheAction64, u64, ?*anyopaque) void,
     cache_type_value: u32,
     zero_cache_block_words_log2: u4,
     thread_value: ?*u64,
     read_only_thread_value: ?*const u64,
     float_nan_mode: FloatNanMode64,
     cycles: CycleHooks,
-    counter_value: ?fn (?*c_void) u64,
-    context: ?*c_void,
+    counter_value: ?fn (?*anyopaque) u64,
+    context: ?*anyopaque,
 
     pub fn empty() HostHooks64 {
         return HostHooks64{
