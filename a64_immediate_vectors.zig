@@ -87,6 +87,15 @@ pub fn reverseBytes32(value: u32) u32 {
         ((value & 0xff000000) >> 24);
 }
 
+pub fn reverseWordBytes(value: u64) u64 {
+    return @as(u64, reverseBytes32(@intCast(u32, value))) |
+        (@as(u64, reverseBytes32(@intCast(u32, value >> 32))) << 32);
+}
+
+pub fn reverseWordHalfwords(value: u64) u64 {
+    return ((value & 0x0000ffff0000ffff) << 16) | ((value & 0xffff0000ffff0000) >> 16);
+}
+
 pub fn reverseBytes64(value: u64) u64 {
     return (@as(u64, reverseBytes32(@intCast(u32, value))) << 32) |
         @as(u64, reverseBytes32(@intCast(u32, value >> 32)));
@@ -137,4 +146,3 @@ pub fn signExtendRuntime(value: u64, width: u6) u64 {
     }
     return narrowed;
 }
-

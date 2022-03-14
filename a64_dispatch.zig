@@ -302,6 +302,13 @@ pub const Core64Methods = struct {
             if (vector_reverse_half) {
                 return;
             }
+            const vector_reverse_word = self.runVectorReverseWordBytes(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_reverse_word) {
+                return;
+            }
             const vector_compare_zero = self.runVectorCompareZero(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -465,6 +472,4 @@ pub const Core64Methods = struct {
         const callback = self.hooks.exception orelse return err;
         callback(self.state.pc, kind, self.hooks.context);
     }
-
-
 };
