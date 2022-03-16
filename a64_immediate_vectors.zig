@@ -96,6 +96,17 @@ pub fn reverseWordHalfwords(value: u64) u64 {
     return ((value & 0x0000ffff0000ffff) << 16) | ((value & 0xffff0000ffff0000) >> 16);
 }
 
+pub fn reverseDoublewordHalfwords(value: u64) u64 {
+    return ((value & 0x000000000000ffff) << 48) |
+        ((value & 0x00000000ffff0000) << 16) |
+        ((value & 0x0000ffff00000000) >> 16) |
+        ((value & 0xffff000000000000) >> 48);
+}
+
+pub fn reverseDoublewordWords(value: u64) u64 {
+    return (value << 32) | (value >> 32);
+}
+
 pub fn reverseBytes64(value: u64) u64 {
     return (@as(u64, reverseBytes32(@intCast(u32, value))) << 32) |
         @as(u64, reverseBytes32(@intCast(u32, value >> 32)));

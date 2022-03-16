@@ -133,6 +133,37 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorReverseDoublewordBytes(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x0e200800) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = switch (size) {
+            0 => a64_state.VectorValue{
+                .low = reverseBytes64(source.low),
+                .high = if (full) reverseBytes64(source.high) else 0,
+            },
+            1 => a64_state.VectorValue{
+                .low = reverseDoublewordHalfwords(source.low),
+                .high = if (full) reverseDoublewordHalfwords(source.high) else 0,
+            },
+            else => a64_state.VectorValue{
+                .low = reverseDoublewordWords(source.low),
+                .high = if (full) reverseDoublewordWords(source.high) else 0,
+            },
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorCompareZero(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf3ffc00;
         const greater = masked == 0x0e208800;

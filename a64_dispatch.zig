@@ -309,6 +309,13 @@ pub const Core64Methods = struct {
             if (vector_reverse_word) {
                 return;
             }
+            const vector_reverse_doubleword = self.runVectorReverseDoublewordBytes(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_reverse_doubleword) {
+                return;
+            }
             const vector_compare_zero = self.runVectorCompareZero(word) catch |err| {
                 try self.raiseFault(err);
                 return;
