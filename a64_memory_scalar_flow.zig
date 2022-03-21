@@ -25,7 +25,6 @@ usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
-
 pub const Core64Methods = struct {
     pub fn runLoadStore(self: *Core64, word: u32) Core64Error!bool {
         const exclusive = self.runExclusiveLoadStore(word) catch |err| {
@@ -58,6 +57,11 @@ pub const Core64Methods = struct {
         }
 
         if ((word & 0xff000000) == 0xd8000000) {
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        if ((word & 0xffc00000) == 0xf9800000) {
             self.state.pc +%= 4;
             return true;
         }
@@ -411,5 +415,4 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
-
 };
