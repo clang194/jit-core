@@ -225,6 +225,9 @@ pub const Core64Methods = struct {
             if (self.runAesRound(word)) {
                 return;
             }
+            if (self.runHashRotate(word)) {
+                return;
+            }
             const vector_duplicate = self.runVectorDuplicate(word) catch |err| {
                 try self.raiseFault(err);
                 return;

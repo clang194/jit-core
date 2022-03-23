@@ -48,6 +48,18 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runHashRotate(self: *Core64, word: u32) bool {
+        if ((word & 0xfffffc00) != 0x5e280800) {
+            return false;
+        }
+
+        const source = @intCast(u32, self.state.readVector(vectorRegFromWord(word >> 5)).low);
+        const result = (source << 30) | (source >> 2);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = @as(u64, result), .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorDuplicate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfe0fc00;
         if (masked != 0x0e000400 and masked != 0x0e000c00) {
@@ -249,6 +261,4 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
-
-
 };
