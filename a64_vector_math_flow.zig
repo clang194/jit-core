@@ -28,7 +28,7 @@ usingnamespace @import("a64_memory_bits.zig");
 pub const Core64Methods = struct {
     pub fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfa0fc00;
-        if (masked != 0x0e20d400 and masked != 0x0ea0d400 and masked != 0x2e20fc00) {
+        if (masked != 0x0e20d400 and masked != 0x0ea0d400 and masked != 0x2e20dc00 and masked != 0x2e20fc00) {
             return false;
         }
 
@@ -44,6 +44,8 @@ pub const Core64Methods = struct {
         const nan_mode = self.hooks.float_nan_mode;
         const result = if (masked == 0x0e20d400)
             addFloatVector(control, nan_mode, double, full, left, right)
+        else if (masked == 0x2e20dc00)
+            multiplyFloatVector(control, nan_mode, double, full, left, right)
         else if (masked == 0x2e20fc00)
             divideFloatVector(control, nan_mode, double, full, left, right)
         else
