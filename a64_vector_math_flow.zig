@@ -333,5 +333,26 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorUnsignedDifference(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x2e207400) {
+            return false;
+        }
 
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = differenceUnsignedVectorLanes(left.low, right.low, lane),
+            .high = if (full) differenceUnsignedVectorLanes(left.high, right.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
 };

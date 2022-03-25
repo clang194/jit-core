@@ -410,6 +410,13 @@ pub const Core64Methods = struct {
             if (vector_min_max) {
                 return;
             }
+            const vector_difference = self.runVectorUnsignedDifference(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_difference) {
+                return;
+            }
             if (self.runVectorNot(word)) {
                 return;
             }

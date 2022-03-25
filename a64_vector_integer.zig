@@ -35,6 +35,24 @@ pub fn subtractVectorLanes(left: u64, right: u64, lane: u8) u64 {
     return result;
 }
 
+pub fn differenceUnsignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return if (left >= right) left - right else right - left;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_lane = (left >> amount) & mask;
+        const right_lane = (right >> amount) & mask;
+        const difference = if (left_lane >= right_lane) left_lane - right_lane else right_lane - left_lane;
+        result |= difference << amount;
+    }
+    return result;
+}
+
 pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return left *% right;
@@ -69,4 +87,3 @@ pub fn countByteBits(value: u8) u8 {
     }
     return count;
 }
-
