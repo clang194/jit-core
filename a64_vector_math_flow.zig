@@ -178,6 +178,37 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorWideningAdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x2e201000) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const upper = (word & 0x40000000) != 0;
+        const source_bytes = @as(usize, 1) << size;
+        const target_bytes = source_bytes * 2;
+        const source_bits = @intCast(u8, source_bytes * 8);
+        const source_mask = ones(source_bits);
+        const addend = self.state.readVector(vectorRegFromWord(word >> 16));
+        const addend_half = if (upper) addend.high else addend.low;
+        const base = self.state.readVector(vectorRegFromWord(word >> 5));
+        var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < 8 / source_bytes) : (index += 1) {
+            const shift = @intCast(u6, index * source_bytes * 8);
+            const left = vectorElement(base, index, target_bytes);
+            const right = (addend_half >> shift) & source_mask;
+            setVectorElement(&result, index, target_bytes, left +% right);
+        }
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorPairAdd(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf20fc00) != 0x0e20bc00) {
             return false;

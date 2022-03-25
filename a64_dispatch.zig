@@ -368,6 +368,13 @@ pub const Core64Methods = struct {
             if (vector_add) {
                 return;
             }
+            const vector_widening_add = self.runVectorWideningAdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_widening_add) {
+                return;
+            }
             const vector_pair_add = self.runVectorPairAdd(word) catch |err| {
                 try self.raiseFault(err);
                 return;
