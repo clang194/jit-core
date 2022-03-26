@@ -101,6 +101,18 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorRotatedXor(self: *Core64, word: u32) bool {
+        if ((word & 0xffe0fc00) != 0xce608c00) {
+            return false;
+        }
+
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        self.state.writeVector(vectorRegFromWord(word), xorRotatedDoublewordVector(left, right));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runDivide(self: *Core64, word: u32) bool {
         const masked = word & 0x7fe0fc00;
         if (masked != 0x1ac00800 and masked != 0x1ac00c00) {
@@ -282,8 +294,7 @@ pub const Core64Methods = struct {
         const sign = masked == 0x5ac01400;
         const result = if (sign)
             if (wide) countLeadingSignBits64(value) else @as(u64, countLeadingSignBits32(@intCast(u32, value)))
-        else
-            if (wide) countLeadingZeroes64(value) else @as(u64, countLeadingZeroes32(@intCast(u32, value)));
+        else if (wide) countLeadingZeroes64(value) else @as(u64, countLeadingZeroes32(@intCast(u32, value)));
         self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
@@ -339,6 +350,4 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
-
-
 };

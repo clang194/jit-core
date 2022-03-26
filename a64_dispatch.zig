@@ -440,6 +440,9 @@ pub const Core64Methods = struct {
             if (self.runVectorThreeInputBitwise(word)) {
                 return;
             }
+            if (self.runVectorRotatedXor(word)) {
+                return;
+            }
             if (self.runDivide(word)) {
                 return;
             }

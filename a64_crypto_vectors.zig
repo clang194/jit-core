@@ -156,3 +156,9 @@ pub fn mixAesVector(input: a64_state.VectorValue, inverse: bool) a64_state.Vecto
     return output;
 }
 
+pub fn xorRotatedDoublewordVector(left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    return a64_state.VectorValue{
+        .low = left.low ^ ((right.low << 1) | (right.low >> 63)),
+        .high = left.high ^ ((right.high << 1) | (right.high >> 63)),
+    };
+}
