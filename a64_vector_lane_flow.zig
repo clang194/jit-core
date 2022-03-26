@@ -211,4 +211,26 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
+
+    pub fn runVectorAbsolute(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x0e20b800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = a64_state.VectorValue{
+            .low = absoluteVectorLanes(source.low, lane),
+            .high = if (full) absoluteVectorLanes(source.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
 };

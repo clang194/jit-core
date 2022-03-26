@@ -53,6 +53,24 @@ pub fn differenceUnsignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
     return result;
 }
 
+pub fn absoluteVectorLanes(value: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return if ((value & (@as(u64, 1) << 63)) != 0) 0 -% value else value;
+    }
+
+    const mask = ones(lane);
+    const sign = @as(u64, 1) << @intCast(u6, lane - 1);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const element = (value >> amount) & mask;
+        const magnitude = if ((element & sign) != 0) 0 -% element else element;
+        result |= (magnitude & mask) << amount;
+    }
+    return result;
+}
+
 pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return left *% right;

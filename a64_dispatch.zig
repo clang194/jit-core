@@ -326,6 +326,13 @@ pub const Core64Methods = struct {
             if (vector_compare_zero) {
                 return;
             }
+            const vector_absolute = self.runVectorAbsolute(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_absolute) {
+                return;
+            }
             const vector_negate = self.runVectorNegate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
