@@ -178,9 +178,10 @@ pub const Core64Methods = struct {
         return true;
     }
 
-    pub fn runVectorWideningAdd(self: *Core64, word: u32) Core64Error!bool {
+    pub fn runVectorWideningArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
-        const signed = masked == 0x0e201000;
+        const signed = masked == 0x0e201000 or masked == 0x0e203000;
+        const subtracting = masked == 0x0e203000;
         if (!signed and masked != 0x2e201000) {
             return false;
         }
@@ -205,7 +206,7 @@ pub const Core64Methods = struct {
             const left = vectorElement(base, index, target_bytes);
             const raw = (addend_half >> shift) & source_mask;
             const right = if (signed) signExtendRuntime(raw, @intCast(u6, source_bits)) else raw;
-            setVectorElement(&result, index, target_bytes, left +% right);
+            setVectorElement(&result, index, target_bytes, if (subtracting) left -% right else left +% right);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
