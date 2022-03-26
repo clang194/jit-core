@@ -27,7 +27,10 @@ usingnamespace @import("a64_memory_bits.zig");
 
 pub const Core64Methods = struct {
     pub fn runVectorInterleave(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfe0fc00) != 0x0e003800) {
+        const masked = word & 0xbfe0fc00;
+        const lower = masked == 0x0e003800;
+        const upper = masked == 0x0e007800;
+        if (!lower and !upper) {
             return false;
         }
 
@@ -40,7 +43,9 @@ pub const Core64Methods = struct {
         const bytes = @as(usize, 1) << size;
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
-        self.state.writeVector(vectorRegFromWord(word), interleaveLowerVector(left, right, bytes, if (full) @as(usize, 16) else @as(usize, 8)));
+        const total = if (full) @as(usize, 16) else @as(usize, 8);
+        const result = if (lower) interleaveLowerVector(left, right, bytes, total) else interleaveUpperVector(left, right, bytes, total);
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }
