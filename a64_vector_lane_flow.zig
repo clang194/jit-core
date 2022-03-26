@@ -89,6 +89,21 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorReverseBits(self: *Core64, word: u32) bool {
+        if ((word & 0xbffffc00) != 0x2e605800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{
+            .low = reverseVectorByteBits(source.low),
+            .high = if (full) reverseVectorByteBits(source.high) else 0,
+        });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorReverseHalfBytes(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf3ffc00) != 0x0e201800) {
             return false;

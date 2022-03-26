@@ -298,6 +298,9 @@ pub const Core64Methods = struct {
             if (vector_count) {
                 return;
             }
+            if (self.runVectorReverseBits(word)) {
+                return;
+            }
             const vector_reverse_half = self.runVectorReverseHalfBytes(word) catch |err| {
                 try self.raiseFault(err);
                 return;

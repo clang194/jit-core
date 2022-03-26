@@ -38,3 +38,24 @@ pub fn countLeadingSignBits64(value: u64) u64 {
     const folded = if ((value & 0x8000000000000000) != 0) ~value else value;
     return countLeadingZeroes64(folded) - 1;
 }
+
+pub fn reverseByteBits(value: u8) u8 {
+    var remaining = value;
+    var result: u8 = 0;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        result = (result << 1) | (remaining & 1);
+        remaining >>= 1;
+    }
+    return result;
+}
+
+pub fn reverseVectorByteBits(value: u64) u64 {
+    var result: u64 = 0;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        const shift = @intCast(u6, index * 8);
+        result |= @as(u64, reverseByteBits(@intCast(u8, (value >> shift) & 0xff))) << shift;
+    }
+    return result;
+}
