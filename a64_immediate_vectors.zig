@@ -48,6 +48,14 @@ pub fn expandVectorImmediate(op: bool, cmode: u4, imm8: u8) u64 {
     }
 }
 
+pub fn expandVectorHalfFloatImmediate(imm8: u8) u64 {
+    var imm16: u16 = 0;
+    imm16 |= if ((imm8 & 0x80) != 0) @as(u16, 0x8000) else 0;
+    imm16 |= if ((imm8 & 0x40) != 0) @as(u16, 0x3000) else @as(u16, 0x4000);
+    imm16 |= @as(u16, imm8 & 0x3f) << 6;
+    return replicate64(imm16, 16);
+}
+
 pub fn rotateRight64(value: u64, amount: u6) u64 {
     const shift = amount & 63;
     if (shift == 0) {

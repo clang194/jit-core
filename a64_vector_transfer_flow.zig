@@ -219,6 +219,22 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorModifiedImmediate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbff8fc00) == 0x0f00fc00) {
+            const full = (word & 0x40000000) != 0;
+            const imm8 = @intCast(u8, ((word >> 11) & 0xe0) | ((word >> 5) & 0x1f));
+            const expanded = expandVectorHalfFloatImmediate(imm8);
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{
+                .low = expanded,
+                .high = if (full) expanded else 0,
+            });
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        if ((word & 0x9ff80c00) == 0x0f000c00) {
+            return error.UnallocatedEncoding;
+        }
+
         if ((word & 0x9ff80c00) != 0x0f000400) {
             return false;
         }
