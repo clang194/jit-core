@@ -57,7 +57,7 @@ pub const Core64Methods = struct {
 
     pub fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f005400 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
+        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f005400 and masked != 0x0f008400 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -65,6 +65,26 @@ pub const Core64Methods = struct {
         const immh = @intCast(u4, (word >> 19) & 0xf);
         if (immh == 0) {
             return error.UnallocatedEncoding;
+        }
+        if (masked == 0x0f008400) {
+            if ((immh & 8) != 0) {
+                return error.ReservedInstruction;
+            }
+
+            const target_lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));
+            const source_lane = target_lane * 2;
+            const immediate = @intCast(u8, (word >> 16) & 0x7f);
+            const amount = source_lane - immediate;
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            const narrowed = narrowShiftRightVectorLanes(source, @intCast(usize, target_lane / 8), amount);
+            const result = if (full) blk: {
+                var target = self.state.readVector(vectorRegFromWord(word));
+                target.high = narrowed;
+                break :blk target;
+            } else a64_state.VectorValue{ .low = narrowed, .high = 0 };
+            self.state.writeVector(vectorRegFromWord(word), result);
+            self.state.pc +%= 4;
+            return true;
         }
         if (masked == 0x0f00a400 or masked == 0x2f00a400) {
             if ((immh & 8) != 0) {
