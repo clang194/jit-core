@@ -82,3 +82,16 @@ pub fn narrowShiftRightVectorLanes(value: a64_state.VectorValue, bytes: usize, a
     }
     return result;
 }
+
+pub fn narrowRoundedShiftRightVectorLanes(value: a64_state.VectorValue, bytes: usize, amount: u8) u64 {
+    var result: u64 = 0;
+    const mask = ones(@intCast(u8, bytes * 8));
+    const source_bytes = bytes * 2;
+    const round = @as(u64, 1) << @intCast(u6, amount - 1);
+    var index: usize = 0;
+    while (index < 8 / bytes) : (index += 1) {
+        const element = ((vectorElement(value, index, source_bytes) +% round) >> @intCast(u6, amount)) & mask;
+        result |= element << @intCast(u6, index * bytes * 8);
+    }
+    return result;
+}
