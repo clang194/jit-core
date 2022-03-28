@@ -41,6 +41,21 @@ pub fn shiftRightVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     return result;
 }
 
+pub fn roundedShiftRightVectorLanes(value: u64, lane: u8, amount: u8) u64 {
+    const mask = ones(lane);
+    const round = @as(u64, 1) << @intCast(u6, amount - 1);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const shifted = if (amount >= lane) @as(u64, 0) else element >> @intCast(u6, amount);
+        const corrected = shifted +% if ((element & round) != 0) @as(u64, 1) else @as(u64, 0);
+        result |= (corrected & mask) << position;
+    }
+    return result;
+}
+
 pub fn shiftRightSignedVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     const mask = ones(lane);
     const sign = @as(u64, 1) << @intCast(u6, lane - 1);
@@ -51,8 +66,7 @@ pub fn shiftRightSignedVectorLanes(value: u64, lane: u8, amount: u8) u64 {
         const element = (value >> position) & mask;
         const shifted = if ((element & sign) == 0)
             if (amount >= lane) @as(u64, 0) else element >> @intCast(u6, amount)
-        else
-            if (amount >= lane) mask else (element >> @intCast(u6, amount)) | (mask ^ (mask >> @intCast(u6, amount)));
+        else if (amount >= lane) mask else (element >> @intCast(u6, amount)) | (mask ^ (mask >> @intCast(u6, amount)));
         result |= shifted << position;
     }
     return result;
@@ -107,4 +121,3 @@ pub fn widenSignedShiftLeftVectorHalf(value: u64, lane: u8, amount: u6) a64_stat
     }
     return result;
 }
-
