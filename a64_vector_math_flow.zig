@@ -206,7 +206,8 @@ pub const Core64Methods = struct {
         const masked = word & 0xbf20fc00;
         const signed = masked == 0x0e201000 or masked == 0x0e203000;
         const subtracting = masked == 0x0e203000 or masked == 0x2e203000;
-        if (!signed and masked != 0x2e201000 and masked != 0x2e203000) {
+        const widening_source_pair = masked == 0x2e200000;
+        if (!signed and masked != 0x2e201000 and masked != 0x2e203000 and !widening_source_pair) {
             return false;
         }
 
@@ -223,11 +224,13 @@ pub const Core64Methods = struct {
         const addend = self.state.readVector(vectorRegFromWord(word >> 16));
         const addend_half = if (upper) addend.high else addend.low;
         const base = self.state.readVector(vectorRegFromWord(word >> 5));
+        const base_half = if (upper) base.high else base.low;
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
         var index: usize = 0;
         while (index < 8 / source_bytes) : (index += 1) {
             const shift = @intCast(u6, index * source_bytes * 8);
-            const left = vectorElement(base, index, target_bytes);
+            const raw_left = (base_half >> shift) & source_mask;
+            const left = if (widening_source_pair) if (signed) signExtendRuntime(raw_left, @intCast(u6, source_bits)) else raw_left else vectorElement(base, index, target_bytes);
             const raw = (addend_half >> shift) & source_mask;
             const right = if (signed) signExtendRuntime(raw, @intCast(u6, source_bits)) else raw;
             setVectorElement(&result, index, target_bytes, if (subtracting) left -% right else left +% right);
