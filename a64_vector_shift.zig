@@ -72,6 +72,21 @@ pub fn shiftRightSignedVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     return result;
 }
 
+pub fn roundedShiftRightSignedVectorLanes(value: u64, lane: u8, amount: u8) u64 {
+    const mask = ones(lane);
+    const round = @as(u64, 1) << @intCast(u6, amount - 1);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const shifted = shiftRightSignedVectorLanes(element, lane, amount) & mask;
+        const corrected = shifted +% if ((element & round) != 0) @as(u64, 1) else @as(u64, 0);
+        result |= (corrected & mask) << position;
+    }
+    return result;
+}
+
 pub fn variableUnsignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
     const mask = ones(lane);
     const limit = @as(i16, lane);
