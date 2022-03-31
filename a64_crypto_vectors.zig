@@ -162,3 +162,13 @@ pub fn xorRotatedDoublewordVector(left: a64_state.VectorValue, right: a64_state.
         .high = left.high ^ ((right.high << 1) | (right.high >> 63)),
     };
 }
+
+pub fn sm3SelectWord(addend: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    const top_addend = @intCast(u32, vectorElement(addend, 3, 4));
+    const top_message = @intCast(u32, vectorElement(message, 3, 4));
+    const top_state = @intCast(u32, vectorElement(state, 3, 4));
+    const rotated_state = (top_state >> 20) | (top_state << 12);
+    const sum = rotated_state +% top_message +% top_addend;
+    const result = (sum >> 25) | (sum << 7);
+    return a64_state.VectorValue{ .low = 0, .high = @as(u64, result) << 32 };
+}

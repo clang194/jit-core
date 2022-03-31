@@ -82,7 +82,7 @@ pub const Core64Methods = struct {
 
     pub fn runVectorThreeInputBitwise(self: *Core64, word: u32) bool {
         const masked = word & 0xffe08000;
-        if (masked != 0xce000000 and masked != 0xce200000) {
+        if (masked != 0xce000000 and masked != 0xce200000 and masked != 0xce400000) {
             return false;
         }
 
@@ -92,7 +92,7 @@ pub const Core64Methods = struct {
         const result = if (masked == 0xce000000) a64_state.VectorValue{
             .low = left.low ^ right.low ^ third.low,
             .high = left.high ^ right.high ^ third.high,
-        } else a64_state.VectorValue{
+        } else if (masked == 0xce400000) sm3SelectWord(third, right, left) else a64_state.VectorValue{
             .low = left.low ^ (right.low & ~third.low),
             .high = left.high ^ (right.high & ~third.high),
         };
