@@ -56,6 +56,21 @@ pub fn shiftRightVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     return result;
 }
 
+pub fn insertShiftRightVectorLanes(target: u64, source: u64, lane: u8, amount: u8) u64 {
+    const mask = ones(lane);
+    const insert_mask = if (amount >= lane) @as(u64, 0) else mask >> @intCast(u6, amount);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const target_element = (target >> position) & mask;
+        const source_element = (source >> position) & mask;
+        const inserted = if (amount >= lane) @as(u64, 0) else source_element >> @intCast(u6, amount);
+        result |= ((target_element & ~insert_mask) | inserted) << position;
+    }
+    return result;
+}
+
 pub fn roundedShiftRightVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     const mask = ones(lane);
     const round = @as(u64, 1) << @intCast(u6, amount - 1);
