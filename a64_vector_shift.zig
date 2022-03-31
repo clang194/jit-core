@@ -22,6 +22,21 @@ pub fn shiftLeftVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     return result;
 }
 
+pub fn insertShiftLeftVectorLanes(target: u64, source: u64, lane: u8, amount: u8) u64 {
+    const mask = ones(lane);
+    const insert_mask = (mask << @intCast(u6, amount)) & mask;
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const target_element = (target >> position) & mask;
+        const source_element = (source >> position) & mask;
+        const inserted = (source_element << @intCast(u6, amount)) & mask;
+        result |= ((target_element & ~insert_mask) | inserted) << position;
+    }
+    return result;
+}
+
 pub fn shiftRightVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     if (amount >= lane) {
         return 0;

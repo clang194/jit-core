@@ -57,7 +57,7 @@ pub const Core64Methods = struct {
 
     pub fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f00a400) {
+        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f005400 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -122,6 +122,15 @@ pub const Core64Methods = struct {
         else
             immediate - @intCast(u8, lane);
         const input = self.state.readVector(vectorRegFromWord(word >> 5));
+        if (masked == 0x2f005400) {
+            const target = self.state.readVector(vectorRegFromWord(word));
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{
+                .low = insertShiftLeftVectorLanes(target.low, input.low, lane, amount),
+                .high = if (full) insertShiftLeftVectorLanes(target.high, input.high, lane, amount) else 0,
+            });
+            self.state.pc +%= 4;
+            return true;
+        }
         const shifted = a64_state.VectorValue{
             .low = if (signed_right) shiftRightSignedVectorLanes(input.low, lane, amount) else if (rounded_signed_right) roundedShiftRightSignedVectorLanes(input.low, lane, amount) else if (rounded_right) roundedShiftRightVectorLanes(input.low, lane, amount) else if (right) shiftRightVectorLanes(input.low, lane, amount) else shiftLeftVectorLanes(input.low, lane, amount),
             .high = if (full) if (signed_right) shiftRightSignedVectorLanes(input.high, lane, amount) else if (rounded_signed_right) roundedShiftRightSignedVectorLanes(input.high, lane, amount) else if (rounded_right) roundedShiftRightVectorLanes(input.high, lane, amount) else if (right) shiftRightVectorLanes(input.high, lane, amount) else shiftLeftVectorLanes(input.high, lane, amount) else 0,
