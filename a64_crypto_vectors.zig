@@ -172,3 +172,21 @@ pub fn sm3SelectWord(addend: a64_state.VectorValue, message: a64_state.VectorVal
     const result = (sum >> 25) | (sum << 7);
     return a64_state.VectorValue{ .low = 0, .high = @as(u64, result) << 32 };
 }
+
+pub fn sm3MixOneA(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, index: usize) a64_state.VectorValue {
+    const low_target = @intCast(u32, vectorElement(target, 0, 4));
+    const after_low_target = @intCast(u32, vectorElement(target, 1, 4));
+    const before_top_target = @intCast(u32, vectorElement(target, 2, 4));
+    const top_target = @intCast(u32, vectorElement(target, 3, 4));
+    const top_state = @intCast(u32, vectorElement(state, 3, 4));
+    const message_word = @intCast(u32, vectorElement(message, index, 4));
+    const selected_state = top_state ^ ((top_target >> 20) | (top_target << 12));
+    const combined_target = after_low_target ^ top_target ^ before_top_target;
+    const top_result = combined_target +% low_target +% selected_state +% message_word;
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    setVectorElement(&result, 0, 4, after_low_target);
+    setVectorElement(&result, 1, 4, (before_top_target >> 23) | (before_top_target << 9));
+    setVectorElement(&result, 2, 4, top_target);
+    setVectorElement(&result, 3, 4, top_result);
+    return result;
+}

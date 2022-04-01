@@ -443,6 +443,9 @@ pub const Core64Methods = struct {
             if (self.runVectorThreeInputBitwise(word)) {
                 return;
             }
+            if (self.runVectorThreeInputHash(word)) {
+                return;
+            }
             if (self.runVectorRotatedXor(word)) {
                 return;
             }

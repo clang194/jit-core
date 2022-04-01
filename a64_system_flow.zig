@@ -101,6 +101,19 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorThreeInputHash(self: *Core64, word: u32) bool {
+        if ((word & 0xffe0cc00) != 0xce408000) {
+            return false;
+        }
+
+        const target = self.state.readVector(vectorRegFromWord(word));
+        const message = self.state.readVector(vectorRegFromWord(word >> 16));
+        const state = self.state.readVector(vectorRegFromWord(word >> 5));
+        self.state.writeVector(vectorRegFromWord(word), sm3MixOneA(target, message, state, @intCast(usize, (word >> 12) & 3)));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorRotatedXor(self: *Core64, word: u32) bool {
         if ((word & 0xffe0fc00) != 0xce608c00) {
             return false;
