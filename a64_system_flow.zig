@@ -102,14 +102,18 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorThreeInputHash(self: *Core64, word: u32) bool {
-        if ((word & 0xffe0cc00) != 0xce408000) {
+        if ((word & 0xffe0c800) != 0xce408000) {
             return false;
         }
 
         const target = self.state.readVector(vectorRegFromWord(word));
         const message = self.state.readVector(vectorRegFromWord(word >> 16));
         const state = self.state.readVector(vectorRegFromWord(word >> 5));
-        self.state.writeVector(vectorRegFromWord(word), sm3MixOneA(target, message, state, @intCast(usize, (word >> 12) & 3)));
+        const result = if ((word & 0x400) == 0)
+            sm3MixOneA(target, message, state, @intCast(usize, (word >> 12) & 3))
+        else
+            sm3MixOneB(target, message, state, @intCast(usize, (word >> 12) & 3));
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }
