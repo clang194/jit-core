@@ -449,6 +449,9 @@ pub const Core64Methods = struct {
             if (self.runVectorRotatedXor(word)) {
                 return;
             }
+            if (self.runVectorMessageSchedule(word)) {
+                return;
+            }
             if (self.runDivide(word)) {
                 return;
             }

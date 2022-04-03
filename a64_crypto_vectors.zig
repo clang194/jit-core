@@ -230,3 +230,29 @@ pub fn sm3MixTwoA(target: a64_state.VectorValue, message: a64_state.VectorValue,
 pub fn sm3MixTwoB(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, index: usize) a64_state.VectorValue {
     return sm3MixTwo(target, message, state, index, true);
 }
+
+fn rotateLeftWord(value: u32, amount: u5) u32 {
+    const inverse = @intCast(u5, @as(u6, 32) - @as(u6, amount));
+    return (value << amount) | (value >> inverse);
+}
+
+fn rotateRightWord(value: u32, amount: u5) u32 {
+    const inverse = @intCast(u5, @as(u6, 32) - @as(u6, amount));
+    return (value >> amount) | (value << inverse);
+}
+
+pub fn sm3PrepareWordsSecond(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    var mixed = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < 4) : (index += 1) {
+        const lane = @intCast(u32, vectorElement(state, index, 4)) ^ rotateLeftWord(@intCast(u32, vectorElement(message, index, 4)), 7);
+        setVectorElement(&mixed, index, 4, lane);
+    }
+
+    var result = a64_state.VectorValue{ .low = target.low ^ mixed.low, .high = target.high ^ mixed.high };
+    const low_mixed = @intCast(u32, vectorElement(mixed, 0, 4));
+    const rotate_one = rotateRightWord(low_mixed, 17);
+    const folded = rotate_one ^ rotateRightWord(rotate_one, 17) ^ rotateRightWord(rotate_one, 9);
+    setVectorElement(&result, 3, 4, @intCast(u32, vectorElement(result, 3, 4)) ^ folded);
+    return result;
+}
