@@ -202,14 +202,17 @@ pub fn sm3MixOneB(target: a64_state.VectorValue, message: a64_state.VectorValue,
     return sm3MixOne(target, message, state, index, true);
 }
 
-pub fn sm3MixTwoA(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, index: usize) a64_state.VectorValue {
+fn sm3MixTwo(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, index: usize, choose_masked: bool) a64_state.VectorValue {
     const low_target = @intCast(u32, vectorElement(target, 0, 4));
     const after_low_target = @intCast(u32, vectorElement(target, 1, 4));
     const before_top_target = @intCast(u32, vectorElement(target, 2, 4));
     const top_target = @intCast(u32, vectorElement(target, 3, 4));
     const top_state = @intCast(u32, vectorElement(state, 3, 4));
     const message_word = @intCast(u32, vectorElement(message, index, 4));
-    const combined_target = after_low_target ^ top_target ^ before_top_target;
+    const combined_target = if (choose_masked)
+        (top_target & before_top_target) | (~top_target & after_low_target)
+    else
+        after_low_target ^ top_target ^ before_top_target;
     const combined = combined_target +% low_target +% top_state +% message_word;
     const top_result = combined ^ ((combined >> 23) | (combined << 9)) ^ ((combined >> 15) | (combined << 17));
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
@@ -218,4 +221,12 @@ pub fn sm3MixTwoA(target: a64_state.VectorValue, message: a64_state.VectorValue,
     setVectorElement(&result, 2, 4, top_target);
     setVectorElement(&result, 3, 4, top_result);
     return result;
+}
+
+pub fn sm3MixTwoA(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, index: usize) a64_state.VectorValue {
+    return sm3MixTwo(target, message, state, index, false);
+}
+
+pub fn sm3MixTwoB(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, index: usize) a64_state.VectorValue {
+    return sm3MixTwo(target, message, state, index, true);
 }
