@@ -148,6 +148,24 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff80fc00) != 0x5f005400) {
+            return false;
+        }
+
+        const immh = @intCast(u4, (word >> 19) & 0xf);
+        if ((immh & 8) == 0) {
+            return error.ReservedInstruction;
+        }
+
+        const immediate = @intCast(u8, (word >> 16) & 0x7f);
+        const amount = @intCast(u6, immediate - 64);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = source << amount, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarVectorArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
         if (masked != 0x5e208400 and masked != 0x7e208400) {

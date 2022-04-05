@@ -357,6 +357,13 @@ pub const Core64Methods = struct {
             if (vector_shift_immediate) {
                 return;
             }
+            const scalar_shift_immediate = self.runScalarShiftImmediate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_shift_immediate) {
+                return;
+            }
             const scalar_vector_arithmetic = self.runScalarVectorArithmetic(word) catch |err| {
                 try self.raiseFault(err);
                 return;
