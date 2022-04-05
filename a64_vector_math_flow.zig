@@ -150,7 +150,7 @@ pub const Core64Methods = struct {
 
     pub fn runScalarShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff80fc00;
-        if (masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400) {
+        if (masked != 0x5f000400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400) {
             return false;
         }
 
@@ -163,7 +163,13 @@ pub const Core64Methods = struct {
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const result = if (masked == 0x5f005400)
             source << @intCast(u6, immediate - 64)
-        else blk: {
+        else if (masked == 0x5f000400) blk: {
+            const amount = 128 - @as(u8, immediate);
+            break :blk if (amount == 64)
+                if ((source & 0x8000000000000000) == 0) @as(u64, 0) else ~@as(u64, 0)
+            else
+                @bitCast(u64, @bitCast(i64, source) >> @intCast(u6, amount));
+        } else blk: {
             const amount = 128 - @as(u8, immediate);
             const shifted = if (amount == 64) @as(u64, 0) else source >> @intCast(u6, amount);
             break :blk if (masked == 0x7f001400) shifted +% self.state.readVector(vectorRegFromWord(word)).low else shifted;
