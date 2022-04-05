@@ -135,14 +135,18 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorMessageSchedule(self: *Core64, word: u32) bool {
-        if ((word & 0xffe0fc00) != 0xce60c400) {
+        if ((word & 0xffe0f800) != 0xce60c000) {
             return false;
         }
 
         const target = self.state.readVector(vectorRegFromWord(word));
         const message = self.state.readVector(vectorRegFromWord(word >> 16));
         const state = self.state.readVector(vectorRegFromWord(word >> 5));
-        self.state.writeVector(vectorRegFromWord(word), sm3PrepareWordsSecond(target, message, state));
+        const result = if ((word & 0x400) == 0)
+            sm3PrepareWordsFirst(target, message, state)
+        else
+            sm3PrepareWordsSecond(target, message, state);
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }

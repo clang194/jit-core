@@ -256,3 +256,24 @@ pub fn sm3PrepareWordsSecond(target: a64_state.VectorValue, message: a64_state.V
     setVectorElement(&result, 3, 4, @intCast(u32, vectorElement(result, 3, 4)) ^ folded);
     return result;
 }
+
+fn sm3FoldWord(value: u32) u32 {
+    return value ^ rotateRightWord(value, 17) ^ rotateRightWord(value, 9);
+}
+
+pub fn sm3PrepareWordsFirst(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    const mixed = a64_state.VectorValue{ .low = target.low ^ state.low, .high = target.high ^ state.high };
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    setVectorElement(&result, 0, 4, @intCast(u32, vectorElement(mixed, 0, 4)) ^ rotateLeftWord(@intCast(u32, vectorElement(message, 1, 4)), 15));
+    setVectorElement(&result, 1, 4, @intCast(u32, vectorElement(mixed, 1, 4)) ^ rotateLeftWord(@intCast(u32, vectorElement(message, 2, 4)), 15));
+    setVectorElement(&result, 2, 4, @intCast(u32, vectorElement(mixed, 2, 4)) ^ rotateLeftWord(@intCast(u32, vectorElement(message, 3, 4)), 15));
+    setVectorElement(&result, 3, 4, @intCast(u32, vectorElement(mixed, 3, 4)) ^ rotateLeftWord(@intCast(u32, vectorElement(message, 0, 4)), 15));
+
+    var index: usize = 0;
+    while (index < 3) : (index += 1) {
+        setVectorElement(&result, index, 4, sm3FoldWord(@intCast(u32, vectorElement(result, index, 4))));
+    }
+    const top_word = @intCast(u32, vectorElement(mixed, 3, 4)) ^ rotateRightWord(@intCast(u32, vectorElement(result, 0, 4)), 17);
+    setVectorElement(&result, 3, 4, sm3FoldWord(top_word));
+    return result;
+}
