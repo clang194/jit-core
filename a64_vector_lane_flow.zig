@@ -29,9 +29,10 @@ pub const Core64Methods = struct {
     pub fn runVectorInterleave(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfe0fc00;
         const lower = masked == 0x0e003800;
-        const transpose = masked == 0x0e002800;
+        const transpose_lower = masked == 0x0e002800;
+        const transpose_upper = masked == 0x0e006800;
         const upper = masked == 0x0e007800;
-        if (!lower and !transpose and !upper) {
+        if (!lower and !transpose_lower and !transpose_upper and !upper) {
             return false;
         }
 
@@ -45,7 +46,7 @@ pub const Core64Methods = struct {
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const total = if (full) @as(usize, 16) else @as(usize, 8);
-        const result = if (lower) interleaveLowerVector(left, right, bytes, total) else if (transpose) transposeLowerVector(left, right, bytes, total) else interleaveUpperVector(left, right, bytes, total);
+        const result = if (lower) interleaveLowerVector(left, right, bytes, total) else if (transpose_lower) transposeLowerVector(left, right, bytes, total) else if (transpose_upper) transposeUpperVector(left, right, bytes, total) else interleaveUpperVector(left, right, bytes, total);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
