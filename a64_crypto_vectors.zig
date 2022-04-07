@@ -183,6 +183,33 @@ pub fn sha1ScheduleNext(target: a64_state.VectorValue, state: a64_state.VectorVa
     return result;
 }
 
+fn sha1Choose(x: u32, y: u32, z: u32) u32 {
+    return ((y ^ z) & x) ^ z;
+}
+
+pub fn sha1RoundChoose(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    var x = target;
+    var y = @intCast(u32, vectorElement(state, 0, 4));
+    var index: usize = 0;
+    while (index < 4) : (index += 1) {
+        const low_x = @intCast(u32, vectorElement(x, 0, 4));
+        const after_low_x = @intCast(u32, vectorElement(x, 1, 4));
+        const before_high_x = @intCast(u32, vectorElement(x, 2, 4));
+        const high_x = @intCast(u32, vectorElement(x, 3, 4));
+        const combined = sha1Choose(after_low_x, before_high_x, high_x);
+        const message_word = @intCast(u32, vectorElement(message, index, 4));
+        y +%= rotateLeftWord(low_x, 5) +% combined +% message_word;
+        var next = a64_state.VectorValue{ .low = 0, .high = 0 };
+        setVectorElement(&next, 0, 4, y);
+        setVectorElement(&next, 1, 4, low_x);
+        setVectorElement(&next, 2, 4, rotateRightWord(after_low_x, 2));
+        setVectorElement(&next, 3, 4, before_high_x);
+        x = next;
+        y = high_x;
+    }
+    return x;
+}
+
 pub fn sm3SelectWord(addend: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
     const top_addend = @intCast(u32, vectorElement(addend, 3, 4));
     const top_message = @intCast(u32, vectorElement(message, 3, 4));

@@ -154,7 +154,8 @@ pub const Core64Methods = struct {
     pub fn runVectorShaSchedule(self: *Core64, word: u32) bool {
         const three_input = (word & 0xffe0fc00) == 0x5e000c00;
         const two_input = (word & 0xfffffc00) == 0x5e281800;
-        if (!three_input and !two_input) {
+        const round_choose = (word & 0xffe0fc00) == 0x5e000000;
+        if (!three_input and !two_input and !round_choose) {
             return false;
         }
 
@@ -163,6 +164,9 @@ pub const Core64Methods = struct {
         const result = if (three_input) blk: {
             const message = self.state.readVector(vectorRegFromWord(word >> 16));
             break :blk sha1ScheduleFirst(target, message, state);
+        } else if (round_choose) blk: {
+            const message = self.state.readVector(vectorRegFromWord(word >> 16));
+            break :blk sha1RoundChoose(target, message, state);
         } else sha1ScheduleNext(target, state);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
