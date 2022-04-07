@@ -343,6 +343,13 @@ pub const Core64Methods = struct {
             if (vector_negate) {
                 return;
             }
+            const scalar_vector_negate = self.runScalarVectorNegate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_vector_negate) {
+                return;
+            }
             const vector_float = self.runVectorFloatBinary(word) catch |err| {
                 try self.raiseFault(err);
                 return;

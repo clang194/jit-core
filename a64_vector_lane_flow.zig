@@ -234,6 +234,22 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarVectorNegate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff3ffc00) != 0x7e20b800) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size != 3) {
+            return error.ReservedInstruction;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = 0 -% source, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorAbsolute(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf3ffc00) != 0x0e20b800) {
             return false;
