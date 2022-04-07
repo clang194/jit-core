@@ -187,7 +187,11 @@ fn sha1Choose(x: u32, y: u32, z: u32) u32 {
     return ((y ^ z) & x) ^ z;
 }
 
-pub fn sha1RoundChoose(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+fn sha1RoundMix(x: u32, y: u32, z: u32, parity: bool) u32 {
+    return if (parity) x ^ y ^ z else sha1Choose(x, y, z);
+}
+
+fn sha1RoundUpdate(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, parity: bool) a64_state.VectorValue {
     var x = target;
     var y = @intCast(u32, vectorElement(state, 0, 4));
     var index: usize = 0;
@@ -196,7 +200,7 @@ pub fn sha1RoundChoose(target: a64_state.VectorValue, message: a64_state.VectorV
         const after_low_x = @intCast(u32, vectorElement(x, 1, 4));
         const before_high_x = @intCast(u32, vectorElement(x, 2, 4));
         const high_x = @intCast(u32, vectorElement(x, 3, 4));
-        const combined = sha1Choose(after_low_x, before_high_x, high_x);
+        const combined = sha1RoundMix(after_low_x, before_high_x, high_x, parity);
         const message_word = @intCast(u32, vectorElement(message, index, 4));
         y +%= rotateLeftWord(low_x, 5) +% combined +% message_word;
         var next = a64_state.VectorValue{ .low = 0, .high = 0 };
@@ -208,6 +212,14 @@ pub fn sha1RoundChoose(target: a64_state.VectorValue, message: a64_state.VectorV
         y = high_x;
     }
     return x;
+}
+
+pub fn sha1RoundChoose(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    return sha1RoundUpdate(target, message, state, false);
+}
+
+pub fn sha1RoundParity(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    return sha1RoundUpdate(target, message, state, true);
 }
 
 pub fn sm3SelectWord(addend: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
