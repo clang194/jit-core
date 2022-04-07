@@ -170,6 +170,19 @@ pub fn sha1ScheduleFirst(target: a64_state.VectorValue, message: a64_state.Vecto
     };
 }
 
+pub fn sha1ScheduleNext(target: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    const first = @intCast(u32, vectorElement(target, 0, 4)) ^ @intCast(u32, vectorElement(state, 1, 4));
+    const second = @intCast(u32, vectorElement(target, 1, 4)) ^ @intCast(u32, vectorElement(state, 2, 4));
+    const third = @intCast(u32, vectorElement(target, 2, 4)) ^ @intCast(u32, vectorElement(state, 3, 4));
+    const fourth = @intCast(u32, vectorElement(target, 3, 4));
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    setVectorElement(&result, 0, 4, rotateLeftWord(first, 1));
+    setVectorElement(&result, 1, 4, rotateLeftWord(second, 1));
+    setVectorElement(&result, 2, 4, rotateLeftWord(third, 1));
+    setVectorElement(&result, 3, 4, rotateLeftWord(first, 2) ^ rotateLeftWord(fourth, 1));
+    return result;
+}
+
 pub fn sm3SelectWord(addend: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
     const top_addend = @intCast(u32, vectorElement(addend, 3, 4));
     const top_message = @intCast(u32, vectorElement(message, 3, 4));
