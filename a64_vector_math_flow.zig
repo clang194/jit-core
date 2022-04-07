@@ -203,7 +203,7 @@ pub const Core64Methods = struct {
 
     pub fn runScalarVectorArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
-        if (masked != 0x5e208400 and masked != 0x7e208400) {
+        if (masked != 0x5e203400 and masked != 0x5e208400 and masked != 0x7e208400) {
             return false;
         }
 
@@ -214,7 +214,14 @@ pub const Core64Methods = struct {
 
         const left = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const right = self.state.readVector(vectorRegFromWord(word >> 16)).low;
-        const result = if (masked == 0x5e208400) left +% right else left -% right;
+        const result = if (masked == 0x5e208400)
+            left +% right
+        else if (masked == 0x7e208400)
+            left -% right
+        else if (@bitCast(i64, left) > @bitCast(i64, right))
+            ~@as(u64, 0)
+        else
+            0;
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
