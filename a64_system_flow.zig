@@ -151,6 +151,19 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorShaSchedule(self: *Core64, word: u32) bool {
+        if ((word & 0xffe0fc00) != 0x5e000c00) {
+            return false;
+        }
+
+        const target = self.state.readVector(vectorRegFromWord(word));
+        const message = self.state.readVector(vectorRegFromWord(word >> 16));
+        const state = self.state.readVector(vectorRegFromWord(word >> 5));
+        self.state.writeVector(vectorRegFromWord(word), sha1ScheduleFirst(target, message, state));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runDivide(self: *Core64, word: u32) bool {
         const masked = word & 0x7fe0fc00;
         if (masked != 0x1ac00800 and masked != 0x1ac00c00) {

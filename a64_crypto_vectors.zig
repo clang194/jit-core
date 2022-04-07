@@ -163,6 +163,13 @@ pub fn xorRotatedDoublewordVector(left: a64_state.VectorValue, right: a64_state.
     };
 }
 
+pub fn sha1ScheduleFirst(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    return a64_state.VectorValue{
+        .low = target.high ^ target.low ^ message.low,
+        .high = state.low ^ target.high ^ message.high,
+    };
+}
+
 pub fn sm3SelectWord(addend: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
     const top_addend = @intCast(u32, vectorElement(addend, 3, 4));
     const top_message = @intCast(u32, vectorElement(message, 3, 4));
