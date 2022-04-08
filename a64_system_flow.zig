@@ -156,7 +156,8 @@ pub const Core64Methods = struct {
         const two_input = (word & 0xfffffc00) == 0x5e281800;
         const round_choose = (word & 0xffe0fc00) == 0x5e000000;
         const round_parity = (word & 0xffe0fc00) == 0x5e001000;
-        if (!three_input and !two_input and !round_choose and !round_parity) {
+        const round_majority = (word & 0xffe0fc00) == 0x5e002000;
+        if (!three_input and !two_input and !round_choose and !round_parity and !round_majority) {
             return false;
         }
 
@@ -171,6 +172,9 @@ pub const Core64Methods = struct {
         } else if (round_parity) blk: {
             const message = self.state.readVector(vectorRegFromWord(word >> 16));
             break :blk sha1RoundParity(target, message, state);
+        } else if (round_majority) blk: {
+            const message = self.state.readVector(vectorRegFromWord(word >> 16));
+            break :blk sha1RoundMajority(target, message, state);
         } else sha1ScheduleNext(target, state);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
