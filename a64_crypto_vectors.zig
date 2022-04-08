@@ -183,6 +183,18 @@ pub fn sha1ScheduleNext(target: a64_state.VectorValue, state: a64_state.VectorVa
     return result;
 }
 
+pub fn sha256ScheduleFirst(target: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < 4) : (index += 1) {
+        const shifted = if (index == 3) @intCast(u32, vectorElement(state, 0, 4)) else @intCast(u32, vectorElement(target, index + 1, 4));
+        const mixed = rotateRightWord(shifted, 7) ^ rotateRightWord(shifted, 18) ^ (shifted >> 3);
+        const prior = @intCast(u32, vectorElement(target, index, 4));
+        setVectorElement(&result, index, 4, prior +% mixed);
+    }
+    return result;
+}
+
 fn sha1Choose(x: u32, y: u32, z: u32) u32 {
     return ((y ^ z) & x) ^ z;
 }
