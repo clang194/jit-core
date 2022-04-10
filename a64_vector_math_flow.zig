@@ -281,6 +281,44 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorMultiplyAddByElement(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf00f400) != 0x2f000000) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 0 or size == 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const bytes = @as(usize, 1) << size;
+        const total = if (full) @as(usize, 16) else @as(usize, 8);
+        const high = @intCast(usize, (word >> 11) & 1);
+        const left_index = @intCast(usize, (word >> 21) & 1);
+        const middle_index = @intCast(usize, (word >> 20) & 1);
+        const lane_index = if (size == 1)
+            (high << 2) | (left_index << 1) | middle_index
+        else
+            (high << 1) | left_index;
+        const element_reg = if (size == 1)
+            (word >> 16) & 0xf
+        else
+            ((word >> 16) & 0xf) | (((word >> 20) & 1) << 4);
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, bytes);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const prior = self.state.readVector(vectorRegFromWord(word));
+        var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < total / bytes) : (index += 1) {
+            const product = vectorElement(source, index, bytes) *% element;
+            setVectorElement(&result, index, bytes, vectorElement(prior, index, bytes) +% product);
+        }
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorWideningArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000;
