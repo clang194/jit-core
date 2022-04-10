@@ -282,7 +282,10 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorMultiplyAddByElement(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf00f400) != 0x2f000000) {
+        const masked = word & 0xbf00f400;
+        const multiply_only = masked == 0x0f008000;
+        const accumulate = masked == 0x2f000000;
+        if (!multiply_only and !accumulate) {
             return false;
         }
 
@@ -312,7 +315,8 @@ pub const Core64Methods = struct {
         var index: usize = 0;
         while (index < total / bytes) : (index += 1) {
             const product = vectorElement(source, index, bytes) *% element;
-            setVectorElement(&result, index, bytes, vectorElement(prior, index, bytes) +% product);
+            const value = if (accumulate) vectorElement(prior, index, bytes) +% product else product;
+            setVectorElement(&result, index, bytes, value);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
