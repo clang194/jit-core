@@ -285,7 +285,8 @@ pub const Core64Methods = struct {
         const masked = word & 0xbf00f400;
         const multiply_only = masked == 0x0f008000;
         const accumulate = masked == 0x2f000000;
-        if (!multiply_only and !accumulate) {
+        const subtracting = masked == 0x2f004000;
+        if (!multiply_only and !accumulate and !subtracting) {
             return false;
         }
 
@@ -315,7 +316,12 @@ pub const Core64Methods = struct {
         var index: usize = 0;
         while (index < total / bytes) : (index += 1) {
             const product = vectorElement(source, index, bytes) *% element;
-            const value = if (accumulate) vectorElement(prior, index, bytes) +% product else product;
+            const value = if (accumulate)
+                vectorElement(prior, index, bytes) +% product
+            else if (subtracting)
+                vectorElement(prior, index, bytes) -% product
+            else
+                product;
             setVectorElement(&result, index, bytes, value);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
