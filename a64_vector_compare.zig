@@ -60,9 +60,9 @@ pub fn greaterUnsignedVectorLanes(left: u64, right: u64, lane: u8, inclusive: bo
     return result;
 }
 
-pub fn compareZeroVectorLanes(value: u64, lane: u8, greater: bool, equal: bool) u64 {
+pub fn compareZeroVectorLanes(value: u64, lane: u8, greater: bool, equal: bool, inclusive: bool) u64 {
     if (greater) {
-        return greaterSignedVectorLanes(value, 0, lane, false);
+        return greaterSignedVectorLanes(value, 0, lane, inclusive);
     }
     if (equal) {
         return equalVectorLanes(value, 0, lane);
@@ -113,4 +113,3 @@ pub fn pairVectorHalf(value: u64, lane: u8) u64 {
     }
     return result;
 }
-
