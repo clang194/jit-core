@@ -195,6 +195,31 @@ pub fn sha256ScheduleFirst(target: a64_state.VectorValue, state: a64_state.Vecto
     return result;
 }
 
+fn sha256FoldHigh(value: u32) u32 {
+    return rotateRightWord(value, 17) ^ rotateRightWord(value, 19) ^ (value >> 10);
+}
+
+pub fn sha256ScheduleNext(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    const first = @intCast(u32, vectorElement(target, 0, 4)) +%
+        sha256FoldHigh(@intCast(u32, vectorElement(message, 2, 4))) +%
+        @intCast(u32, vectorElement(state, 1, 4));
+    const second = @intCast(u32, vectorElement(target, 1, 4)) +%
+        sha256FoldHigh(@intCast(u32, vectorElement(message, 3, 4))) +%
+        @intCast(u32, vectorElement(state, 2, 4));
+    const third = @intCast(u32, vectorElement(target, 2, 4)) +%
+        sha256FoldHigh(first) +%
+        @intCast(u32, vectorElement(state, 3, 4));
+    const fourth = @intCast(u32, vectorElement(target, 3, 4)) +%
+        sha256FoldHigh(second) +%
+        @intCast(u32, vectorElement(message, 0, 4));
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    setVectorElement(&result, 0, 4, first);
+    setVectorElement(&result, 1, 4, second);
+    setVectorElement(&result, 2, 4, third);
+    setVectorElement(&result, 3, 4, fourth);
+    return result;
+}
+
 fn sha1Choose(x: u32, y: u32, z: u32) u32 {
     return ((y ^ z) & x) ^ z;
 }

@@ -153,12 +153,13 @@ pub const Core64Methods = struct {
 
     pub fn runVectorShaSchedule(self: *Core64, word: u32) bool {
         const three_input = (word & 0xffe0fc00) == 0x5e000c00;
+        const schedule_three = (word & 0xffe0fc00) == 0x5e006000;
         const schedule_next = (word & 0xfffffc00) == 0x5e281800;
         const schedule_first = (word & 0xfffffc00) == 0x5e282800;
         const round_choose = (word & 0xffe0fc00) == 0x5e000000;
         const round_parity = (word & 0xffe0fc00) == 0x5e001000;
         const round_majority = (word & 0xffe0fc00) == 0x5e002000;
-        if (!three_input and !schedule_next and !schedule_first and !round_choose and !round_parity and !round_majority) {
+        if (!three_input and !schedule_three and !schedule_next and !schedule_first and !round_choose and !round_parity and !round_majority) {
             return false;
         }
 
@@ -167,6 +168,9 @@ pub const Core64Methods = struct {
         const result = if (three_input) blk: {
             const message = self.state.readVector(vectorRegFromWord(word >> 16));
             break :blk sha1ScheduleFirst(target, message, state);
+        } else if (schedule_three) blk: {
+            const message = self.state.readVector(vectorRegFromWord(word >> 16));
+            break :blk sha256ScheduleNext(target, message, state);
         } else if (round_choose) blk: {
             const message = self.state.readVector(vectorRegFromWord(word >> 16));
             break :blk sha1RoundChoose(target, message, state);
