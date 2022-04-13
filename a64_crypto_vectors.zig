@@ -232,6 +232,54 @@ fn sha1Majority(x: u32, y: u32, z: u32) u32 {
     return (x & y) | ((x | y) & z);
 }
 
+fn sha256FoldLow(value: u32) u32 {
+    return rotateRightWord(value, 2) ^ rotateRightWord(value, 13) ^ rotateRightWord(value, 22);
+}
+
+fn sha256FoldChoice(value: u32) u32 {
+    return rotateRightWord(value, 6) ^ rotateRightWord(value, 11) ^ rotateRightWord(value, 25);
+}
+
+fn sha256Round(target: a64_state.VectorValue, state: a64_state.VectorValue, message: a64_state.VectorValue, second: bool) a64_state.VectorValue {
+    var x = if (second) state else target;
+    var y = if (second) target else state;
+    var index: usize = 0;
+    while (index < 4) : (index += 1) {
+        const low_x = @intCast(u32, vectorElement(x, 0, 4));
+        const after_low_x = @intCast(u32, vectorElement(x, 1, 4));
+        const before_high_x = @intCast(u32, vectorElement(x, 2, 4));
+        const high_x = @intCast(u32, vectorElement(x, 3, 4));
+        const low_y = @intCast(u32, vectorElement(y, 0, 4));
+        const after_low_y = @intCast(u32, vectorElement(y, 1, 4));
+        const before_high_y = @intCast(u32, vectorElement(y, 2, 4));
+        const high_y = @intCast(u32, vectorElement(y, 3, 4));
+        const choice = sha1Choose(low_y, after_low_y, before_high_y);
+        const majority = sha1Majority(low_x, after_low_x, before_high_x);
+        const mixed = high_y +% sha256FoldChoice(low_y) +% choice +% @intCast(u32, vectorElement(message, index, 4));
+        var next_x = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var next_y = a64_state.VectorValue{ .low = 0, .high = 0 };
+        setVectorElement(&next_x, 0, 4, mixed +% sha256FoldLow(low_x) +% majority);
+        setVectorElement(&next_x, 1, 4, low_x);
+        setVectorElement(&next_x, 2, 4, after_low_x);
+        setVectorElement(&next_x, 3, 4, before_high_x);
+        setVectorElement(&next_y, 0, 4, mixed +% high_x);
+        setVectorElement(&next_y, 1, 4, low_y);
+        setVectorElement(&next_y, 2, 4, after_low_y);
+        setVectorElement(&next_y, 3, 4, before_high_y);
+        x = next_x;
+        y = next_y;
+    }
+    return if (second) y else x;
+}
+
+pub fn sha256RoundFirst(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    return sha256Round(target, state, message, false);
+}
+
+pub fn sha256RoundSecond(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    return sha256Round(target, state, message, true);
+}
+
 fn sha1RoundUpdate(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, mode: u2) a64_state.VectorValue {
     var x = target;
     var y = @intCast(u32, vectorElement(state, 0, 4));
