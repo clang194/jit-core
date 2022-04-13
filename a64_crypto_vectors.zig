@@ -172,10 +172,21 @@ fn sha512ScheduleFold(value: u64) u64 {
     return rotateRightDoubleword(value, 1) ^ rotateRightDoubleword(value, 8) ^ (value >> 7);
 }
 
+fn sha512ScheduleFoldHigh(value: u64) u64 {
+    return rotateRightDoubleword(value, 19) ^ rotateRightDoubleword(value, 61) ^ (value >> 6);
+}
+
 pub fn sha512ScheduleFirst(target: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
     return a64_state.VectorValue{
         .low = target.low +% sha512ScheduleFold(target.high),
         .high = target.high +% sha512ScheduleFold(state.low),
+    };
+}
+
+pub fn sha512ScheduleNext(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    return a64_state.VectorValue{
+        .low = target.low +% message.low +% sha512ScheduleFoldHigh(state.low),
+        .high = target.high +% message.high +% sha512ScheduleFoldHigh(state.high),
     };
 }
 

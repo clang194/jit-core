@@ -135,13 +135,19 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorWideSchedule(self: *Core64, word: u32) bool {
-        if ((word & 0xfffffc00) != 0xcec08000) {
+        const first = (word & 0xfffffc00) == 0xcec08000;
+        const next = (word & 0xffe0fc00) == 0xce608800;
+        if (!first and !next) {
             return false;
         }
 
         const target = self.state.readVector(vectorRegFromWord(word));
         const state = self.state.readVector(vectorRegFromWord(word >> 5));
-        self.state.writeVector(vectorRegFromWord(word), sha512ScheduleFirst(target, state));
+        const result = if (next) blk: {
+            const message = self.state.readVector(vectorRegFromWord(word >> 16));
+            break :blk sha512ScheduleNext(target, message, state);
+        } else sha512ScheduleFirst(target, state);
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }
