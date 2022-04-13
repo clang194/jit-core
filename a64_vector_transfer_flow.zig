@@ -118,8 +118,11 @@ pub const Core64Methods = struct {
         return true;
     }
 
-    pub fn runScalarUnsignedToFloat(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xffbffc00) != 0x7e21d800) {
+    pub fn runScalarIntegerToFloat(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xffbffc00;
+        const signed = masked == 0x5e21d800;
+        const unsigned = masked == 0x7e21d800;
+        if (!signed and !unsigned) {
             return false;
         }
 
@@ -128,7 +131,7 @@ pub const Core64Methods = struct {
         }
 
         const source = @intCast(u32, self.state.readVector(vectorRegFromWord(word >> 5)).low);
-        const result = unsignedWordToFloat32(source);
+        const result = if (signed) signedWordToFloat32(source) else unsignedWordToFloat32(source);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = @as(u64, result), .high = 0 });
         self.state.pc +%= 4;
         return true;

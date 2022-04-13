@@ -242,11 +242,11 @@ pub const Core64Methods = struct {
             if (scalar_duplicate) {
                 return;
             }
-            const scalar_unsigned_float = self.runScalarUnsignedToFloat(word) catch |err| {
+            const scalar_integer_float = self.runScalarIntegerToFloat(word) catch |err| {
                 try self.raiseFault(err);
                 return;
             };
-            if (scalar_unsigned_float) {
+            if (scalar_integer_float) {
                 return;
             }
             const vector_extract = self.runVectorExtractToRegister(word) catch |err| {
