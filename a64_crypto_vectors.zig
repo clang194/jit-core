@@ -176,6 +176,26 @@ fn sha512ScheduleFoldHigh(value: u64) u64 {
     return rotateRightDoubleword(value, 19) ^ rotateRightDoubleword(value, 61) ^ (value >> 6);
 }
 
+fn sha512RoundFold(value: u64) u64 {
+    return rotateRightDoubleword(value, 14) ^ rotateRightDoubleword(value, 18) ^ rotateRightDoubleword(value, 41);
+}
+
+fn sha512Choose(value: u64, left: u64, right: u64) u64 {
+    return (value & left) ^ (~value & right);
+}
+
+pub fn sha512RoundFirst(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    const lower_state = state.low;
+    const upper_state = state.high;
+    const lower_message = message.low;
+    const upper_message = message.high;
+    const upper_target = target.high;
+    const upper_mix = sha512Choose(upper_message, lower_state, upper_state) +% sha512RoundFold(upper_message) +% upper_target;
+    const low_word = upper_mix +% lower_message;
+    const low_result = sha512Choose(low_word, upper_message, lower_state) +% sha512RoundFold(low_word) +% target.low;
+    return a64_state.VectorValue{ .low = low_result, .high = upper_mix };
+}
+
 pub fn sha512ScheduleFirst(target: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
     return a64_state.VectorValue{
         .low = target.low +% sha512ScheduleFold(target.high),
