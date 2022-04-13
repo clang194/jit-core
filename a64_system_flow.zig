@@ -104,7 +104,8 @@ pub const Core64Methods = struct {
     pub fn runVectorThreeInputHash(self: *Core64, word: u32) bool {
         const sm3_group = (word & 0xffe0c000) == 0xce408000;
         const wide_first = (word & 0xffe0fc00) == 0xce608000;
-        if (!sm3_group and !wide_first) {
+        const wide_second = (word & 0xffe0fc00) == 0xce608400;
+        if (!sm3_group and !wide_first and !wide_second) {
             return false;
         }
 
@@ -113,6 +114,11 @@ pub const Core64Methods = struct {
         const state = self.state.readVector(vectorRegFromWord(word >> 5));
         if (wide_first) {
             self.state.writeVector(vectorRegFromWord(word), sha512RoundFirst(target, message, state));
+            self.state.pc +%= 4;
+            return true;
+        }
+        if (wide_second) {
+            self.state.writeVector(vectorRegFromWord(word), sha512RoundSecond(target, message, state));
             self.state.pc +%= 4;
             return true;
         }
