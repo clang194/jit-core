@@ -46,3 +46,13 @@ pub fn multiplyFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64
     }
     return result;
 }
+
+pub fn signedWordsToFloatVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, 4, signedWordToFloat32(@intCast(u32, vectorElement(source, index, 4))));
+    }
+    return result;
+}

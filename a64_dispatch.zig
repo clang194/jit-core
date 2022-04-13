@@ -371,6 +371,13 @@ pub const Core64Methods = struct {
             if (vector_float) {
                 return;
             }
+            const vector_signed_integer_float = self.runVectorSignedIntegerToFloat(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_signed_integer_float) {
+                return;
+            }
             const vector_shift_immediate = self.runVectorShiftImmediate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
