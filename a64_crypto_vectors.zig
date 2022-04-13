@@ -163,6 +163,22 @@ pub fn xorRotatedDoublewordVector(left: a64_state.VectorValue, right: a64_state.
     };
 }
 
+fn rotateRightDoubleword(value: u64, amount: u6) u64 {
+    const inverse = @intCast(u6, @as(u7, 64) - @as(u7, amount));
+    return (value >> amount) | (value << inverse);
+}
+
+fn sha512ScheduleFold(value: u64) u64 {
+    return rotateRightDoubleword(value, 1) ^ rotateRightDoubleword(value, 8) ^ (value >> 7);
+}
+
+pub fn sha512ScheduleFirst(target: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
+    return a64_state.VectorValue{
+        .low = target.low +% sha512ScheduleFold(target.high),
+        .high = target.high +% sha512ScheduleFold(state.low),
+    };
+}
+
 pub fn sha1ScheduleFirst(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue) a64_state.VectorValue {
     return a64_state.VectorValue{
         .low = target.high ^ target.low ^ message.low,
