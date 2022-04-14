@@ -219,7 +219,8 @@ pub const Core64Methods = struct {
         const equal = masked == 0x5e209800;
         const less = masked == 0x5e20a800;
         const greater_equal = masked == 0x7e208800;
-        if (!greater and !equal and !less and !greater_equal) {
+        const less_equal = masked == 0x7e209800;
+        if (!greater and !equal and !less and !greater_equal and !less_equal) {
             return false;
         }
 
@@ -230,7 +231,7 @@ pub const Core64Methods = struct {
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const signed = @bitCast(i64, source);
-        const result = if ((greater and signed > 0) or (equal and source == 0) or (less and signed < 0) or (greater_equal and signed >= 0)) ~@as(u64, 0) else 0;
+        const result = if ((greater and signed > 0) or (equal and source == 0) or (less and signed < 0) or (greater_equal and signed >= 0) or (less_equal and signed <= 0)) ~@as(u64, 0) else 0;
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
