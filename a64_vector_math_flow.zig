@@ -383,6 +383,41 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorHighNarrowArithmetic(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbf20fc00;
+        const adding = masked == 0x0e204000;
+        const subtracting = masked == 0x0e206000;
+        if (!adding and !subtracting) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const upper = (word & 0x40000000) != 0;
+        const target_bytes = @as(usize, 1) << size;
+        const wide_bytes = target_bytes * 2;
+        const target_bits = @intCast(u8, target_bytes * 8);
+        const wide_mask = ones(target_bits * 2);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        var narrowed_value = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < 8 / target_bytes) : (index += 1) {
+            const wide_left = vectorElement(left, index, wide_bytes);
+            const wide_right = vectorElement(right, index, wide_bytes);
+            const combined = (if (adding) wide_left +% wide_right else wide_left -% wide_right) & wide_mask;
+            setVectorElement(&narrowed_value, index, target_bytes, combined >> @intCast(u6, target_bits));
+        }
+
+        const result = if (upper) a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word)).low, .high = narrowed_value.low } else a64_state.VectorValue{ .low = narrowed_value.low, .high = 0 };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorPairAdd(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf20fc00) != 0x0e20bc00) {
             return false;

@@ -427,6 +427,13 @@ pub const Core64Methods = struct {
             if (vector_widening_arithmetic) {
                 return;
             }
+            const vector_high_narrow_arithmetic = self.runVectorHighNarrowArithmetic(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_high_narrow_arithmetic) {
+                return;
+            }
             const vector_pair_add = self.runVectorPairAdd(word) catch |err| {
                 try self.raiseFault(err);
                 return;
