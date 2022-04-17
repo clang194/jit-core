@@ -148,6 +148,19 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorXorRotateImmediate(self: *Core64, word: u32) bool {
+        if ((word & 0xffe00000) != 0xce800000) {
+            return false;
+        }
+
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const amount = @intCast(u6, (word >> 10) & 0x3f);
+        self.state.writeVector(vectorRegFromWord(word), xorRotateRightVector(left, right, amount));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorWideSchedule(self: *Core64, word: u32) bool {
         const first = (word & 0xfffffc00) == 0xcec08000;
         const next = (word & 0xffe0fc00) == 0xce608800;

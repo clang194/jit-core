@@ -505,6 +505,9 @@ pub const Core64Methods = struct {
             if (self.runVectorRotatedXor(word)) {
                 return;
             }
+            if (self.runVectorXorRotateImmediate(word)) {
+                return;
+            }
             if (self.runVectorWideSchedule(word)) {
                 return;
             }

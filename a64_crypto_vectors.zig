@@ -163,7 +163,17 @@ pub fn xorRotatedDoublewordVector(left: a64_state.VectorValue, right: a64_state.
     };
 }
 
+pub fn xorRotateRightVector(left: a64_state.VectorValue, right: a64_state.VectorValue, amount: u6) a64_state.VectorValue {
+    return a64_state.VectorValue{
+        .low = rotateRightDoubleword(left.low ^ right.low, amount),
+        .high = rotateRightDoubleword(left.high ^ right.high, amount),
+    };
+}
+
 fn rotateRightDoubleword(value: u64, amount: u6) u64 {
+    if (amount == 0) {
+        return value;
+    }
     const inverse = @intCast(u6, @as(u7, 64) - @as(u7, amount));
     return (value >> amount) | (value << inverse);
 }
