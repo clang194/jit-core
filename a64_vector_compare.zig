@@ -20,6 +20,23 @@ pub fn equalVectorLanes(left: u64, right: u64, lane: u8) u64 {
     return result;
 }
 
+pub fn sharedBitVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    if (lane == 64) {
+        return if ((left & right) != 0) ~@as(u64, 0) else 0;
+    }
+
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        if ((((left >> amount) & (right >> amount)) & mask) != 0) {
+            result |= mask << amount;
+        }
+    }
+    return result;
+}
+
 pub fn greaterSignedVectorLanes(left: u64, right: u64, lane: u8, inclusive: bool) u64 {
     if (lane == 64) {
         const left_signed = @bitCast(i64, left);

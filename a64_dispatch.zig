@@ -448,6 +448,13 @@ pub const Core64Methods = struct {
             if (vector_equal) {
                 return;
             }
+            const vector_shared_bit_compare = self.runVectorSharedBitCompare(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_shared_bit_compare) {
+                return;
+            }
             const vector_greater = self.runVectorGreaterSigned(word) catch |err| {
                 try self.raiseFault(err);
                 return;

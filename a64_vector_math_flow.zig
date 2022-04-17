@@ -470,6 +470,29 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorSharedBitCompare(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf20fc00) != 0x0e208c00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = a64_state.VectorValue{
+            .low = sharedBitVectorLanes(left.low, right.low, lane),
+            .high = if (full) sharedBitVectorLanes(left.high, right.high, lane) else 0,
+        };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorGreaterSigned(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const strict = masked == 0x0e203400;
