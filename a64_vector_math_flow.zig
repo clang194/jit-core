@@ -388,7 +388,8 @@ pub const Core64Methods = struct {
         const adding = masked == 0x0e204000;
         const subtracting = masked == 0x0e206000;
         const rounded_adding = masked == 0x2e204000;
-        if (!adding and !subtracting and !rounded_adding) {
+        const rounded_subtracting = masked == 0x2e206000;
+        if (!adding and !subtracting and !rounded_adding and !rounded_subtracting) {
             return false;
         }
 
@@ -410,7 +411,7 @@ pub const Core64Methods = struct {
             const wide_left = vectorElement(left, index, wide_bytes);
             const wide_right = vectorElement(right, index, wide_bytes);
             var combined = (if (adding or rounded_adding) wide_left +% wide_right else wide_left -% wide_right) & wide_mask;
-            if (rounded_adding) {
+            if (rounded_adding or rounded_subtracting) {
                 combined = (combined +% (@as(u64, 1) << @intCast(u6, target_bits - 1))) & wide_mask;
             }
             setVectorElement(&narrowed_value, index, target_bytes, combined >> @intCast(u6, target_bits));
