@@ -192,7 +192,8 @@ pub const Core64Methods = struct {
         const greater_equal = masked == 0x2e208800;
         const equal = masked == 0x0e209800;
         const less = masked == 0x0e20a800;
-        if (!greater and !greater_equal and !equal and !less) {
+        const less_equal = masked == 0x2e209800;
+        if (!greater and !greater_equal and !equal and !less and !less_equal) {
             return false;
         }
 
@@ -205,8 +206,8 @@ pub const Core64Methods = struct {
         const lane = @as(u8, 8) << @intCast(u3, size);
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const result = a64_state.VectorValue{
-            .low = compareZeroVectorLanes(source.low, lane, greater or greater_equal, equal, greater_equal),
-            .high = if (full) compareZeroVectorLanes(source.high, lane, greater or greater_equal, equal, greater_equal) else 0,
+            .low = compareZeroVectorLanes(source.low, lane, greater or greater_equal, equal, greater_equal or less_equal),
+            .high = if (full) compareZeroVectorLanes(source.high, lane, greater or greater_equal, equal, greater_equal or less_equal) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;

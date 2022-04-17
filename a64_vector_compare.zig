@@ -84,7 +84,7 @@ pub fn compareZeroVectorLanes(value: u64, lane: u8, greater: bool, equal: bool, 
     if (equal) {
         return equalVectorLanes(value, 0, lane);
     }
-    return greaterSignedVectorLanes(0, value, lane, false);
+    return greaterSignedVectorLanes(0, value, lane, inclusive);
 }
 
 pub fn minMaxVectorLanes(left: u64, right: u64, lane: u8, signed: bool, maximum: bool) u64 {
