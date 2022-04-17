@@ -47,6 +47,17 @@ pub fn multiplyFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64
     return result;
 }
 
+pub fn negateFloatVector(double: bool, full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, negateFloat(double, vectorElement(source, index, bytes)));
+    }
+    return result;
+}
+
 pub fn signedWordsToFloatVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
     const lanes = if (full) @as(usize, 4) else @as(usize, 2);
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };

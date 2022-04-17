@@ -26,6 +26,23 @@ usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
 pub const Core64Methods = struct {
+    pub fn runVectorFloatNegate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x2e20f800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        self.state.writeVector(vectorRegFromWord(word), negateFloatVector(double, full, source));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfa0fc00;
         if (masked != 0x0e20d400 and masked != 0x0ea0d400 and masked != 0x2e20dc00 and masked != 0x2e20fc00) {
