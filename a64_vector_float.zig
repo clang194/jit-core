@@ -58,6 +58,16 @@ pub fn negateFloatVector(double: bool, full: bool, source: a64_state.VectorValue
     return result;
 }
 
+pub fn negateHalfFloatVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 8) else @as(usize, 4);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, 2, vectorElement(source, index, 2) ^ 0x8000);
+    }
+    return result;
+}
+
 pub fn signedWordsToFloatVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
     const lanes = if (full) @as(usize, 4) else @as(usize, 2);
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
