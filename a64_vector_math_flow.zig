@@ -239,7 +239,7 @@ pub const Core64Methods = struct {
 
     pub fn runScalarVectorArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
-        if (masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e208400 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e208400 and masked != 0x7e208c00) {
+        if (masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e208400 and masked != 0x5e208c00 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e208400 and masked != 0x7e208c00) {
             return false;
         }
 
@@ -264,6 +264,8 @@ pub const Core64Methods = struct {
             ~@as(u64, 0)
         else if (masked == 0x7e208c00 and left == right)
             ~@as(u64, 0)
+        else if (masked == 0x5e208c00)
+            sharedBitVectorLanes(left, right, 64)
         else if (masked == 0x7e204400)
             variableUnsignedShiftVectorLanes(left, right, 64)
         else
