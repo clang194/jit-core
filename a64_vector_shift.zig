@@ -137,6 +137,29 @@ pub fn variableUnsignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
     return result;
 }
 
+pub fn variableSignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
+    const mask = ones(lane);
+    const sign = @as(u64, 1) << @intCast(u6, lane - 1);
+    const limit = @as(i16, lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const amount = @as(i16, @bitCast(i8, @intCast(u8, (shifts >> position) & 0xff)));
+        const shifted = if (amount >= limit)
+            @as(u64, 0)
+        else if (amount <= -limit)
+            if ((element & sign) == 0) @as(u64, 0) else mask
+        else if (amount < 0)
+            shiftRightSignedVectorLanes(element, lane, @intCast(u8, -amount)) & mask
+        else
+            (element << @intCast(u6, amount)) & mask;
+        result |= shifted << position;
+    }
+    return result;
+}
+
 pub fn widenShiftLeftVectorHalf(value: u64, lane: u8, amount: u6) a64_state.VectorValue {
     const output_lane = lane * 2;
     const input_mask = ones(lane);

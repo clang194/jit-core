@@ -575,7 +575,9 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorUnsignedShift(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf20fc00) != 0x2e204400) {
+        const masked = word & 0xbf20fc00;
+        const signed = masked == 0x0e204400;
+        if (!signed and masked != 0x2e204400) {
             return false;
         }
 
@@ -589,8 +591,8 @@ pub const Core64Methods = struct {
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = a64_state.VectorValue{
-            .low = variableUnsignedShiftVectorLanes(left.low, right.low, lane),
-            .high = if (full) variableUnsignedShiftVectorLanes(left.high, right.high, lane) else 0,
+            .low = if (signed) variableSignedShiftVectorLanes(left.low, right.low, lane) else variableUnsignedShiftVectorLanes(left.low, right.low, lane),
+            .high = if (full) if (signed) variableSignedShiftVectorLanes(left.high, right.high, lane) else variableUnsignedShiftVectorLanes(left.high, right.high, lane) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
