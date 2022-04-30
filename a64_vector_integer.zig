@@ -35,6 +35,20 @@ pub fn subtractVectorLanes(left: u64, right: u64, lane: u8) u64 {
     return result;
 }
 
+pub fn signedHalvingAddVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_lane = @bitCast(i64, signExtendRuntime((left >> amount) & mask, @intCast(u6, lane)));
+        const right_lane = @bitCast(i64, signExtendRuntime((right >> amount) & mask, @intCast(u6, lane)));
+        const halved = @bitCast(u64, (left_lane + right_lane) >> 1);
+        result |= (halved & mask) << amount;
+    }
+    return result;
+}
+
 pub fn differenceUnsignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return if (left >= right) left - right else right - left;
