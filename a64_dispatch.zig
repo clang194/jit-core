@@ -518,6 +518,9 @@ pub const Core64Methods = struct {
             if (self.runVectorWideSchedule(word)) {
                 return;
             }
+            if (self.runVectorSm4Encrypt(word)) {
+                return;
+            }
             if (self.runVectorMessageSchedule(word)) {
                 return;
             }

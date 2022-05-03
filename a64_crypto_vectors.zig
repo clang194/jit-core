@@ -2,6 +2,7 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+usingnamespace @import("a64_crypto_tables.zig");
 
 pub fn aesDouble(value: u8) u8 {
     const shifted = (@as(u16, value) << 1) & 0xff;
@@ -461,6 +462,36 @@ pub fn sm3MixTwoA(target: a64_state.VectorValue, message: a64_state.VectorValue,
 
 pub fn sm3MixTwoB(target: a64_state.VectorValue, message: a64_state.VectorValue, state: a64_state.VectorValue, index: usize) a64_state.VectorValue {
     return sm3MixTwo(target, message, state, index, true);
+}
+
+pub fn sm4EncryptRound(target: a64_state.VectorValue, key: a64_state.VectorValue) a64_state.VectorValue {
+    var result = target;
+    var index: usize = 0;
+    while (index < 4) : (index += 1) {
+        const mixed = @intCast(u32, vectorElement(result, 3, 4)) ^
+            @intCast(u32, vectorElement(result, 2, 4)) ^
+            @intCast(u32, vectorElement(result, 1, 4)) ^
+            @intCast(u32, vectorElement(key, index, 4));
+        var substituted: u32 = 0;
+        var byte_index: usize = 0;
+        while (byte_index < 4) : (byte_index += 1) {
+            const byte = @intCast(u8, (mixed >> @intCast(u5, byte_index * 8)) & 0xff);
+            substituted |= @as(u32, sm4ForwardBox[byte]) << @intCast(u5, byte_index * 8);
+        }
+        const top = @intCast(u32, vectorElement(result, 0, 4)) ^
+            substituted ^
+            rotateRightWord(substituted, 30) ^
+            rotateRightWord(substituted, 22) ^
+            rotateRightWord(substituted, 14) ^
+            rotateRightWord(substituted, 8);
+        var next = a64_state.VectorValue{ .low = 0, .high = 0 };
+        setVectorElement(&next, 0, 4, vectorElement(result, 1, 4));
+        setVectorElement(&next, 1, 4, vectorElement(result, 2, 4));
+        setVectorElement(&next, 2, 4, vectorElement(result, 3, 4));
+        setVectorElement(&next, 3, 4, top);
+        result = next;
+    }
+    return result;
 }
 
 fn rotateLeftWord(value: u32, amount: u5) u32 {
