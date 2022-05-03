@@ -464,7 +464,7 @@ pub fn sm3MixTwoB(target: a64_state.VectorValue, message: a64_state.VectorValue,
     return sm3MixTwo(target, message, state, index, true);
 }
 
-pub fn sm4EncryptRound(target: a64_state.VectorValue, key: a64_state.VectorValue) a64_state.VectorValue {
+fn sm4RoundUpdate(target: a64_state.VectorValue, key: a64_state.VectorValue, key_mode: bool) a64_state.VectorValue {
     var result = target;
     var index: usize = 0;
     while (index < 4) : (index += 1) {
@@ -478,12 +478,14 @@ pub fn sm4EncryptRound(target: a64_state.VectorValue, key: a64_state.VectorValue
             const byte = @intCast(u8, (mixed >> @intCast(u5, byte_index * 8)) & 0xff);
             substituted |= @as(u32, sm4ForwardBox[byte]) << @intCast(u5, byte_index * 8);
         }
-        const top = @intCast(u32, vectorElement(result, 0, 4)) ^
-            substituted ^
+        const rotated = if (key_mode)
+            rotateRightWord(substituted, 19) ^ rotateRightWord(substituted, 9)
+        else
             rotateRightWord(substituted, 30) ^
-            rotateRightWord(substituted, 22) ^
-            rotateRightWord(substituted, 14) ^
-            rotateRightWord(substituted, 8);
+                rotateRightWord(substituted, 22) ^
+                rotateRightWord(substituted, 14) ^
+                rotateRightWord(substituted, 8);
+        const top = @intCast(u32, vectorElement(result, 0, 4)) ^ substituted ^ rotated;
         var next = a64_state.VectorValue{ .low = 0, .high = 0 };
         setVectorElement(&next, 0, 4, vectorElement(result, 1, 4));
         setVectorElement(&next, 1, 4, vectorElement(result, 2, 4));
@@ -492,6 +494,14 @@ pub fn sm4EncryptRound(target: a64_state.VectorValue, key: a64_state.VectorValue
         result = next;
     }
     return result;
+}
+
+pub fn sm4EncryptRound(target: a64_state.VectorValue, key: a64_state.VectorValue) a64_state.VectorValue {
+    return sm4RoundUpdate(target, key, false);
+}
+
+pub fn sm4KeyRound(target: a64_state.VectorValue, key: a64_state.VectorValue) a64_state.VectorValue {
+    return sm4RoundUpdate(target, key, true);
 }
 
 fn rotateLeftWord(value: u32, amount: u5) u32 {

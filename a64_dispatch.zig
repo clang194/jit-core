@@ -506,6 +506,9 @@ pub const Core64Methods = struct {
             if (self.runVectorThreeInputBitwise(word)) {
                 return;
             }
+            if (self.runVectorSm4Key(word)) {
+                return;
+            }
             if (self.runVectorThreeInputHash(word)) {
                 return;
             }

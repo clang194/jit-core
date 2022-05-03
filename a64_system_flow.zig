@@ -191,6 +191,18 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorSm4Key(self: *Core64, word: u32) bool {
+        if ((word & 0xffe0fc00) != 0xce60c800) {
+            return false;
+        }
+
+        const target = self.state.readVector(vectorRegFromWord(word >> 5));
+        const key = self.state.readVector(vectorRegFromWord(word >> 16));
+        self.state.writeVector(vectorRegFromWord(word), sm4KeyRound(target, key));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorMessageSchedule(self: *Core64, word: u32) bool {
         if ((word & 0xffe0f800) != 0xce60c000) {
             return false;
