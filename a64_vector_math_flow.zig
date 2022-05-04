@@ -80,13 +80,18 @@ pub const Core64Methods = struct {
             return false;
         }
 
-        if ((word & 0x00400000) != 0) {
-            return false;
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
         }
 
-        const full = (word & 0x40000000) != 0;
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        self.state.writeVector(vectorRegFromWord(word), signedWordsToFloatVector(full, source));
+        const result = if (double)
+            signedDoublewordsToFloatVector(source)
+        else
+            signedWordsToFloatVector(full, source);
+        self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
     }

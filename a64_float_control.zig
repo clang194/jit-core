@@ -107,6 +107,10 @@ pub fn signedWordToFloat64(value: u32) u64 {
     return @bitCast(u64, @intToFloat(f64, @bitCast(i32, value)));
 }
 
+pub fn signedDoublewordToFloat64(value: u64) u64 {
+    return @bitCast(u64, @intToFloat(f64, @bitCast(i64, value)));
+}
+
 pub fn unsignedWordToFloat64(value: u32) u64 {
     return @bitCast(u64, @intToFloat(f64, value));
 }
@@ -141,4 +145,3 @@ pub fn floatToUnsignedWord(control: a64_state.FloatControl, double: bool, value:
     }
     return @floatToInt(u32, number);
 }
-

@@ -77,3 +77,10 @@ pub fn signedWordsToFloatVector(full: bool, source: a64_state.VectorValue) a64_s
     }
     return result;
 }
+
+pub fn signedDoublewordsToFloatVector(source: a64_state.VectorValue) a64_state.VectorValue {
+    return a64_state.VectorValue{
+        .low = signedDoublewordToFloat64(source.low),
+        .high = signedDoublewordToFloat64(source.high),
+    };
+}
