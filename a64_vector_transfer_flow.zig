@@ -170,6 +170,24 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorWidenLongShift(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x2e213800) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const half = if ((word & 0x40000000) != 0) source.high else source.low;
+        self.state.writeVector(vectorRegFromWord(word), widenShiftLeftVectorHalf(half, lane, @intCast(u6, lane)));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runRegisterInsertElement(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xffe0fc00) != 0x4e001c00) {
             return false;
