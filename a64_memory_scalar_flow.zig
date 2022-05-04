@@ -66,6 +66,11 @@ pub const Core64Methods = struct {
             return true;
         }
 
+        if ((word & 0xffe00c00) == 0xf8800000) {
+            self.state.pc +%= 4;
+            return true;
+        }
+
         if ((word & 0x3f200400) == 0x3c000400) {
             const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 12) & 0x1ff), 9));
             return try self.runVectorLoadStoreRegister(word, offset, true, ((word >> 11) & 1) == 0);
