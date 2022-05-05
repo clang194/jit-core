@@ -640,7 +640,8 @@ pub const Core64Methods = struct {
         const masked = word & 0xbf20fc00;
         const signed_plain = masked == 0x0e207400;
         const plain = signed_plain or masked == 0x2e207400;
-        const accumulating = masked == 0x2e207c00;
+        const signed_accumulating = masked == 0x0e207c00;
+        const accumulating = signed_accumulating or masked == 0x2e207c00;
         if (!plain and !accumulating) {
             return false;
         }
@@ -655,8 +656,8 @@ pub const Core64Methods = struct {
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const difference = a64_state.VectorValue{
-            .low = if (signed_plain) differenceSignedVectorLanes(left.low, right.low, lane) else differenceUnsignedVectorLanes(left.low, right.low, lane),
-            .high = if (full) if (signed_plain) differenceSignedVectorLanes(left.high, right.high, lane) else differenceUnsignedVectorLanes(left.high, right.high, lane) else 0,
+            .low = if (signed_plain or signed_accumulating) differenceSignedVectorLanes(left.low, right.low, lane) else differenceUnsignedVectorLanes(left.low, right.low, lane),
+            .high = if (full) if (signed_plain or signed_accumulating) differenceSignedVectorLanes(left.high, right.high, lane) else differenceUnsignedVectorLanes(left.high, right.high, lane) else 0,
         };
         const result = if (plain) difference else blk: {
             const prior = self.state.readVector(vectorRegFromWord(word));
