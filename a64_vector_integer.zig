@@ -108,6 +108,20 @@ pub fn differenceUnsignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
     return result;
 }
 
+pub fn differenceSignedVectorLanes(left: u64, right: u64, lane: u8) u64 {
+    const mask = ones(lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_lane = @bitCast(i64, signExtendRuntime((left >> amount) & mask, @intCast(u6, lane)));
+        const right_lane = @bitCast(i64, signExtendRuntime((right >> amount) & mask, @intCast(u6, lane)));
+        const difference = if (left_lane >= right_lane) left_lane - right_lane else right_lane - left_lane;
+        result |= (@bitCast(u64, difference) & mask) << amount;
+    }
+    return result;
+}
+
 pub fn absoluteVectorLanes(value: u64, lane: u8) u64 {
     if (lane == 64) {
         return if ((value & (@as(u64, 1) << 63)) != 0) 0 -% value else value;
