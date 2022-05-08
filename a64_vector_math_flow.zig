@@ -29,18 +29,19 @@ pub const Core64Methods = struct {
     pub fn runVectorFloatNegate(self: *Core64, word: u32) Core64Error!bool {
         const half = (word & 0xbffffc00) == 0x2ef8f800;
         const wide = (word & 0xbf3ffc00) == 0x2e20f800;
-        if (!half and !wide) {
+        const absolute = (word & 0xbfbffc00) == 0x0ea0f800;
+        if (!half and !wide and !absolute) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const double = ((word >> 22) & 1) != 0;
-        if (wide and double and !full) {
+        if ((wide or absolute) and double and !full) {
             return error.ReservedInstruction;
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        const result = if (half) negateHalfFloatVector(full, source) else negateFloatVector(double, full, source);
+        const result = if (half) negateHalfFloatVector(full, source) else if (absolute) absoluteFloatVector(double, full, source) else negateFloatVector(double, full, source);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
