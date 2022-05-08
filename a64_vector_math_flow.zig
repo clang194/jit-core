@@ -191,7 +191,7 @@ pub const Core64Methods = struct {
 
     pub fn runScalarShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff80fc00;
-        if (masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f004400 and masked != 0x7f005400) {
+        if (masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
             return false;
         }
 
@@ -233,6 +233,10 @@ pub const Core64Methods = struct {
             const target = self.state.readVector(vectorRegFromWord(word)).low;
             if (masked == 0x7f001400) {
                 break :blk shifted +% target;
+            }
+            if (masked == 0x7f002400 or masked == 0x7f003400) {
+                const rounded = (source >> @intCast(u6, amount - 1)) & 1;
+                break :blk shifted +% if (masked == 0x7f002400) rounded else target +% rounded;
             }
             if (masked == 0x7f004400) {
                 const mask = if (amount == 64) @as(u64, 0) else ~@as(u64, 0) >> @intCast(u6, amount);
