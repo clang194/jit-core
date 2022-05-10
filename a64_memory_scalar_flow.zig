@@ -61,6 +61,26 @@ pub const Core64Methods = struct {
             return true;
         }
 
+        if ((word & 0x3f000000) == 0x1c000000) {
+            const scale = @intCast(u2, word >> 30);
+            if (scale == 3) {
+                return error.UnallocatedEncoding;
+            }
+            const bytes = @as(usize, 4) << scale;
+            const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 5) & 0x7ffff) << 2, 21));
+            const address = self.state.pc +% offset;
+            const value = if (bytes == 16)
+                try self.readMemoryVector(address)
+            else
+                a64_state.VectorValue{
+                    .low = try self.readMemory(address, bytes),
+                    .high = 0,
+                };
+            self.state.writeVector(vectorRegFromWord(word), value);
+            self.state.pc +%= 4;
+            return true;
+        }
+
         if ((word & 0xffc00000) == 0xf9800000) {
             self.state.pc +%= 4;
             return true;
