@@ -390,7 +390,8 @@ pub const Core64Methods = struct {
         const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000;
         const subtracting = masked == 0x0e202000 or masked == 0x0e203000 or masked == 0x2e202000 or masked == 0x2e203000;
         const widening_source_pair = masked == 0x0e200000 or masked == 0x0e202000 or masked == 0x2e200000 or masked == 0x2e202000;
-        const absolute_difference = masked == 0x2e207000;
+        const accumulating_difference = masked == 0x2e205000;
+        const absolute_difference = masked == 0x2e207000 or accumulating_difference;
         if (!signed and masked != 0x2e201000 and masked != 0x2e203000 and !widening_source_pair and !absolute_difference) {
             return false;
         }
@@ -417,7 +418,8 @@ pub const Core64Methods = struct {
             const left = if (widening_source_pair or absolute_difference) if (signed) signExtendRuntime(raw_left, @intCast(u6, source_bits)) else raw_left else vectorElement(base, index, target_bytes);
             const raw = (addend_half >> shift) & source_mask;
             const right = if (signed) signExtendRuntime(raw, @intCast(u6, source_bits)) else raw;
-            const value = if (absolute_difference) if (left >= right) left - right else right - left else if (subtracting) left -% right else left +% right;
+            const difference = if (left >= right) left - right else right - left;
+            const value = if (accumulating_difference) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) +% difference else if (absolute_difference) difference else if (subtracting) left -% right else left +% right;
             setVectorElement(&result, index, target_bytes, value);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
