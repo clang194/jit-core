@@ -391,12 +391,16 @@ pub const Core64Methods = struct {
         const signed_multiply_accumulate = masked == 0x0e208000;
         const signed_multiply_subtract = masked == 0x0e20a000;
         const signed_multiply_long = masked == 0x0e20c000;
+        const unsigned_multiply_accumulate = masked == 0x2e208000;
+        const unsigned_multiply_subtract = masked == 0x2e20a000;
+        const unsigned_multiply_long = masked == 0x2e20c000;
+        const multiplying_long = signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long or unsigned_multiply_accumulate or unsigned_multiply_subtract or unsigned_multiply_long;
         const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000 or signed_difference or signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long;
         const subtracting = masked == 0x0e202000 or masked == 0x0e203000 or masked == 0x2e202000 or masked == 0x2e203000;
         const widening_source_pair = masked == 0x0e200000 or masked == 0x0e202000 or masked == 0x2e200000 or masked == 0x2e202000;
         const accumulating_difference = masked == 0x0e205000 or masked == 0x2e205000;
         const absolute_difference = masked == 0x0e207000 or masked == 0x2e207000 or accumulating_difference;
-        if (!signed and masked != 0x2e201000 and masked != 0x2e203000 and !widening_source_pair and !absolute_difference) {
+        if (!signed and masked != 0x2e201000 and masked != 0x2e203000 and !widening_source_pair and !absolute_difference and !multiplying_long) {
             return false;
         }
 
@@ -419,7 +423,7 @@ pub const Core64Methods = struct {
         while (index < 8 / source_bytes) : (index += 1) {
             const shift = @intCast(u6, index * source_bytes * 8);
             const raw_left = (base_half >> shift) & source_mask;
-            const left = if (widening_source_pair or absolute_difference or signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long) if (signed) signExtendRuntime(raw_left, @intCast(u6, source_bits)) else raw_left else vectorElement(base, index, target_bytes);
+            const left = if (widening_source_pair or absolute_difference or signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long or unsigned_multiply_accumulate or unsigned_multiply_subtract or unsigned_multiply_long) if (signed) signExtendRuntime(raw_left, @intCast(u6, source_bits)) else raw_left else vectorElement(base, index, target_bytes);
             const raw = (addend_half >> shift) & source_mask;
             const right = if (signed) signExtendRuntime(raw, @intCast(u6, source_bits)) else raw;
             const difference = if (signed_difference) blk: {
@@ -427,8 +431,8 @@ pub const Core64Methods = struct {
                 const signed_right = @bitCast(i64, right);
                 break :blk @bitCast(u64, if (signed_left >= signed_right) signed_left - signed_right else signed_right - signed_left);
             } else if (left >= right) left - right else right - left;
-            const product = @bitCast(u64, @bitCast(i64, left) *% @bitCast(i64, right));
-            const value = if (signed_multiply_accumulate) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) +% product else if (signed_multiply_subtract) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) -% product else if (signed_multiply_long) product else if (accumulating_difference) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) +% difference else if (absolute_difference) difference else if (subtracting) left -% right else left +% right;
+            const product = if (signed) @bitCast(u64, @bitCast(i64, left) *% @bitCast(i64, right)) else left *% right;
+            const value = if (signed_multiply_accumulate or unsigned_multiply_accumulate) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) +% product else if (signed_multiply_subtract or unsigned_multiply_subtract) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) -% product else if (signed_multiply_long or unsigned_multiply_long) product else if (accumulating_difference) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) +% difference else if (absolute_difference) difference else if (subtracting) left -% right else left +% right;
             setVectorElement(&result, index, target_bytes, value);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
