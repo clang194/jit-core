@@ -388,7 +388,8 @@ pub const Core64Methods = struct {
     pub fn runVectorWideningArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed_difference = masked == 0x0e205000 or masked == 0x0e207000;
-        const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000 or signed_difference;
+        const signed_multiply_long = masked == 0x0e20c000;
+        const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000 or signed_difference or signed_multiply_long;
         const subtracting = masked == 0x0e202000 or masked == 0x0e203000 or masked == 0x2e202000 or masked == 0x2e203000;
         const widening_source_pair = masked == 0x0e200000 or masked == 0x0e202000 or masked == 0x2e200000 or masked == 0x2e202000;
         const accumulating_difference = masked == 0x0e205000 or masked == 0x2e205000;
@@ -416,7 +417,7 @@ pub const Core64Methods = struct {
         while (index < 8 / source_bytes) : (index += 1) {
             const shift = @intCast(u6, index * source_bytes * 8);
             const raw_left = (base_half >> shift) & source_mask;
-            const left = if (widening_source_pair or absolute_difference) if (signed) signExtendRuntime(raw_left, @intCast(u6, source_bits)) else raw_left else vectorElement(base, index, target_bytes);
+            const left = if (widening_source_pair or absolute_difference or signed_multiply_long) if (signed) signExtendRuntime(raw_left, @intCast(u6, source_bits)) else raw_left else vectorElement(base, index, target_bytes);
             const raw = (addend_half >> shift) & source_mask;
             const right = if (signed) signExtendRuntime(raw, @intCast(u6, source_bits)) else raw;
             const difference = if (signed_difference) blk: {
@@ -424,7 +425,7 @@ pub const Core64Methods = struct {
                 const signed_right = @bitCast(i64, right);
                 break :blk @bitCast(u64, if (signed_left >= signed_right) signed_left - signed_right else signed_right - signed_left);
             } else if (left >= right) left - right else right - left;
-            const value = if (accumulating_difference) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) +% difference else if (absolute_difference) difference else if (subtracting) left -% right else left +% right;
+            const value = if (signed_multiply_long) @bitCast(u64, @bitCast(i64, left) *% @bitCast(i64, right)) else if (accumulating_difference) vectorElement(self.state.readVector(vectorRegFromWord(word)), index, target_bytes) +% difference else if (absolute_difference) difference else if (subtracting) left -% right else left +% right;
             setVectorElement(&result, index, target_bytes, value);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
