@@ -47,6 +47,27 @@ pub fn multiplyFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64
     return result;
 }
 
+pub fn equalFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    const match_value = if (double) ~@as(u64, 0) else @as(u64, 0xffffffff);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const matched = if (double) blk: {
+            const left_input = floatInput64(control, vectorElement(left, index, bytes));
+            const right_input = floatInput64(control, vectorElement(right, index, bytes));
+            break :blk !isNan64(left_input) and !isNan64(right_input) and @bitCast(f64, left_input) == @bitCast(f64, right_input);
+        } else blk: {
+            const left_input = floatInput32(control, @intCast(u32, vectorElement(left, index, bytes)));
+            const right_input = floatInput32(control, @intCast(u32, vectorElement(right, index, bytes)));
+            break :blk !isNan32(left_input) and !isNan32(right_input) and @bitCast(f32, left_input) == @bitCast(f32, right_input);
+        };
+        setVectorElement(&result, index, bytes, if (matched) match_value else 0);
+    }
+    return result;
+}
+
 pub fn negateFloatVector(double: bool, full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
