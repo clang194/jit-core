@@ -31,18 +31,19 @@ pub const Core64Methods = struct {
         const half_absolute = (word & 0xbffffc00) == 0x0ef8f800;
         const wide = (word & 0xbf3ffc00) == 0x2e20f800;
         const absolute = (word & 0xbfbffc00) == 0x0ea0f800;
-        if (!half and !half_absolute and !wide and !absolute) {
+        const equal_zero = (word & 0xbfbffc00) == 0x0ea0d800;
+        if (!half and !half_absolute and !wide and !absolute and !equal_zero) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const double = ((word >> 22) & 1) != 0;
-        if ((wide or absolute) and double and !full) {
+        if ((wide or absolute or equal_zero) and double and !full) {
             return error.ReservedInstruction;
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        const result = if (half) negateHalfFloatVector(full, source) else if (half_absolute) absoluteHalfFloatVector(full, source) else if (absolute) absoluteFloatVector(double, full, source) else negateFloatVector(double, full, source);
+        const result = if (half) negateHalfFloatVector(full, source) else if (half_absolute) absoluteHalfFloatVector(full, source) else if (equal_zero) equalFloatVector(self.state.floatControl(), double, full, source, a64_state.VectorValue{ .low = 0, .high = 0 }) else if (absolute) absoluteFloatVector(double, full, source) else negateFloatVector(double, full, source);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
