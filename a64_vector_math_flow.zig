@@ -56,7 +56,7 @@ pub const Core64Methods = struct {
 
     pub fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfa0fc00;
-        if (masked != 0x0e20d400 and masked != 0x0ea0d400 and masked != 0x0e20e400 and masked != 0x2e20dc00 and masked != 0x2e20fc00) {
+        if (masked != 0x0e20d400 and masked != 0x0ea0d400 and masked != 0x0e20e400 and masked != 0x2e20dc00 and masked != 0x2e20e400 and masked != 0x2e20fc00 and masked != 0x2ea0e400) {
             return false;
         }
 
@@ -78,6 +78,10 @@ pub const Core64Methods = struct {
             divideFloatVector(control, nan_mode, double, full, left, right)
         else if (masked == 0x0e20e400)
             equalFloatVector(control, double, full, left, right)
+        else if (masked == 0x2e20e400)
+            compareFloatVector(control, double, full, left, right, .greater_equal)
+        else if (masked == 0x2ea0e400)
+            compareFloatVector(control, double, full, left, right, .greater)
         else
             subtractFloatVector(control, nan_mode, double, full, left, right);
         self.state.writeVector(vectorRegFromWord(word), result);

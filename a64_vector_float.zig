@@ -11,6 +11,12 @@ pub const FloatZeroComparison = enum {
     less_equal,
 };
 
+pub const FloatComparison = enum {
+    equal,
+    greater,
+    greater_equal,
+};
+
 pub fn addFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
@@ -56,6 +62,10 @@ pub fn multiplyFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64
 }
 
 pub fn equalFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    return compareFloatVector(control, double, full, left, right, .equal);
+}
+
+pub fn compareFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue, comparison: FloatComparison) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
     const match_value = if (double) ~@as(u64, 0) else @as(u64, 0xffffffff);
@@ -65,11 +75,23 @@ pub fn equalFloatVector(control: a64_state.FloatControl, double: bool, full: boo
         const matched = if (double) blk: {
             const left_input = floatInput64(control, vectorElement(left, index, bytes));
             const right_input = floatInput64(control, vectorElement(right, index, bytes));
-            break :blk !isNan64(left_input) and !isNan64(right_input) and @bitCast(f64, left_input) == @bitCast(f64, right_input);
+            const left_value = @bitCast(f64, left_input);
+            const right_value = @bitCast(f64, right_input);
+            break :blk !isNan64(left_input) and !isNan64(right_input) and switch (comparison) {
+                .equal => left_value == right_value,
+                .greater => left_value > right_value,
+                .greater_equal => left_value >= right_value,
+            };
         } else blk: {
             const left_input = floatInput32(control, @intCast(u32, vectorElement(left, index, bytes)));
             const right_input = floatInput32(control, @intCast(u32, vectorElement(right, index, bytes)));
-            break :blk !isNan32(left_input) and !isNan32(right_input) and @bitCast(f32, left_input) == @bitCast(f32, right_input);
+            const left_value = @bitCast(f32, left_input);
+            const right_value = @bitCast(f32, right_input);
+            break :blk !isNan32(left_input) and !isNan32(right_input) and switch (comparison) {
+                .equal => left_value == right_value,
+                .greater => left_value > right_value,
+                .greater_equal => left_value >= right_value,
+            };
         };
         setVectorElement(&result, index, bytes, if (matched) match_value else 0);
     }
