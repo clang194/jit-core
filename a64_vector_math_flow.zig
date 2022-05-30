@@ -32,18 +32,23 @@ pub const Core64Methods = struct {
         const wide = (word & 0xbf3ffc00) == 0x2e20f800;
         const absolute = (word & 0xbfbffc00) == 0x0ea0f800;
         const equal_zero = (word & 0xbfbffc00) == 0x0ea0d800;
-        if (!half and !half_absolute and !wide and !absolute and !equal_zero) {
+        const greater_zero = (word & 0xbfbffc00) == 0x0ea0c800;
+        const greater_equal_zero = (word & 0xbfbffc00) == 0x2ea0c800;
+        const less_zero = (word & 0xbfbffc00) == 0x0ea0e800;
+        const less_equal_zero = (word & 0xbfbffc00) == 0x2ea0d800;
+        const compare_zero = equal_zero or greater_zero or greater_equal_zero or less_zero or less_equal_zero;
+        if (!half and !half_absolute and !wide and !absolute and !compare_zero) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const double = ((word >> 22) & 1) != 0;
-        if ((wide or absolute or equal_zero) and double and !full) {
+        if ((wide or absolute or compare_zero) and double and !full) {
             return error.ReservedInstruction;
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        const result = if (half) negateHalfFloatVector(full, source) else if (half_absolute) absoluteHalfFloatVector(full, source) else if (equal_zero) equalFloatVector(self.state.floatControl(), double, full, source, a64_state.VectorValue{ .low = 0, .high = 0 }) else if (absolute) absoluteFloatVector(double, full, source) else negateFloatVector(double, full, source);
+        const result = if (half) negateHalfFloatVector(full, source) else if (half_absolute) absoluteHalfFloatVector(full, source) else if (compare_zero) compareFloatZeroVector(self.state.floatControl(), double, full, source, if (equal_zero) .equal else if (greater_zero) .greater else if (greater_equal_zero) .greater_equal else if (less_zero) .less else .less_equal) else if (absolute) absoluteFloatVector(double, full, source) else negateFloatVector(double, full, source);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
