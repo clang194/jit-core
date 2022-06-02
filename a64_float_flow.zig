@@ -259,9 +259,6 @@ pub const Core64Methods = struct {
 
         const negated_addend = (word & 0x00200000) != 0;
         const subtract = (word & 0x8000) != 0;
-        if (negated_addend and subtract) {
-            return false;
-        }
 
         const mode = (word >> 22) & 3;
         if (mode > 1) {
