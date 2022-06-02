@@ -253,7 +253,13 @@ pub const Core64Methods = struct {
     }
 
     pub fn runFloatMulAdd(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xff200000) != 0x1f000000) {
+        if ((word & 0xff000000) != 0x1f000000) {
+            return false;
+        }
+
+        const negated_addend = (word & 0x00200000) != 0;
+        const subtract = (word & 0x8000) != 0;
+        if (negated_addend and subtract) {
             return false;
         }
 
@@ -267,8 +273,9 @@ pub const Core64Methods = struct {
         const addend = vectorElement(self.state.readVector(vectorRegFromWord(word >> 10)), 0, bytes);
         const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
         const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
-        const adjusted_left = if ((word & 0x8000) != 0) negateFloat(double, left) else left;
-        const result = floatMulAdd(self.state.floatControl(), self.hooks.float_nan_mode, double, addend, adjusted_left, right);
+        const adjusted_addend = if (negated_addend) negateFloat(double, addend) else addend;
+        const adjusted_left = if (negated_addend != subtract) negateFloat(double, left) else left;
+        const result = floatMulAdd(self.state.floatControl(), self.hooks.float_nan_mode, double, adjusted_addend, adjusted_left, right);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
