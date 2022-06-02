@@ -109,8 +109,7 @@ pub const Core64Methods = struct {
         const input = @intCast(u32, self.readSized(false, regFromWord(word >> 5), false));
         const result = if (mode == 0)
             @as(u64, if (masked == 0x1e220000) signedWordToFloat32(input) else unsignedWordToFloat32(input))
-        else
-            if (masked == 0x1e220000) signedWordToFloat64(input) else unsignedWordToFloat64(input);
+        else if (masked == 0x1e220000) signedWordToFloat64(input) else unsignedWordToFloat64(input);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
@@ -253,6 +252,27 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runFloatMulAdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff208000) != 0x1f000000) {
+            return false;
+        }
+
+        const mode = (word >> 22) & 3;
+        if (mode > 1) {
+            return error.UnallocatedEncoding;
+        }
+
+        const double = mode == 1;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const addend = vectorElement(self.state.readVector(vectorRegFromWord(word >> 10)), 0, bytes);
+        const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
+        const result = floatMulAdd(self.state.floatControl(), self.hooks.float_nan_mode, double, addend, left, right);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runFloatCompare(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc17;
         if (masked != 0x1e202000 and masked != 0x1e202010) {
@@ -317,6 +337,4 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
-
-
 };

@@ -75,6 +75,56 @@ pub fn chooseBinaryNan64(control: a64_state.FloatControl, mode: FloatNanMode64, 
     return null;
 }
 
+pub fn chooseTernaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, first: u32, second: u32, third: u32) ?u32 {
+    if (!useAccurateNan(mode) or control.dn()) {
+        return null;
+    }
+    if (isSignalingNan32(first)) {
+        return first | 0x00400000;
+    }
+    if (isSignalingNan32(second)) {
+        return second | 0x00400000;
+    }
+    if (isSignalingNan32(third)) {
+        return third | 0x00400000;
+    }
+    if (isQuietNan32(first)) {
+        return first;
+    }
+    if (isQuietNan32(second)) {
+        return second;
+    }
+    if (isQuietNan32(third)) {
+        return third;
+    }
+    return null;
+}
+
+pub fn chooseTernaryNan64(control: a64_state.FloatControl, mode: FloatNanMode64, first: u64, second: u64, third: u64) ?u64 {
+    if (!useAccurateNan(mode) or control.dn()) {
+        return null;
+    }
+    if (isSignalingNan64(first)) {
+        return first | 0x0008000000000000;
+    }
+    if (isSignalingNan64(second)) {
+        return second | 0x0008000000000000;
+    }
+    if (isSignalingNan64(third)) {
+        return third | 0x0008000000000000;
+    }
+    if (isQuietNan64(first)) {
+        return first;
+    }
+    if (isQuietNan64(second)) {
+        return second;
+    }
+    if (isQuietNan64(third)) {
+        return third;
+    }
+    return null;
+}
+
 pub fn chooseUnaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, value: u32) ?u32 {
     if (!useAccurateNan(mode) or control.dn()) {
         return null;

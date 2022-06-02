@@ -201,6 +201,13 @@ pub const Core64Methods = struct {
             if (float_binary) {
                 return;
             }
+            const float_mul_add = self.runFloatMulAdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (float_mul_add) {
+                return;
+            }
             const float_compare = self.runFloatCompare(word) catch |err| {
                 try self.raiseFault(err);
                 return;

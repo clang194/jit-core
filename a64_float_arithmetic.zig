@@ -60,6 +60,27 @@ pub fn floatMul(base_control: a64_state.FloatControl, mode: FloatNanMode64, doub
     return @as(u64, finishFloat32(control, mode, result));
 }
 
+pub fn floatMulAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, addend: u64, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
+    if (double) {
+        const addend_input = floatInput64(control, addend);
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseTernaryNan64(control, mode, addend_input, left_input, right_input)) |nan| {
+            return nan;
+        }
+        return finishFloat64(control, mode, @bitCast(u64, @mulAdd(f64, @bitCast(f64, left_input), @bitCast(f64, right_input), @bitCast(f64, addend_input))));
+    }
+    const addend_input = floatInput32(control, @intCast(u32, addend));
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseTernaryNan32(control, mode, addend_input, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    const result = @bitCast(u32, @mulAdd(f32, @bitCast(f32, left_input), @bitCast(f32, right_input), @bitCast(f32, addend_input)));
+    return @as(u64, finishFloat32(control, mode, result));
+}
+
 pub fn floatSub(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
     const control = effectiveFloatControl(base_control, mode);
     if (double) {
@@ -94,4 +115,3 @@ pub fn floatSqrt(base_control: a64_state.FloatControl, mode: FloatNanMode64, dou
     }
     return @as(u64, finishFloat32(control, mode, @bitCast(u32, @sqrt(@bitCast(f32, input)))));
 }
-
