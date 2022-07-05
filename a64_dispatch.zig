@@ -385,6 +385,13 @@ pub const Core64Methods = struct {
             if (vector_float) {
                 return;
             }
+            const scalar_float_absolute_difference = self.runScalarFloatAbsoluteDifference(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_float_absolute_difference) {
+                return;
+            }
             const vector_signed_integer_float = self.runVectorSignedIntegerToFloat(word) catch |err| {
                 try self.raiseFault(err);
                 return;
