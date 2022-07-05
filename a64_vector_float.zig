@@ -61,6 +61,19 @@ pub fn multiplyFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64
     return result;
 }
 
+pub fn absoluteDifferenceFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    const mask = if (double) @as(u64, 0x7fffffffffffffff) else @as(u64, 0x7fffffff);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const difference = floatSub(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes));
+        setVectorElement(&result, index, bytes, difference & mask);
+    }
+    return result;
+}
+
 pub fn equalFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     return compareFloatVector(control, double, full, left, right, .equal);
 }
