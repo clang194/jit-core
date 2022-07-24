@@ -25,9 +25,12 @@ usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
-
 pub const Core64Methods = struct {
     pub fn runVectorStructureTransfer(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0x3f000000) == 0x0d000000) {
+            return try self.runVectorSingleStructureTransfer(word);
+        }
+
         if ((word & 0x3f000000) != 0x0c000000 or (word & 0x00200000) != 0) {
             return false;
         }
@@ -122,6 +125,94 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorSingleStructureTransfer(self: *Core64, word: u32) Core64Error!bool {
+        const writeback = (word & 0x00800000) != 0;
+        const load = (word & 0x00400000) != 0;
+        const offset_reg_bits = (word >> 16) & 0x1f;
+        if (!writeback and offset_reg_bits != 0) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const pair_group = ((word >> 21) & 1) != 0;
+        const odd_group = ((word >> 13) & 1) != 0;
+        const s = ((word >> 12) & 1) != 0;
+        const size = @intCast(u2, (word >> 10) & 3);
+        var scale = @intCast(usize, (word >> 14) & 3);
+        const replicate = load and scale == 3 and !s;
+        var lane_index: usize = 0;
+        switch (scale) {
+            0 => {
+                lane_index = (if (full) @as(usize, 8) else @as(usize, 0)) | (if (s) @as(usize, 4) else @as(usize, 0)) | size;
+            },
+            1 => {
+                if ((size & 1) != 0) {
+                    return error.UnallocatedEncoding;
+                }
+                lane_index = (if (full) @as(usize, 4) else @as(usize, 0)) | (if (s) @as(usize, 2) else @as(usize, 0)) | @as(usize, size >> 1);
+            },
+            2 => {
+                if ((size & 2) != 0) {
+                    return error.UnallocatedEncoding;
+                }
+                if ((size & 1) != 0) {
+                    if (s) {
+                        return error.UnallocatedEncoding;
+                    }
+                    lane_index = if (full) @as(usize, 1) else @as(usize, 0);
+                    scale = 3;
+                } else {
+                    lane_index = (if (full) @as(usize, 2) else @as(usize, 0)) | if (s) @as(usize, 1) else @as(usize, 0);
+                }
+            },
+            else => {
+                if (!load or s) {
+                    return error.UnallocatedEncoding;
+                }
+                scale = size;
+            },
+        }
+
+        const lane_bytes = @as(usize, 1) << @intCast(u3, scale);
+        const fields = (if (odd_group) @as(usize, 2) else @as(usize, 0)) + (if (pair_group) @as(usize, 1) else @as(usize, 0)) + 1;
+        const lanes = if (full) 16 / lane_bytes else 8 / lane_bytes;
+        const base_reg = regFromWord(word >> 5);
+        const first_reg = @enumToInt(vectorRegFromWord(word));
+        const start_address = self.readSized(true, base_reg, true);
+        var offset: u64 = 0;
+        var field: usize = 0;
+        while (field < fields) : (field += 1) {
+            const reg = @intToEnum(a64_state.VectorReg, @intCast(u5, (first_reg + field) & 31));
+            const address = start_address +% offset;
+            if (replicate) {
+                const element = try self.readMemory(address, lane_bytes);
+                var vector = a64_state.VectorValue{ .low = 0, .high = 0 };
+                var lane: usize = 0;
+                while (lane < lanes) : (lane += 1) {
+                    setVectorElement(&vector, lane, lane_bytes, element);
+                }
+                self.state.writeVector(reg, vector);
+            } else if (load) {
+                var vector = self.state.readVector(reg);
+                setVectorElement(&vector, lane_index, lane_bytes, try self.readMemory(address, lane_bytes));
+                self.state.writeVector(reg, vector);
+            } else {
+                const vector = self.state.readVector(reg);
+                try self.writeMemory(address, lane_bytes, vectorElement(vector, lane_index, lane_bytes));
+            }
+            offset += @intCast(u64, lane_bytes);
+        }
+
+        if (writeback) {
+            const offset_reg = regFromWord(word >> 16);
+            const advance = if (offset_reg == .sp) offset else self.readSized(true, offset_reg, false);
+            self.writeSized(true, base_reg, start_address +% advance, true);
+        }
+
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn readVectorPairMemory(self: *Core64, address: u64, bytes: usize) Core64Error!a64_state.VectorValue {
         if (bytes == 16) {
             return try self.readMemoryVector(address);
@@ -139,6 +230,4 @@ pub const Core64Methods = struct {
         }
         try self.writeMemory(address, bytes, value.low);
     }
-
-
 };
