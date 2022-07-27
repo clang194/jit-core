@@ -126,8 +126,7 @@ pub const Core64Methods = struct {
         const callback = self.hooks.supervisor orelse return false;
         self.state.pc +%= 4;
         callback((word >> 5) & 0xffff, &self.state, self.hooks.context);
+        self.state.exclusive = false;
         return true;
     }
-
-
 };
