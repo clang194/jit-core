@@ -191,6 +191,27 @@ pub const Core64Methods = struct {
         return self.state.exclusive and (((address ^ self.state.exclusive_address) & 0xfffffffffffffff0) == 0);
     }
 
+    pub fn markExclusive(self: *Core64, address: u64, bytes: usize) void {
+        self.state.exclusive = true;
+        self.state.exclusive_address = address;
+        if (self.hooks.shared_reservations) |reservations| {
+            reservations.mark(self.hooks.worker_index, address, bytes);
+        }
+    }
+
+    pub fn claimExclusive(self: *Core64, address: u64, bytes: usize) bool {
+        if (!self.exclusiveHolds(address)) {
+            return false;
+        }
+        if (self.hooks.shared_reservations) |reservations| {
+            if (!reservations.claim(self.hooks.worker_index, address, bytes)) {
+                return false;
+            }
+        }
+        self.state.exclusive = false;
+        return true;
+    }
+
     pub fn conditionHolds(self: *const Core64, code: u4) bool {
         const n = self.state.negative();
         const z = self.state.zero();
@@ -215,6 +236,4 @@ pub const Core64Methods = struct {
             else => false,
         };
     }
-
-
 };

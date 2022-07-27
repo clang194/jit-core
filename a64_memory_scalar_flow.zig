@@ -159,6 +159,7 @@ pub const Core64Methods = struct {
         const data_reg = regFromWord(word);
         const address = self.readSized(true, base_reg, true);
 
+        const reservation_bytes = if (pair) if (size == 3) @as(usize, 16) else @as(usize, 8) else @as(usize, 1) << size;
         if (store) {
             const status_reg = regFromWord(word >> 16);
             const second_reg = regFromWord(word >> 10);
@@ -168,8 +169,7 @@ pub const Core64Methods = struct {
             if (status_reg == base_reg and base_reg != .sp) {
                 return error.Unpredictable;
             }
-            if (self.exclusiveHolds(address)) {
-                self.state.exclusive = false;
+            if (self.claimExclusive(address, reservation_bytes)) {
                 if (pair) {
                     if (size == 3) {
                         try self.writeMemoryVector(address, a64_state.VectorValue{
@@ -193,8 +193,7 @@ pub const Core64Methods = struct {
             if (pair and data_reg == second_reg) {
                 return error.Unpredictable;
             }
-            self.state.exclusive = true;
-            self.state.exclusive_address = address;
+            self.markExclusive(address, reservation_bytes);
             if (pair) {
                 if (size == 3) {
                     const value = try self.readMemoryVector(address);

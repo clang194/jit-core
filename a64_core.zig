@@ -1,4 +1,5 @@
 const a64_state = @import("a64_state.zig");
+const a64_reservation = @import("a64_reservation.zig");
 const bits = @import("bits.zig");
 
 pub const Core64Error = error{
@@ -96,6 +97,8 @@ pub const HostHooks64 = struct {
     zero_cache_block_words_log2: u4,
     thread_value: ?*u64,
     read_only_thread_value: ?*const u64,
+    worker_index: usize,
+    shared_reservations: ?*a64_reservation.ReservationTable64,
     float_nan_mode: FloatNanMode64,
     cycles: CycleHooks,
     counter_value: ?fn (?*anyopaque) u64,
@@ -112,6 +115,8 @@ pub const HostHooks64 = struct {
             .zero_cache_block_words_log2 = 4,
             .thread_value = null,
             .read_only_thread_value = null,
+            .worker_index = 0,
+            .shared_reservations = null,
             .float_nan_mode = .accurate,
             .cycles = CycleHooks.empty(),
             .counter_value = null,
