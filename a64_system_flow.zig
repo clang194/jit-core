@@ -362,7 +362,7 @@ pub const Core64Methods = struct {
         if ((word & 0xfffff0ff) != 0xd503305f) {
             return false;
         }
-        self.state.exclusive = false;
+        self.clearReservation();
         self.state.pc +%= 4;
         return true;
     }

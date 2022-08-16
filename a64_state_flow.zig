@@ -212,6 +212,10 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn clearReservation(self: *Core64) void {
+        self.state.exclusive = false;
+    }
+
     pub fn conditionHolds(self: *const Core64, code: u4) bool {
         const n = self.state.negative();
         const z = self.state.zero();
