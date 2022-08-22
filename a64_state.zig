@@ -1,11 +1,7 @@
 const bits = @import("bits.zig");
+const float_rounding = @import("float_rounding.zig");
 
-pub const FloatControlMode = enum(u2) {
-    nearest = 0,
-    positive = 1,
-    negative = 2,
-    zero = 3,
-};
+pub const FloatControlMode = float_rounding.RoundingMode;
 
 pub const float_control_mask: u32 = 0x07f79f00;
 pub const float_control_key_mask: u32 = 0x07c00000;

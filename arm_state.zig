@@ -1,4 +1,5 @@
 const bits = @import("bits.zig");
+const float_rounding = @import("float_rounding.zig");
 
 const DirectPage = struct {
     bytes: [*]u8,
@@ -43,12 +44,7 @@ pub const ConditionCode = enum(u4) {
     nv = 0xf,
 };
 
-pub const FloatRoundMode = enum(u2) {
-    nearest = 0,
-    positive = 1,
-    negative = 2,
-    zero = 3,
-};
+pub const FloatRoundMode = float_rounding.RoundingMode;
 
 pub const float_status_mask: u32 = 0xfff79f9f;
 
