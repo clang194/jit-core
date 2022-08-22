@@ -111,6 +111,10 @@ pub fn signedDoublewordToFloat64(value: u64) u64 {
     return @bitCast(u64, @intToFloat(f64, @bitCast(i64, value)));
 }
 
+pub fn unsignedDoublewordToFloat64(value: u64) u64 {
+    return @bitCast(u64, @intToFloat(f64, value));
+}
+
 pub fn unsignedWordToFloat64(value: u32) u64 {
     return @bitCast(u64, @intToFloat(f64, value));
 }

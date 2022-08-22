@@ -126,12 +126,12 @@ pub const Core64Methods = struct {
             return false;
         }
 
-        if ((word & 0x00400000) != 0) {
-            return false;
-        }
-
-        const source = @intCast(u32, self.state.readVector(vectorRegFromWord(word >> 5)).low);
-        const result = if (signed) signedWordToFloat32(source) else unsignedWordToFloat32(source);
+        const double = (word & 0x00400000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        const result = if (double)
+            if (signed) signedDoublewordToFloat64(source) else unsignedDoublewordToFloat64(source)
+        else
+            @as(u64, if (signed) signedWordToFloat32(@intCast(u32, source)) else unsignedWordToFloat32(@intCast(u32, source)));
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = @as(u64, result), .high = 0 });
         self.state.pc +%= 4;
         return true;
