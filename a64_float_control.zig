@@ -111,8 +111,32 @@ pub fn signedDoublewordToFloat64(value: u64) u64 {
     return @bitCast(u64, @intToFloat(f64, @bitCast(i64, value)));
 }
 
-pub fn unsignedDoublewordToFloat64(value: u64) u64 {
-    return @bitCast(u64, @intToFloat(f64, value));
+pub fn unsignedDoublewordToFloat64(control: a64_state.FloatControl, value: u64) u64 {
+    if (value < (@as(u64, 1) << 53)) {
+        return @bitCast(u64, @intToFloat(f64, value));
+    }
+
+    var exponent = @intCast(u11, 63 - @clz(u64, value));
+    const shift = @intCast(u6, exponent - 52);
+    const remainder_mask = (@as(u64, 1) << shift) - 1;
+    const remainder = value & remainder_mask;
+    var significand = value >> shift;
+    const increment = switch (control.rounding()) {
+        .nearest => blk: {
+            const half = @as(u64, 1) << @intCast(u6, shift - 1);
+            break :blk remainder > half or (remainder == half and (significand & 1) != 0);
+        },
+        .positive => remainder != 0,
+        .negative, .zero => false,
+    };
+    if (increment) {
+        significand += 1;
+        if (significand == (@as(u64, 1) << 53)) {
+            significand >>= 1;
+            exponent += 1;
+        }
+    }
+    return ((@as(u64, exponent) + 1023) << 52) | (significand & ((@as(u64, 1) << 52) - 1));
 }
 
 pub fn unsignedWordToFloat64(value: u32) u64 {
