@@ -111,6 +111,41 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarFloatCompareRegister(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xffa0fc00;
+        if (masked != 0x5e20e400 and masked != 0x7e20e400 and masked != 0x7e20ec00 and masked != 0x7ea0e400 and masked != 0x7ea0ec00) {
+            return false;
+        }
+
+        const double = ((word >> 22) & 1) != 0;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const match_value = if (double) ~@as(u64, 0) else @as(u64, 0xffffffff);
+        const sign_mask = if (double) @as(u64, 0x7fffffffffffffff) else @as(u64, 0x7fffffff);
+        var left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        var right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
+        if (masked == 0x7e20ec00 or masked == 0x7ea0ec00) {
+            left &= sign_mask;
+            right &= sign_mask;
+        }
+
+        const matched = if (double) blk: {
+            const left_input = floatInput64(self.state.floatControl(), left);
+            const right_input = floatInput64(self.state.floatControl(), right);
+            const left_value = @bitCast(f64, left_input);
+            const right_value = @bitCast(f64, right_input);
+            break :blk !isNan64(left_input) and !isNan64(right_input) and if (masked == 0x5e20e400) left_value == right_value else if (masked == 0x7e20e400 or masked == 0x7e20ec00) left_value >= right_value else left_value > right_value;
+        } else blk: {
+            const left_input = floatInput32(self.state.floatControl(), @intCast(u32, left));
+            const right_input = floatInput32(self.state.floatControl(), @intCast(u32, right));
+            const left_value = @bitCast(f32, left_input);
+            const right_value = @bitCast(f32, right_input);
+            break :blk !isNan32(left_input) and !isNan32(right_input) and if (masked == 0x5e20e400) left_value == right_value else if (masked == 0x7e20e400 or masked == 0x7e20ec00) left_value >= right_value else left_value > right_value;
+        };
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = if (matched) match_value else 0, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorSignedIntegerToFloat(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbfbffc00) != 0x0e21d800) {
             return false;
