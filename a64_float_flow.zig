@@ -103,17 +103,15 @@ pub const Core64Methods = struct {
             return error.UnallocatedEncoding;
         }
         const wide = (word & 0x80000000) != 0;
-        if (wide and mode == 0) {
-            return false;
-        }
 
         const input = self.readSized(wide, regFromWord(word >> 5), false);
         const control = self.state.floatControl();
+        const signed = masked == 0x1e220000;
         const result = if (mode == 0)
-            @as(u64, if (masked == 0x1e220000) signedWordToFloat32(@intCast(u32, input)) else unsignedWordToFloat32(@intCast(u32, input)))
+            @as(u64, if (wide) if (signed) signedDoublewordToFloat32(control, input) else unsignedDoublewordToFloat32(control, input) else if (signed) signedWordToFloat32(@intCast(u32, input)) else unsignedWordToFloat32(@intCast(u32, input)))
         else if (wide)
-            if (masked == 0x1e220000) signedDoublewordToFloat64(input) else unsignedDoublewordToFloat64(control, input)
-        else if (masked == 0x1e220000) signedWordToFloat64(@intCast(u32, input)) else unsignedWordToFloat64(@intCast(u32, input));
+            if (signed) signedDoublewordToFloat64(input) else unsignedDoublewordToFloat64(control, input)
+        else if (signed) signedWordToFloat64(@intCast(u32, input)) else unsignedWordToFloat64(@intCast(u32, input));
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;

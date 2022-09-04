@@ -103,6 +103,49 @@ pub fn unsignedWordToFloat32(value: u32) u32 {
     return @bitCast(u32, @intToFloat(f32, value));
 }
 
+fn roundedUnsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u64, negative: bool) u32 {
+    if (value == 0) {
+        return 0;
+    }
+    if (value < (@as(u64, 1) << 24)) {
+        return @bitCast(u32, @intToFloat(f32, value));
+    }
+
+    var exponent = @intCast(u8, 63 - @clz(u64, value));
+    const shift = @intCast(u6, exponent - 23);
+    const remainder_mask = (@as(u64, 1) << shift) - 1;
+    const remainder = value & remainder_mask;
+    var significand = value >> shift;
+    const increment = switch (control.rounding()) {
+        .nearest => blk: {
+            const half = @as(u64, 1) << @intCast(u6, shift - 1);
+            break :blk remainder > half or (remainder == half and (significand & 1) != 0);
+        },
+        .positive => !negative and remainder != 0,
+        .negative => negative and remainder != 0,
+        .zero => false,
+    };
+    if (increment) {
+        significand += 1;
+        if (significand == (@as(u64, 1) << 24)) {
+            significand >>= 1;
+            exponent += 1;
+        }
+    }
+    return (@as(u32, exponent) + 127) << 23 | @intCast(u32, significand & ((@as(u64, 1) << 23) - 1));
+}
+
+pub fn signedDoublewordToFloat32(control: a64_state.FloatControl, value: u64) u32 {
+    const negative = @bitCast(i64, value) < 0;
+    const magnitude = if (negative) ~value +% 1 else value;
+    const converted = roundedUnsignedDoublewordToFloat32(control, magnitude, negative);
+    return converted | (if (negative) @as(u32, 0x80000000) else 0);
+}
+
+pub fn unsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u64) u32 {
+    return roundedUnsignedDoublewordToFloat32(control, value, false);
+}
+
 pub fn signedWordToFloat64(value: u32) u64 {
     return @bitCast(u64, @intToFloat(f64, @bitCast(i32, value)));
 }
