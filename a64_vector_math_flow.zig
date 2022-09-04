@@ -731,6 +731,32 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorAcrossAdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x0e31b800) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        const full = (word & 0x40000000) != 0;
+        if ((size == 2 and !full) or size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const bytes = @as(usize, 1) << @intCast(u3, size);
+        const lanes = (if (full) @as(usize, 16) else @as(usize, 8)) / bytes;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        var sum: u32 = 0;
+        var index: usize = 0;
+        while (index < lanes) : (index += 1) {
+            sum +%= @intCast(u32, vectorElement(source, index, bytes));
+        }
+
+        const mask = if (size == 0) @as(u32, 0xff) else if (size == 1) @as(u32, 0xffff) else ~@as(u32, 0);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = @as(u64, sum & mask), .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorDifference(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed_plain = masked == 0x0e207400;
