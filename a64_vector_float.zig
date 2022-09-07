@@ -203,3 +203,20 @@ pub fn signedDoublewordsToFloatVector(source: a64_state.VectorValue) a64_state.V
         .high = signedDoublewordToFloat64(source.high),
     };
 }
+
+pub fn unsignedWordsToFloatVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, 4, unsignedWordToFloat32(@intCast(u32, vectorElement(source, index, 4))));
+    }
+    return result;
+}
+
+pub fn unsignedDoublewordsToFloatVector(control: a64_state.FloatControl, source: a64_state.VectorValue) a64_state.VectorValue {
+    return a64_state.VectorValue{
+        .low = unsignedDoublewordToFloat64(control, source.low),
+        .high = unsignedDoublewordToFloat64(control, source.high),
+    };
+}

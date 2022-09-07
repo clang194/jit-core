@@ -167,6 +167,27 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorUnsignedIntegerToFloat(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfbffc00) != 0x2e21d800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = if (double)
+            unsignedDoublewordsToFloatVector(self.state.floatControl(), source)
+        else
+            unsignedWordsToFloatVector(full, source);
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
         if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f00a400) {

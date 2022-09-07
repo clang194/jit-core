@@ -406,6 +406,13 @@ pub const Core64Methods = struct {
             if (vector_signed_integer_float) {
                 return;
             }
+            const vector_unsigned_integer_float = self.runVectorUnsignedIntegerToFloat(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_unsigned_integer_float) {
+                return;
+            }
             const vector_widen_long_shift = self.runVectorWidenLongShift(word) catch |err| {
                 try self.raiseFault(err);
                 return;
