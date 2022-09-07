@@ -10,6 +10,26 @@ pub fn setBit32(value: u32, index: u5, enabled: bool) u32 {
     return value & ~mask;
 }
 
+pub fn clearBit32(value: u32, index: u5) u32 {
+    return setBit32(value, index, false);
+}
+
+pub fn getBit64(value: u64, index: u6) bool {
+    return ((value >> index) & 1) != 0;
+}
+
+pub fn setBit64(value: u64, index: u6, enabled: bool) u64 {
+    const mask = @as(u64, 1) << index;
+    if (enabled) {
+        return value | mask;
+    }
+    return value & ~mask;
+}
+
+pub fn clearBit64(value: u64, index: u6) u64 {
+    return setBit64(value, index, false);
+}
+
 pub fn lowByte(value: u32) u8 {
     return @intCast(u8, value & 0xff);
 }
