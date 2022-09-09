@@ -38,6 +38,10 @@ pub fn topBit(value: u32) bool {
     return (value & 0x80000000) != 0;
 }
 
+pub fn topBit64(value: u64) bool {
+    return (value & 0x8000000000000000) != 0;
+}
+
 pub fn isZero(value: u32) bool {
     return value == 0;
 }
