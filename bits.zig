@@ -46,6 +46,98 @@ pub fn isZero(value: u32) bool {
     return value == 0;
 }
 
+pub fn shiftLeft32(value: u32, amount: i32) u32 {
+    if (amount < 0) {
+        return shiftRight32(value, -amount);
+    }
+    if (amount >= 32) {
+        return 0;
+    }
+    return value << @intCast(u5, amount);
+}
+
+pub fn shiftRight32(value: u32, amount: i32) u32 {
+    if (amount < 0) {
+        return shiftLeft32(value, -amount);
+    }
+    if (amount >= 32) {
+        return 0;
+    }
+    return value >> @intCast(u5, amount);
+}
+
+pub fn signedShiftLeft32(value: u32, amount: i32) u32 {
+    return shiftLeft32(value, amount);
+}
+
+pub fn signedShiftRight32(value: u32, amount: i32) u32 {
+    if (amount < 0) {
+        return signedShiftLeft32(value, -amount);
+    }
+    if (amount >= 32) {
+        return if (topBit(value)) ~@as(u32, 0) else 0;
+    }
+    return @bitCast(u32, @bitCast(i32, value) >> @intCast(u5, amount));
+}
+
+pub fn shiftPairRight32(high: u32, low: u32, amount: i32) u32 {
+    return shiftLeft32(high, 32 - amount) | shiftRight32(low, amount);
+}
+
+pub fn signedShiftPairRight32(high: u32, low: u32, amount: i32) u32 {
+    return signedShiftLeft32(high, 32 - amount) | shiftRight32(low, amount);
+}
+
+pub fn negate32(value: u32) u32 {
+    return 0 -% value;
+}
+
+pub fn shiftLeft64(value: u64, amount: i32) u64 {
+    if (amount < 0) {
+        return shiftRight64(value, -amount);
+    }
+    if (amount >= 64) {
+        return 0;
+    }
+    return value << @intCast(u6, amount);
+}
+
+pub fn shiftRight64(value: u64, amount: i32) u64 {
+    if (amount < 0) {
+        return shiftLeft64(value, -amount);
+    }
+    if (amount >= 64) {
+        return 0;
+    }
+    return value >> @intCast(u6, amount);
+}
+
+pub fn signedShiftLeft64(value: u64, amount: i32) u64 {
+    return shiftLeft64(value, amount);
+}
+
+pub fn signedShiftRight64(value: u64, amount: i32) u64 {
+    if (amount < 0) {
+        return signedShiftLeft64(value, -amount);
+    }
+    if (amount >= 64) {
+        return if (topBit64(value)) ~@as(u64, 0) else 0;
+    }
+    return @bitCast(u64, @bitCast(i64, value) >> @intCast(u6, amount));
+}
+
+pub fn shiftPairRight64(high: u64, low: u64, amount: i32) u64 {
+    return shiftLeft64(high, 64 - amount) | shiftRight64(low, amount);
+}
+
+pub fn signedShiftPairRight64(high: u64, low: u64, amount: i32) u64 {
+    return signedShiftLeft64(high, 64 - amount) | shiftRight64(low, amount);
+}
+
+pub fn negate64(value: u64) u64 {
+    return 0 -% value;
+}
+
 pub const CarryWord = struct {
     word: u32,
     carry: bool,
