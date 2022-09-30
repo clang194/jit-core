@@ -5,6 +5,7 @@ pub const arm_text = @import("arm_text.zig");
 pub const a64_core = @import("a64_core.zig");
 pub const a64_reservation = @import("a64_reservation.zig");
 pub const a64_state = @import("a64_state.zig");
+pub const float_exception = @import("float_exception.zig");
 pub const float_format = @import("float_format.zig");
 pub const float_rounding = @import("float_rounding.zig");
 pub const float_status = @import("float_status.zig");
