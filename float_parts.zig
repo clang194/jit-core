@@ -2,6 +2,7 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const float_exception = @import("float_exception.zig");
 const float_format = @import("float_format.zig");
+const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
 
 const infinity_exponent_marker: i32 = 1000000;
@@ -26,12 +27,127 @@ pub const FloatAnalysis = struct {
     parts: WideFloatParts,
 };
 
+const NormalizedParts = struct {
+    negative: bool,
+    exponent: i32,
+    significand: u64,
+    lost_bits: u64,
+};
+
 fn emptyParts(negative: bool) WideFloatParts {
     return WideFloatParts{
         .negative = negative,
         .exponent = 0,
         .significand = 0,
     };
+}
+
+fn shiftRightDouble64(high: u64, low: u64, amount: i32) u64 {
+    return bits.shiftLeft64(high, 64 - amount) | bits.shiftRight64(low, amount);
+}
+
+fn normalizeParts(value: WideFloatParts, comptime fraction_bits: u6) NormalizedParts {
+    const highest = @intCast(i32, 63 - @clz(u64, value.significand));
+    const shift = highest - @intCast(i32, fraction_bits);
+    return NormalizedParts{
+        .negative = value.negative,
+        .exponent = value.exponent + highest,
+        .significand = bits.shiftRight64(value.significand, shift),
+        .lost_bits = shiftRightDouble64(value.significand, 0, shift),
+    };
+}
+
+fn shouldRoundUp(mode: float_rounding.RoundingMode, negative: bool, significand: u64, lost_bits: u64) bool {
+    return switch (mode) {
+        .nearest => blk: {
+            const half = @as(u64, 1) << 63;
+            break :blk lost_bits > half or (lost_bits == half and (significand & 1) != 0);
+        },
+        .positive => lost_bits != 0 and !negative,
+        .negative => lost_bits != 0 and negative,
+        .zero => false,
+    };
+}
+
+fn roundParts(
+    value: WideFloatParts,
+    control: a64_state.FloatControl,
+    mode: float_rounding.RoundingMode,
+    status: *float_status.FloatStatus,
+    comptime Result: type,
+    comptime exponent_bits: u5,
+    comptime fraction_bits: u6,
+    comptime exponent_min: i32,
+    comptime fraction_mask: u64,
+    comptime infinity_value: fn (bool) Result,
+    comptime max_normal_value: fn (bool) Result,
+) float_exception.FloatExceptionError!Result {
+    if (value.significand == 0) {
+        return @intCast(Result, if (value.negative) @as(u64, 1) << (exponent_bits + fraction_bits) else 0);
+    }
+
+    var normal = normalizeParts(value, fraction_bits);
+
+    if (control.fz() and normal.exponent < exponent_min) {
+        status.setUnderflow(true);
+        return @intCast(Result, if (normal.negative) @as(u64, 1) << (exponent_bits + fraction_bits) else 0);
+    }
+
+    var biased_exponent = normal.exponent - exponent_min + 1;
+    if (biased_exponent < 0) {
+        biased_exponent = 0;
+    }
+
+    if (biased_exponent == 0) {
+        const shift = exponent_min - normal.exponent;
+        normal.lost_bits = shiftRightDouble64(normal.significand, normal.lost_bits, shift);
+        normal.significand = bits.shiftRight64(normal.significand, shift);
+    }
+
+    if (biased_exponent == 0 and (normal.lost_bits != 0 or control.ufe())) {
+        try float_exception.processFloatException(.underflow, control, status);
+    }
+
+    const increment = shouldRoundUp(mode, normal.negative, normal.significand, normal.lost_bits);
+    const overflow_to_infinity = switch (mode) {
+        .nearest => true,
+        .positive => !normal.negative,
+        .negative => normal.negative,
+        .zero => false,
+    };
+
+    if (increment) {
+        if ((normal.significand & fraction_mask) == fraction_mask) {
+            if (normal.significand == fraction_mask) {
+                normal.significand += 1;
+                biased_exponent += 1;
+            } else {
+                normal.significand = (normal.significand + 1) / 2;
+                biased_exponent += 1;
+            }
+        } else {
+            normal.significand += 1;
+        }
+    }
+
+    const max_biased_exponent = (@as(i32, 1) << exponent_bits) - 1;
+    if (biased_exponent >= max_biased_exponent) {
+        try float_exception.processFloatException(.overflow, control, status);
+        try float_exception.processFloatException(.inexact, control, status);
+        return if (overflow_to_infinity) infinity_value(normal.negative) else max_normal_value(normal.negative);
+    }
+
+    var result = if (normal.negative) @as(u64, 1) else @as(u64, 0);
+    result <<= exponent_bits;
+    result += @intCast(u64, biased_exponent);
+    result <<= fraction_bits;
+    result |= normal.significand & fraction_mask;
+
+    if (normal.lost_bits != 0) {
+        try float_exception.processFloatException(.inexact, control, status);
+    }
+
+    return @intCast(Result, result);
 }
 
 pub fn splitFloat32(value: u32, control: a64_state.FloatControl, status: *float_status.FloatStatus) float_exception.FloatExceptionError!FloatAnalysis {
@@ -150,4 +266,44 @@ pub fn splitFloat64(value: u64, control: a64_state.FloatControl, status: *float_
             .significand = fraction | float_format.Binary64.hidden_bit,
         },
     };
+}
+
+pub fn roundFloat32Parts(value: WideFloatParts, control: a64_state.FloatControl, mode: float_rounding.RoundingMode, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+    return roundParts(
+        value,
+        control,
+        mode,
+        status,
+        u32,
+        float_format.Binary32.exponent_bits,
+        float_format.Binary32.stored_fraction_bits,
+        float_format.Binary32.exponent_min,
+        float_format.Binary32.fraction_mask,
+        float_format.Binary32.infinity,
+        float_format.Binary32.maxNormal,
+    );
+}
+
+pub fn roundFloat32(value: WideFloatParts, control: a64_state.FloatControl, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+    return roundFloat32Parts(value, control, control.rounding(), status);
+}
+
+pub fn roundFloat64Parts(value: WideFloatParts, control: a64_state.FloatControl, mode: float_rounding.RoundingMode, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+    return roundParts(
+        value,
+        control,
+        mode,
+        status,
+        u64,
+        float_format.Binary64.exponent_bits,
+        float_format.Binary64.stored_fraction_bits,
+        float_format.Binary64.exponent_min,
+        float_format.Binary64.fraction_mask,
+        float_format.Binary64.infinity,
+        float_format.Binary64.maxNormal,
+    );
+}
+
+pub fn roundFloat64(value: WideFloatParts, control: a64_state.FloatControl, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+    return roundFloat64Parts(value, control, control.rounding(), status);
 }
