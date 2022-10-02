@@ -31,12 +31,20 @@ pub const FloatControl = struct {
         return bits.getBit32(self.value, 26);
     }
 
+    pub fn setAhp(self: *FloatControl, enabled: bool) void {
+        self.value = cleanFloatControl(bits.setBit32(self.value, 26, enabled));
+    }
+
     pub fn dn(self: FloatControl) bool {
         return bits.getBit32(self.value, 25);
     }
 
     pub fn fz(self: FloatControl) bool {
         return bits.getBit32(self.value, 24);
+    }
+
+    pub fn fz16(self: FloatControl) bool {
+        return bits.getBit32(self.value, 19);
     }
 
     pub fn rounding(self: FloatControl) FloatControlMode {
