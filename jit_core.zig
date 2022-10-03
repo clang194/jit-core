@@ -8,6 +8,7 @@ pub const a64_state = @import("a64_state.zig");
 pub const float_exception = @import("float_exception.zig");
 pub const float_format = @import("float_format.zig");
 pub const float_parts = @import("float_parts.zig");
+pub const float_residue = @import("float_residue.zig");
 pub const float_rounding = @import("float_rounding.zig");
 pub const float_status = @import("float_status.zig");
 pub const trace = @import("trace.zig");
