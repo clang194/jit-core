@@ -1,5 +1,8 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_fixed = @import("float_fixed.zig");
+const float_rounding = @import("float_rounding.zig");
+const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const Core64 = main.Core64;
 const Core64Error = main.Core64Error;
@@ -24,6 +27,26 @@ usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
+
+fn fixedFromFloat(
+    self: *Core64,
+    double: bool,
+    value: u64,
+    integer_bits: usize,
+    fractional_bits: usize,
+    unsigned_result: bool,
+    rounding: float_rounding.RoundingMode,
+) Core64Error!u64 {
+    const control = self.state.floatControl();
+    var status = float_status.FloatStatus.init(self.state.floatStatus());
+    const result = if (double)
+        float_fixed.fixedFromFloat64(integer_bits, value, fractional_bits, unsigned_result, control, rounding, &status)
+    else
+        float_fixed.fixedFromFloat32(integer_bits, @intCast(u32, value), fractional_bits, unsigned_result, control, rounding, &status);
+    const converted = result catch return error.MissingFallback;
+    self.state.writeFloatStatus(status.raw());
+    return converted;
+}
 
 pub const Core64Methods = struct {
     pub fn runFloatImmediate(self: *Core64, word: u32) Core64Error!bool {
@@ -176,10 +199,6 @@ pub const Core64Methods = struct {
         if (!wide and (scale & 0x20) == 0) {
             return error.UnallocatedEncoding;
         }
-        if (wide) {
-            return false;
-        }
-
         const double = mode == 1;
         const fraction = @as(u8, 64) - scale;
         const factor = if (double)
@@ -188,11 +207,8 @@ pub const Core64Methods = struct {
             @as(u64, @as(u32, fraction + 127) << 23);
         const control = self.state.floatControl();
         const scaled = floatMul(control, self.hooks.float_nan_mode, double, vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (double) @as(usize, 8) else @as(usize, 4)), factor);
-        const result = if (masked == 0x1e180000)
-            floatToSignedWord(control, double, scaled)
-        else
-            floatToUnsignedWord(control, double, scaled);
-        self.writeSized(false, regFromWord(word), @as(u64, result), false);
+        const result = try fixedFromFloat(self, double, scaled, if (wide) @as(usize, 64) else @as(usize, 32), 0, masked == 0x1e190000, .zero);
+        self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
     }
@@ -207,17 +223,10 @@ pub const Core64Methods = struct {
         if (mode > 1) {
             return error.UnallocatedEncoding;
         }
-        if ((word & 0x80000000) != 0) {
-            return false;
-        }
-
-        const control = self.state.floatControl();
+        const wide = (word & 0x80000000) != 0;
         const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (mode == 1) @as(usize, 8) else @as(usize, 4));
-        const result = if (masked == 0x1e380000)
-            floatToSignedWord(control, mode == 1, input)
-        else
-            floatToUnsignedWord(control, mode == 1, input);
-        self.writeSized(false, regFromWord(word), @as(u64, result), false);
+        const result = try fixedFromFloat(self, mode == 1, input, if (wide) @as(usize, 64) else @as(usize, 32), 0, masked == 0x1e390000, .zero);
+        self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
     }
