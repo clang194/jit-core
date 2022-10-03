@@ -571,14 +571,26 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorPairAdd(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf20fc00) != 0x0e20bc00) {
+        const pattern = word & 0xbf20fc00;
+        const paired = pattern == 0x0e20bc00;
+        const wide_unsigned = pattern == 0x2e202800;
+        if (!paired and !wide_unsigned) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const size = @intCast(u2, (word >> 22) & 3);
-        if (size == 3 and !full) {
+        if ((wide_unsigned and size == 3) or (paired and size == 3 and !full)) {
             return error.ReservedInstruction;
+        }
+
+        if (wide_unsigned) {
+            const bytes = @as(usize, 1) << @intCast(u6, size);
+            const total = if (full) @as(usize, 16) else @as(usize, 8);
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            self.state.writeVector(vectorRegFromWord(word), pairwiseAddUnsignedWideVector(source, bytes, total));
+            self.state.pc +%= 4;
+            return true;
         }
 
         const lane = @as(u8, 8) << @intCast(u3, size);

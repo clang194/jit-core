@@ -117,6 +117,19 @@ pub fn extractVectorBytes(left: a64_state.VectorValue, right: a64_state.VectorVa
     return result;
 }
 
+pub fn pairwiseAddUnsignedWideVector(source: a64_state.VectorValue, source_bytes: usize, total: usize) a64_state.VectorValue {
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    const target_bytes = source_bytes * 2;
+    const pairs = total / source_bytes / 2;
+    var index: usize = 0;
+    while (index < pairs) : (index += 1) {
+        const left = vectorElement(source, index * 2, source_bytes);
+        const right = vectorElement(source, index * 2 + 1, source_bytes);
+        setVectorElement(&result, index, target_bytes, left + right);
+    }
+    return result;
+}
+
 pub fn narrowVectorLanes(value: a64_state.VectorValue, bytes: usize) u64 {
     var result: u64 = 0;
     const mask = ones(@intCast(u8, bytes * 8));
