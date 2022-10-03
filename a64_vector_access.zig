@@ -2,6 +2,7 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+usingnamespace @import("a64_immediate_vectors.zig");
 
 pub fn vectorByte(value: a64_state.VectorValue, index: usize) u8 {
     const shift = @intCast(u6, (index & 7) * 8);
@@ -117,15 +118,18 @@ pub fn extractVectorBytes(left: a64_state.VectorValue, right: a64_state.VectorVa
     return result;
 }
 
-pub fn pairwiseAddUnsignedWideVector(source: a64_state.VectorValue, source_bytes: usize, total: usize) a64_state.VectorValue {
+pub fn pairwiseAddWideVector(source: a64_state.VectorValue, source_bytes: usize, total: usize, signed: bool) a64_state.VectorValue {
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
     const target_bytes = source_bytes * 2;
+    const source_bits = @intCast(u6, source_bytes * 8);
     const pairs = total / source_bytes / 2;
     var index: usize = 0;
     while (index < pairs) : (index += 1) {
-        const left = vectorElement(source, index * 2, source_bytes);
-        const right = vectorElement(source, index * 2 + 1, source_bytes);
-        setVectorElement(&result, index, target_bytes, left + right);
+        const raw_left = vectorElement(source, index * 2, source_bytes);
+        const raw_right = vectorElement(source, index * 2 + 1, source_bytes);
+        const left = if (signed) signExtendRuntime(raw_left, source_bits) else raw_left;
+        const right = if (signed) signExtendRuntime(raw_right, source_bits) else raw_right;
+        setVectorElement(&result, index, target_bytes, left +% right);
     }
     return result;
 }
