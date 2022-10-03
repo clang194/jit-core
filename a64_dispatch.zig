@@ -284,6 +284,13 @@ pub const Core64Methods = struct {
             if (vector_immediate) {
                 return;
             }
+            const vector_byte_extract = self.runVectorExtract(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_byte_extract) {
+                return;
+            }
             const vector_interleave = self.runVectorInterleave(word) catch |err| {
                 try self.raiseFault(err);
                 return;

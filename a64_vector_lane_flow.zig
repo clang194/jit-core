@@ -26,6 +26,25 @@ usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
 pub const Core64Methods = struct {
+    pub fn runVectorExtract(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfe08400) != 0x2e000000) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const start = @intCast(usize, (word >> 11) & 0xf);
+        if (!full and (start & 8) != 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const total = if (full) @as(usize, 16) else @as(usize, 8);
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        self.state.writeVector(vectorRegFromWord(word), extractVectorBytes(left, right, start, total));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorInterleave(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const unzip_lower = masked == 0x0e001800;
