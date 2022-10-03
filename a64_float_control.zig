@@ -123,6 +123,7 @@ fn roundedUnsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u6
         },
         .positive => !negative and remainder != 0,
         .negative => negative and remainder != 0,
+        .nearest_away => remainder >= (@as(u64, 1) << @intCast(u6, shift - 1)),
         .zero => false,
     };
     if (increment) {
@@ -171,6 +172,7 @@ pub fn unsignedDoublewordToFloat64(control: a64_state.FloatControl, value: u64) 
         },
         .positive => remainder != 0,
         .negative, .zero => false,
+        .nearest_away => remainder >= (@as(u64, 1) << @intCast(u6, shift - 1)),
     };
     if (increment) {
         significand += 1;

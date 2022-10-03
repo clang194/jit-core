@@ -246,6 +246,7 @@ pub fn roundedFloat64(state: *const arm_state.MachineState, value: f64, round_to
         .nearest => if (value >= 0) @floor(value + 0.5) else @ceil(value - 0.5),
         .positive => @ceil(value),
         .negative => @floor(value),
+        .nearest_away => if (value >= 0) @floor(value + 0.5) else @ceil(value - 0.5),
         .zero => @trunc(value),
     };
 }
@@ -449,4 +450,3 @@ pub fn readFloatPair(state: *const arm_state.MachineState, reg: arm_state.FloatP
 pub fn writeFloatPair(state: *arm_state.MachineState, reg: arm_state.FloatPairReg, value: u64) void {
     state.writeFloatPair(reg, value);
 }
-

@@ -36,6 +36,7 @@ fn shouldRaise(mode: float_rounding.RoundingMode, residue: float_residue.ShiftRe
         .nearest => residue == .above_half or (residue == .half and bits.getBit64(shifted, 0)),
         .positive => residue != .zero,
         .negative => false,
+        .nearest_away => residue == .above_half or (residue == .half and !bits.topBit64(shifted)),
         .zero => residue != .zero and bits.topBit64(shifted),
     };
 }

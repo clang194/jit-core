@@ -65,6 +65,7 @@ fn shouldRoundUp(mode: float_rounding.RoundingMode, negative: bool, significand:
         },
         .positive => lost_bits != 0 and !negative,
         .negative => lost_bits != 0 and negative,
+        .nearest_away => lost_bits >= (@as(u64, 1) << 63),
         .zero => false,
     };
 }
@@ -113,6 +114,7 @@ fn roundParts(
         .nearest => true,
         .positive => !normal.negative,
         .negative => normal.negative,
+        .nearest_away => true,
         .zero => false,
     };
 
