@@ -215,7 +215,7 @@ pub const Core64Methods = struct {
 
     pub fn runFloatToInteger(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0x7f3ffc00;
-        if (masked != 0x1e200000 and masked != 0x1e210000 and masked != 0x1e240000 and masked != 0x1e250000 and masked != 0x1e380000 and masked != 0x1e390000) {
+        if (masked != 0x1e200000 and masked != 0x1e210000 and masked != 0x1e240000 and masked != 0x1e250000 and masked != 0x1e280000 and masked != 0x1e380000 and masked != 0x1e390000) {
             return false;
         }
 
@@ -225,7 +225,7 @@ pub const Core64Methods = struct {
         }
         const wide = (word & 0x80000000) != 0;
         const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (mode == 1) @as(usize, 8) else @as(usize, 4));
-        const result = try fixedFromFloat(self, mode == 1, input, if (wide) @as(usize, 64) else @as(usize, 32), 0, masked == 0x1e210000 or masked == 0x1e250000 or masked == 0x1e390000, if (masked == 0x1e200000 or masked == 0x1e210000) .nearest else if (masked == 0x1e240000 or masked == 0x1e250000) .nearest_away else .zero);
+        const result = try fixedFromFloat(self, mode == 1, input, if (wide) @as(usize, 64) else @as(usize, 32), 0, masked == 0x1e210000 or masked == 0x1e250000 or masked == 0x1e390000, if (masked == 0x1e200000 or masked == 0x1e210000) .nearest else if (masked == 0x1e240000 or masked == 0x1e250000) .nearest_away else if (masked == 0x1e280000) .positive else .zero);
         self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
