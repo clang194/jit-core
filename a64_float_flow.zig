@@ -87,7 +87,7 @@ pub const Core64Methods = struct {
 
     pub fn runFloatUnary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff3ffc00;
-        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000 and masked != 0x1e21c000 and masked != 0x1e244000 and masked != 0x1e24c000 and masked != 0x1e254000 and masked != 0x1e25c000 and masked != 0x1e264000) {
+        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000 and masked != 0x1e21c000 and masked != 0x1e244000 and masked != 0x1e24c000 and masked != 0x1e254000 and masked != 0x1e25c000 and masked != 0x1e264000 and masked != 0x1e274000 and masked != 0x1e27c000) {
             return false;
         }
 
@@ -107,6 +107,10 @@ pub const Core64Methods = struct {
             try integralFloat(self, mode == 1, source, .zero, false)
         else if (masked == 0x1e264000)
             try integralFloat(self, mode == 1, source, .nearest_away, false)
+        else if (masked == 0x1e274000)
+            try integralFloat(self, mode == 1, source, self.state.floatControl().rounding(), true)
+        else if (masked == 0x1e27c000)
+            try integralFloat(self, mode == 1, source, self.state.floatControl().rounding(), false)
         else if (masked == 0x1e21c000)
             floatSqrt(self.state.floatControl(), self.hooks.float_nan_mode, mode == 1, source)
         else if (mode == 1)
