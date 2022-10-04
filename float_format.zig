@@ -22,6 +22,10 @@ pub const Binary32 = struct {
     pub fn maxNormal(negative: bool) u32 {
         return (exponent_mask - 1) | zero(negative);
     }
+
+    pub fn defaultNan() u32 {
+        return exponent_mask | (@as(u32, 1) << (stored_fraction_bits - 1));
+    }
 };
 
 pub const Binary64 = struct {
@@ -47,5 +51,9 @@ pub const Binary64 = struct {
 
     pub fn maxNormal(negative: bool) u64 {
         return (exponent_mask - 1) | zero(negative);
+    }
+
+    pub fn defaultNan() u64 {
+        return exponent_mask | (@as(u64, 1) << (stored_fraction_bits - 1));
     }
 };
