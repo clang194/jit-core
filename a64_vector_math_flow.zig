@@ -384,8 +384,22 @@ pub const Core64Methods = struct {
     }
 
     pub fn runScalarPairAdd(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xff20fc00) != 0x5e20bc00) {
+        const integer_pair = (word & 0xff20fc00) == 0x5e20bc00;
+        const float_pair = (word & 0xffbffc00) == 0x7e30d800;
+        if (!integer_pair and !float_pair) {
             return false;
+        }
+
+        if (float_pair) {
+            const double = ((word >> 22) & 1) != 0;
+            const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            const left = vectorElement(source, 0, bytes);
+            const right = vectorElement(source, 1, bytes);
+            const result = floatAdd(self.state.floatControl(), self.hooks.float_nan_mode, double, left, right);
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
         }
 
         const size = @intCast(u2, (word >> 22) & 3);
