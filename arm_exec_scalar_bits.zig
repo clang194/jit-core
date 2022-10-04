@@ -43,11 +43,7 @@ pub fn signedProduct(left: u32, right: u32) u64 {
 }
 
 pub fn rotateRightWord(value: u32, amount: u8) u32 {
-    const shift = amount & 31;
-    if (shift == 0) {
-        return value;
-    }
-    return (value >> @intCast(u5, shift)) | (value << @intCast(u5, 32 - shift));
+    return bits.rotateRight32(value, @intCast(u5, amount & 31));
 }
 
 pub fn addHalfPairs(left: u32, right: u32) u32 {
