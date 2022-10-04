@@ -1,6 +1,7 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const float_fixed = @import("float_fixed.zig");
+const float_integer = @import("float_integer.zig");
 const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
@@ -48,6 +49,23 @@ fn fixedFromFloat(
     return converted;
 }
 
+fn integralFloat(
+    self: *Core64,
+    double: bool,
+    value: u64,
+    rounding: float_rounding.RoundingMode,
+    exact: bool,
+) Core64Error!u64 {
+    const control = self.state.floatControl();
+    var status = float_status.FloatStatus.init(self.state.floatStatus());
+    const converted = if (double)
+        float_integer.roundIntegral64(value, control, rounding, exact, &status) catch return error.MissingFallback
+    else
+        @as(u64, float_integer.roundIntegral32(@intCast(u32, value), control, rounding, exact, &status) catch return error.MissingFallback);
+    self.state.writeFloatStatus(status.raw());
+    return converted;
+}
+
 pub const Core64Methods = struct {
     pub fn runFloatImmediate(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xff201fe0) != 0x1e201000) {
@@ -69,7 +87,7 @@ pub const Core64Methods = struct {
 
     pub fn runFloatUnary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff3ffc00;
-        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000 and masked != 0x1e21c000) {
+        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000 and masked != 0x1e21c000 and masked != 0x1e264000) {
             return false;
         }
 
@@ -79,7 +97,9 @@ pub const Core64Methods = struct {
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
-        const result = if (masked == 0x1e21c000)
+        const result = if (masked == 0x1e264000)
+            try integralFloat(self, mode == 1, source, .nearest_away, false)
+        else if (masked == 0x1e21c000)
             floatSqrt(self.state.floatControl(), self.hooks.float_nan_mode, mode == 1, source)
         else if (mode == 1)
             if (masked == 0x1e204000) source else if (masked == 0x1e20c000) source & 0x7fffffffffffffff else source ^ 0x8000000000000000
