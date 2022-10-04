@@ -159,6 +159,32 @@ pub fn compareFloatZeroVector(control: a64_state.FloatControl, double: bool, ful
     return result;
 }
 
+pub fn compareFloatZeroScalar(control: a64_state.FloatControl, double: bool, source: u64, comparison: FloatZeroComparison) u64 {
+    const match_value = if (double) ~@as(u64, 0) else @as(u64, 0xffffffff);
+    const matched = if (double) blk: {
+        const input = floatInput64(control, source);
+        const value = @bitCast(f64, input);
+        break :blk !isNan64(input) and switch (comparison) {
+            .equal => value == 0.0,
+            .greater => value > 0.0,
+            .greater_equal => value >= 0.0,
+            .less => value < 0.0,
+            .less_equal => value <= 0.0,
+        };
+    } else blk: {
+        const input = floatInput32(control, @intCast(u32, source));
+        const value = @bitCast(f32, input);
+        break :blk !isNan32(input) and switch (comparison) {
+            .equal => value == 0.0,
+            .greater => value > 0.0,
+            .greater_equal => value >= 0.0,
+            .less => value < 0.0,
+            .less_equal => value <= 0.0,
+        };
+    };
+    return if (matched) match_value else 0;
+}
+
 pub fn negateFloatVector(double: bool, full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);

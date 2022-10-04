@@ -399,6 +399,13 @@ pub const Core64Methods = struct {
             if (scalar_float_absolute_difference) {
                 return;
             }
+            const scalar_float_compare_zero = self.runScalarFloatCompareZero(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_float_compare_zero) {
+                return;
+            }
             const scalar_float_compare = self.runScalarFloatCompareRegister(word) catch |err| {
                 try self.raiseFault(err);
                 return;

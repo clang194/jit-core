@@ -113,6 +113,26 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarFloatCompareZero(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xffbffc00;
+        const greater = masked == 0x5ea0c800;
+        const equal = masked == 0x5ea0d800;
+        const less = masked == 0x5ea0e800;
+        const greater_equal = masked == 0x7ea0c800;
+        const less_equal = masked == 0x7ea0d800;
+        if (!greater and !equal and !less and !greater_equal and !less_equal) {
+            return false;
+        }
+
+        const double = ((word >> 22) & 1) != 0;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const source = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const result = compareFloatZeroScalar(self.state.floatControl(), double, source, if (equal) .equal else if (greater) .greater else if (greater_equal) .greater_equal else if (less) .less else .less_equal);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarFloatCompareRegister(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xffa0fc00;
         if (masked != 0x5e20e400 and masked != 0x7e20e400 and masked != 0x7e20ec00 and masked != 0x7ea0e400 and masked != 0x7ea0ec00) {
