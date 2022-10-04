@@ -87,7 +87,7 @@ pub const Core64Methods = struct {
 
     pub fn runFloatUnary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff3ffc00;
-        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000 and masked != 0x1e21c000 and masked != 0x1e264000) {
+        if (masked != 0x1e204000 and masked != 0x1e20c000 and masked != 0x1e214000 and masked != 0x1e21c000 and masked != 0x1e244000 and masked != 0x1e264000) {
             return false;
         }
 
@@ -97,7 +97,9 @@ pub const Core64Methods = struct {
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
-        const result = if (masked == 0x1e264000)
+        const result = if (masked == 0x1e244000)
+            try integralFloat(self, mode == 1, source, .nearest, false)
+        else if (masked == 0x1e264000)
             try integralFloat(self, mode == 1, source, .nearest_away, false)
         else if (masked == 0x1e21c000)
             floatSqrt(self.state.floatControl(), self.hooks.float_nan_mode, mode == 1, source)
