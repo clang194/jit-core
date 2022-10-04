@@ -65,7 +65,7 @@ fn roundParts32(
     else
         try float_parts.roundFloat32Parts(
             float_parts.WideFloatParts{
-                .negative = analysis.negative,
+                .negative = bits.topBit64(integer),
                 .exponent = 0,
                 .significand = unsignedMagnitude(integer),
             },
@@ -113,7 +113,7 @@ fn roundParts64(
     else
         try float_parts.roundFloat64Parts(
             float_parts.WideFloatParts{
-                .negative = analysis.negative,
+                .negative = bits.topBit64(integer),
                 .exponent = 0,
                 .significand = unsignedMagnitude(integer),
             },
