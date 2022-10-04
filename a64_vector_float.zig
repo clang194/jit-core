@@ -28,6 +28,21 @@ pub fn addFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, dou
     return result;
 }
 
+pub fn addFloatPairsVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const pairs = if (double) @as(usize, 1) else if (full) @as(usize, 2) else @as(usize, 1);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < pairs) : (index += 1) {
+        setVectorElement(&result, index, bytes, floatAdd(control, mode, double, vectorElement(left, index * 2, bytes), vectorElement(left, index * 2 + 1, bytes)));
+    }
+    index = 0;
+    while (index < pairs) : (index += 1) {
+        setVectorElement(&result, index + pairs, bytes, floatAdd(control, mode, double, vectorElement(right, index * 2, bytes), vectorElement(right, index * 2 + 1, bytes)));
+    }
+    return result;
+}
+
 pub fn subtractFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
