@@ -25,6 +25,14 @@ fn shouldIncrease(mode: float_rounding.RoundingMode, residue: float_residue.Shif
     };
 }
 
+fn signedMagnitude(negative: bool, value: u64) u64 {
+    return if (negative) bits.negate64(value) else value;
+}
+
+fn unsignedMagnitude(value: u64) u64 {
+    return if (bits.topBit64(value)) bits.negate64(value) else value;
+}
+
 fn roundParts32(
     value: u32,
     analysis: float_parts.FloatAnalysis,
@@ -44,7 +52,7 @@ fn roundParts32(
         return value;
     }
 
-    var integer = analysis.parts.significand;
+    var integer = signedMagnitude(analysis.negative, analysis.parts.significand);
     const residue = float_residue.classifyRightShiftResidue64(integer, -analysis.parts.exponent);
     integer = moveInteger(integer, analysis.parts.exponent);
 
@@ -59,7 +67,7 @@ fn roundParts32(
             float_parts.WideFloatParts{
                 .negative = analysis.negative,
                 .exponent = 0,
-                .significand = integer,
+                .significand = unsignedMagnitude(integer),
             },
             control,
             .zero,
@@ -92,7 +100,7 @@ fn roundParts64(
         return value;
     }
 
-    var integer = analysis.parts.significand;
+    var integer = signedMagnitude(analysis.negative, analysis.parts.significand);
     const residue = float_residue.classifyRightShiftResidue64(integer, -analysis.parts.exponent);
     integer = moveInteger(integer, analysis.parts.exponent);
 
@@ -107,7 +115,7 @@ fn roundParts64(
             float_parts.WideFloatParts{
                 .negative = analysis.negative,
                 .exponent = 0,
-                .significand = integer,
+                .significand = unsignedMagnitude(integer),
             },
             control,
             .zero,
