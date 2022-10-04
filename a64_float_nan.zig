@@ -1,5 +1,8 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_exception = @import("float_exception.zig");
+const float_format = @import("float_format.zig");
+const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
 
@@ -35,6 +38,30 @@ pub fn isQuietNan64(value: u64) bool {
 
 pub fn isSignalingNan64(value: u64) bool {
     return (value & 0x7ff8000000000000) == 0x7ff0000000000000 and (value & 0x0007ffffffffffff) != 0;
+}
+
+pub fn processNan32(control: a64_state.FloatControl, value: u32, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+    var result = value;
+    if (isSignalingNan32(value)) {
+        result |= 0x00400000;
+        try float_exception.processFloatException(.invalid_operation, control, status);
+    }
+    if (control.dn()) {
+        return float_format.Binary32.defaultNan();
+    }
+    return result;
+}
+
+pub fn processNan64(control: a64_state.FloatControl, value: u64, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+    var result = value;
+    if (isSignalingNan64(value)) {
+        result |= 0x0008000000000000;
+        try float_exception.processFloatException(.invalid_operation, control, status);
+    }
+    if (control.dn()) {
+        return float_format.Binary64.defaultNan();
+    }
+    return result;
 }
 
 pub fn chooseBinaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, left: u32, right: u32) ?u32 {
