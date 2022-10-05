@@ -32,15 +32,16 @@ fn fixedScalarFloat(
     self: *Core64,
     double: bool,
     value: u64,
+    fractional_bits: usize,
     unsigned_result: bool,
     rounding: float_rounding.RoundingMode,
 ) Core64Error!u64 {
     const control = self.state.floatControl();
     var status = float_status.FloatStatus.init(self.state.floatStatus());
     const result = if (double)
-        float_fixed.fixedFromFloat64(64, value, 0, unsigned_result, control, rounding, &status)
+        float_fixed.fixedFromFloat64(64, value, fractional_bits, unsigned_result, control, rounding, &status)
     else
-        float_fixed.fixedFromFloat32(32, @intCast(u32, value), 0, unsigned_result, control, rounding, &status);
+        float_fixed.fixedFromFloat32(32, @intCast(u32, value), fractional_bits, unsigned_result, control, rounding, &status);
     const converted = result catch return error.MissingFallback;
     self.state.writeFloatStatus(status.raw());
     return converted;
@@ -208,7 +209,28 @@ pub const Core64Methods = struct {
             float_rounding.RoundingMode.positive
         else
             float_rounding.RoundingMode.zero;
-        const result = try fixedScalarFloat(self, double, source, unsigned_result, rounding);
+        const result = try fixedScalarFloat(self, double, source, 0, unsigned_result, rounding);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runScalarFloatToFixed(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xff80fc00;
+        if (masked != 0x5f007c00 and masked != 0x7f007c00) {
+            return false;
+        }
+
+        const immh = @intCast(u4, (word >> 19) & 0xf);
+        if ((immh & 0xe) == 0 or (immh & 0xe) == 2) {
+            return error.ReservedInstruction;
+        }
+
+        const double = (immh & 8) != 0;
+        const immediate = @as(u8, immh) << 3 | @intCast(u8, (word >> 16) & 7);
+        const fractional_bits = (if (double) @as(usize, 128) else @as(usize, 64)) - @as(usize, immediate);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        const result = try fixedScalarFloat(self, double, source, fractional_bits, masked == 0x7f007c00, .zero);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
