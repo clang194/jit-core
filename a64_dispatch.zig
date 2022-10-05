@@ -256,6 +256,13 @@ pub const Core64Methods = struct {
             if (scalar_integer_float) {
                 return;
             }
+            const scalar_float_integer = self.runScalarFloatToInteger(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_float_integer) {
+                return;
+            }
             const vector_extract = self.runVectorExtractToRegister(word) catch |err| {
                 try self.raiseFault(err);
                 return;

@@ -1,5 +1,8 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_fixed = @import("float_fixed.zig");
+const float_rounding = @import("float_rounding.zig");
+const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const Core64 = main.Core64;
 const Core64Error = main.Core64Error;
@@ -24,6 +27,24 @@ usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
+
+fn fixedScalarFloat(
+    self: *Core64,
+    double: bool,
+    value: u64,
+    unsigned_result: bool,
+    rounding: float_rounding.RoundingMode,
+) Core64Error!u64 {
+    const control = self.state.floatControl();
+    var status = float_status.FloatStatus.init(self.state.floatStatus());
+    const result = if (double)
+        float_fixed.fixedFromFloat64(64, value, 0, unsigned_result, control, rounding, &status)
+    else
+        float_fixed.fixedFromFloat32(32, @intCast(u32, value), 0, unsigned_result, control, rounding, &status);
+    const converted = result catch return error.MissingFallback;
+    self.state.writeFloatStatus(status.raw());
+    return converted;
+}
 
 pub const Core64Methods = struct {
     pub fn runVectorFloatNegate(self: *Core64, word: u32) Core64Error!bool {
@@ -164,6 +185,31 @@ pub const Core64Methods = struct {
             break :blk !isNan32(left_input) and !isNan32(right_input) and if (masked == 0x5e20e400) left_value == right_value else if (masked == 0x7e20e400 or masked == 0x7e20ec00) left_value >= right_value else left_value > right_value;
         };
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = if (matched) match_value else 0, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runScalarFloatToInteger(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xffbffc00;
+        if (masked != 0x5e21a800 and masked != 0x5e21b800 and masked != 0x5e21c800 and masked != 0x5ea1a800 and masked != 0x5ea1b800 and masked != 0x7e21a800 and masked != 0x7e21b800 and masked != 0x7e21c800 and masked != 0x7ea1a800 and masked != 0x7ea1b800) {
+            return false;
+        }
+
+        const double = (word & 0x00400000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        const unsigned_result = (masked & 0x20000000) != 0;
+        const rounding = if (masked == 0x5e21a800 or masked == 0x7e21a800)
+            float_rounding.RoundingMode.nearest
+        else if (masked == 0x5e21b800 or masked == 0x7e21b800)
+            float_rounding.RoundingMode.negative
+        else if (masked == 0x5e21c800 or masked == 0x7e21c800)
+            float_rounding.RoundingMode.nearest_away
+        else if (masked == 0x5ea1a800 or masked == 0x7ea1a800)
+            float_rounding.RoundingMode.positive
+        else
+            float_rounding.RoundingMode.zero;
+        const result = try fixedScalarFloat(self, double, source, unsigned_result, rounding);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
     }
