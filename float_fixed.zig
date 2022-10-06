@@ -1,5 +1,5 @@
-const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_control = @import("float_control.zig");
 const float_exception = @import("float_exception.zig");
 const float_parts = @import("float_parts.zig");
 const float_residue = @import("float_residue.zig");
@@ -46,7 +46,7 @@ fn fixedFromParts(
     analysis: float_parts.FloatAnalysis,
     fractional_bits: usize,
     unsigned_result: bool,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     status: *float_status.FloatStatus,
 ) float_exception.FloatExceptionError!u64 {
@@ -102,7 +102,7 @@ pub fn fixedFromFloat32(
     value: u32,
     fractional_bits: usize,
     unsigned_result: bool,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     status: *float_status.FloatStatus,
 ) float_exception.FloatExceptionError!u64 {
@@ -115,7 +115,7 @@ pub fn fixedFromFloat64(
     value: u64,
     fractional_bits: usize,
     unsigned_result: bool,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     status: *float_status.FloatStatus,
 ) float_exception.FloatExceptionError!u64 {

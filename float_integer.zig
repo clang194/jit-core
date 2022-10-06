@@ -1,6 +1,6 @@
 const a64_float_nan = @import("a64_float_nan.zig");
-const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_control = @import("float_control.zig");
 const float_exception = @import("float_exception.zig");
 const float_format = @import("float_format.zig");
 const float_parts = @import("float_parts.zig");
@@ -36,7 +36,7 @@ fn unsignedMagnitude(value: u64) u64 {
 fn roundParts32(
     value: u32,
     analysis: float_parts.FloatAnalysis,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     exact: bool,
     status: *float_status.FloatStatus,
@@ -84,7 +84,7 @@ fn roundParts32(
 fn roundParts64(
     value: u64,
     analysis: float_parts.FloatAnalysis,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     exact: bool,
     status: *float_status.FloatStatus,
@@ -131,7 +131,7 @@ fn roundParts64(
 
 pub fn roundIntegral32(
     value: u32,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     exact: bool,
     status: *float_status.FloatStatus,
@@ -142,7 +142,7 @@ pub fn roundIntegral32(
 
 pub fn roundIntegral64(
     value: u64,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     exact: bool,
     status: *float_status.FloatStatus,

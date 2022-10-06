@@ -1,4 +1,4 @@
-const a64_state = @import("a64_state.zig");
+const float_control = @import("float_control.zig");
 const float_status = @import("float_status.zig");
 
 pub const FloatException = enum {
@@ -14,7 +14,7 @@ pub const FloatExceptionError = error{
     EnabledTrap,
 };
 
-pub fn processFloatException(kind: FloatException, control: a64_state.FloatControl, status: *float_status.FloatStatus) FloatExceptionError!void {
+pub fn processFloatException(kind: FloatException, control: float_control.Control, status: *float_status.FloatStatus) FloatExceptionError!void {
     switch (kind) {
         .invalid_operation => {
             if (control.ioe()) {

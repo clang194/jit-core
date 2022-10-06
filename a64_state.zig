@@ -1,80 +1,22 @@
 const bits = @import("bits.zig");
-const float_rounding = @import("float_rounding.zig");
+const float_control = @import("float_control.zig");
 
-pub const FloatControlMode = float_rounding.RoundingMode;
+pub const FloatControlMode = float_control.Mode;
 
-pub const float_control_mask: u32 = 0x07f79f00;
-pub const float_control_key_mask: u32 = 0x07c00000;
+pub const float_control_mask: u32 = float_control.mask;
+pub const float_control_key_mask: u32 = float_control.key_mask;
 pub const float_status_mask: u32 = 0x0800009f;
 pub const pc_mask: u64 = 0x00ffffffffffffff;
 
 pub fn cleanFloatControl(value: u32) u32 {
-    return value & float_control_mask;
+    return float_control.clean(value);
 }
 
 pub fn cleanFloatStatus(value: u32) u32 {
     return value & float_status_mask;
 }
 
-pub const FloatControl = struct {
-    value: u32,
-
-    pub fn init(value: u32) FloatControl {
-        return FloatControl{ .value = cleanFloatControl(value) };
-    }
-
-    pub fn raw(self: FloatControl) u32 {
-        return self.value;
-    }
-
-    pub fn ahp(self: FloatControl) bool {
-        return bits.getBit32(self.value, 26);
-    }
-
-    pub fn setAhp(self: *FloatControl, enabled: bool) void {
-        self.value = cleanFloatControl(bits.setBit32(self.value, 26, enabled));
-    }
-
-    pub fn dn(self: FloatControl) bool {
-        return bits.getBit32(self.value, 25);
-    }
-
-    pub fn fz(self: FloatControl) bool {
-        return bits.getBit32(self.value, 24);
-    }
-
-    pub fn fz16(self: FloatControl) bool {
-        return bits.getBit32(self.value, 19);
-    }
-
-    pub fn rounding(self: FloatControl) FloatControlMode {
-        return @intToEnum(FloatControlMode, @intCast(u2, (self.value >> 22) & 3));
-    }
-
-    pub fn ide(self: FloatControl) bool {
-        return bits.getBit32(self.value, 15);
-    }
-
-    pub fn ixe(self: FloatControl) bool {
-        return bits.getBit32(self.value, 12);
-    }
-
-    pub fn ufe(self: FloatControl) bool {
-        return bits.getBit32(self.value, 11);
-    }
-
-    pub fn ofe(self: FloatControl) bool {
-        return bits.getBit32(self.value, 10);
-    }
-
-    pub fn dze(self: FloatControl) bool {
-        return bits.getBit32(self.value, 9);
-    }
-
-    pub fn ioe(self: FloatControl) bool {
-        return bits.getBit32(self.value, 8);
-    }
-};
+pub const FloatControl = float_control.Control;
 
 pub const BlockKey = struct {
     pc: u64,

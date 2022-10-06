@@ -1,5 +1,5 @@
-const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_control = @import("float_control.zig");
 const float_exception = @import("float_exception.zig");
 const float_format = @import("float_format.zig");
 const float_rounding = @import("float_rounding.zig");
@@ -72,7 +72,7 @@ fn shouldRoundUp(mode: float_rounding.RoundingMode, negative: bool, significand:
 
 fn roundParts(
     value: WideFloatParts,
-    control: a64_state.FloatControl,
+    control: float_control.Control,
     mode: float_rounding.RoundingMode,
     status: *float_status.FloatStatus,
     comptime Result: type,
@@ -152,7 +152,7 @@ fn roundParts(
     return @intCast(Result, result);
 }
 
-pub fn splitFloat32(value: u32, control: a64_state.FloatControl, status: *float_status.FloatStatus) float_exception.FloatExceptionError!FloatAnalysis {
+pub fn splitFloat32(value: u32, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!FloatAnalysis {
     const negative = bits.getBit32(value, 31);
     const exponent_raw = (value & float_format.Binary32.exponent_mask) >> float_format.Binary32.stored_fraction_bits;
     const fraction = value & float_format.Binary32.fraction_mask;
@@ -211,7 +211,7 @@ pub fn splitFloat32(value: u32, control: a64_state.FloatControl, status: *float_
     };
 }
 
-pub fn splitFloat64(value: u64, control: a64_state.FloatControl, status: *float_status.FloatStatus) float_exception.FloatExceptionError!FloatAnalysis {
+pub fn splitFloat64(value: u64, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!FloatAnalysis {
     const negative = bits.getBit64(value, 63);
     const exponent_raw = (value & float_format.Binary64.exponent_mask) >> float_format.Binary64.stored_fraction_bits;
     const fraction = value & float_format.Binary64.fraction_mask;
@@ -270,7 +270,7 @@ pub fn splitFloat64(value: u64, control: a64_state.FloatControl, status: *float_
     };
 }
 
-pub fn roundFloat32Parts(value: WideFloatParts, control: a64_state.FloatControl, mode: float_rounding.RoundingMode, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+pub fn roundFloat32Parts(value: WideFloatParts, control: float_control.Control, mode: float_rounding.RoundingMode, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
     return roundParts(
         value,
         control,
@@ -286,11 +286,11 @@ pub fn roundFloat32Parts(value: WideFloatParts, control: a64_state.FloatControl,
     );
 }
 
-pub fn roundFloat32(value: WideFloatParts, control: a64_state.FloatControl, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+pub fn roundFloat32(value: WideFloatParts, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
     return roundFloat32Parts(value, control, control.rounding(), status);
 }
 
-pub fn roundFloat64Parts(value: WideFloatParts, control: a64_state.FloatControl, mode: float_rounding.RoundingMode, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+pub fn roundFloat64Parts(value: WideFloatParts, control: float_control.Control, mode: float_rounding.RoundingMode, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     return roundParts(
         value,
         control,
@@ -306,6 +306,6 @@ pub fn roundFloat64Parts(value: WideFloatParts, control: a64_state.FloatControl,
     );
 }
 
-pub fn roundFloat64(value: WideFloatParts, control: a64_state.FloatControl, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+pub fn roundFloat64(value: WideFloatParts, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     return roundFloat64Parts(value, control, control.rounding(), status);
 }
