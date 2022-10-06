@@ -14,6 +14,32 @@ pub fn clearBit32(value: u32, index: u5) u32 {
     return setBit32(value, index, false);
 }
 
+pub fn ones32(comptime count: u6) u32 {
+    if (count == 0) {
+        return 0;
+    }
+    if (count >= 32) {
+        return ~@as(u32, 0);
+    }
+    return (@as(u32, 1) << @intCast(u5, count)) - 1;
+}
+
+pub fn rangeMask32(comptime first: u5, comptime last: u5) u32 {
+    if (first > last) {
+        @compileError("invalid bit range");
+    }
+    return ones32(@as(u6, last) - @as(u6, first) + 1) << first;
+}
+
+pub fn clearBits32(value: u32, comptime first: u5, comptime last: u5) u32 {
+    return value & ~rangeMask32(first, last);
+}
+
+pub fn modifyBits32(value: u32, new_bits: u32, comptime first: u5, comptime last: u5) u32 {
+    const mask = rangeMask32(first, last);
+    return clearBits32(value, first, last) | ((new_bits << first) & mask);
+}
+
 pub fn getBit64(value: u64, index: u6) bool {
     return ((value >> index) & 1) != 0;
 }
@@ -28,6 +54,32 @@ pub fn setBit64(value: u64, index: u6, enabled: bool) u64 {
 
 pub fn clearBit64(value: u64, index: u6) u64 {
     return setBit64(value, index, false);
+}
+
+pub fn ones64(comptime count: u7) u64 {
+    if (count == 0) {
+        return 0;
+    }
+    if (count >= 64) {
+        return ~@as(u64, 0);
+    }
+    return (@as(u64, 1) << @intCast(u6, count)) - 1;
+}
+
+pub fn rangeMask64(comptime first: u6, comptime last: u6) u64 {
+    if (first > last) {
+        @compileError("invalid bit range");
+    }
+    return ones64(@as(u7, last) - @as(u7, first) + 1) << first;
+}
+
+pub fn clearBits64(value: u64, comptime first: u6, comptime last: u6) u64 {
+    return value & ~rangeMask64(first, last);
+}
+
+pub fn modifyBits64(value: u64, new_bits: u64, comptime first: u6, comptime last: u6) u64 {
+    const mask = rangeMask64(first, last);
+    return clearBits64(value, first, last) | ((new_bits << first) & mask);
 }
 
 pub fn lowByte(value: u32) u8 {
