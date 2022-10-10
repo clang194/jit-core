@@ -873,7 +873,9 @@ pub const Core64Methods = struct {
     pub fn runVectorAcrossAdd(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf3ffc00;
         const narrow = masked == 0x0e31b800;
-        const wide = masked == 0x2e303800;
+        const signed_wide = masked == 0x0e303800;
+        const unsigned_wide = masked == 0x2e303800;
+        const wide = signed_wide or unsigned_wide;
         if (!narrow and !wide) {
             return false;
         }
@@ -890,7 +892,8 @@ pub const Core64Methods = struct {
         var sum: u64 = 0;
         var index: usize = 0;
         while (index < lanes) : (index += 1) {
-            sum +%= vectorElement(source, index, bytes);
+            const element = vectorElement(source, index, bytes);
+            sum +%= if (signed_wide) signExtendRuntime(element, @intCast(u6, bytes * 8)) else element;
         }
 
         const result = if (wide)
