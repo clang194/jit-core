@@ -579,6 +579,41 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorFloatMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf00f400) != 0x0f009000) {
+            return false;
+        }
+
+        const double = (word & 0x00800000) != 0;
+        const full = (word & 0x40000000) != 0;
+        const left_index = @intCast(usize, (word >> 22) & 1);
+        const middle_index = @intCast(usize, (word >> 21) & 1);
+        const high = @intCast(usize, (word >> 11) & 1);
+        if (double and left_index != 0) {
+            return error.UnallocatedEncoding;
+        }
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+        const lane_index = if (double) high else (high << 1) | left_index;
+        const element_reg = ((word >> 16) & 0xf) | (middle_index << 4);
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, bytes);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const control = self.state.floatControl();
+        const nan_mode = self.hooks.float_nan_mode;
+        var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < lanes) : (index += 1) {
+            setVectorElement(&result, index, bytes, floatMul(control, nan_mode, double, vectorElement(source, index, bytes), element));
+        }
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorWideningArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed_difference = masked == 0x0e205000 or masked == 0x0e207000;

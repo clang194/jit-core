@@ -483,6 +483,13 @@ pub const Core64Methods = struct {
             if (vector_add) {
                 return;
             }
+            const vector_float_element_multiply = self.runVectorFloatMultiplyByElement(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_float_element_multiply) {
+                return;
+            }
             const vector_multiply_add_element = self.runVectorMultiplyAddByElement(word) catch |err| {
                 try self.raiseFault(err);
                 return;
