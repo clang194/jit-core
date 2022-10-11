@@ -1,5 +1,6 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_estimate = @import("float_estimate.zig");
 const float_fixed = @import("float_fixed.zig");
 const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
@@ -231,6 +232,28 @@ pub const Core64Methods = struct {
         const fractional_bits = (if (double) @as(usize, 128) else @as(usize, 64)) - @as(usize, immediate);
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const result = try fixedScalarFloat(self, double, source, fractional_bits, masked == 0x7f007c00, .zero);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runScalarInverseRootEstimate(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xffbffc00;
+        if (masked != 0x7e21d800 and masked != 0x7ea1d800) {
+            return false;
+        }
+
+        const double = (word & 0x00800000) != 0;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const source = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = if (double) blk: {
+            break :blk float_estimate.inverseRootEstimate64(source, control, &status) catch return error.MissingFallback;
+        } else blk: {
+            break :blk @as(u64, float_estimate.inverseRootEstimate32(@intCast(u32, source), control, &status) catch return error.MissingFallback);
+        };
+        self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
