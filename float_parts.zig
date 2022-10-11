@@ -2,6 +2,7 @@ const bits = @import("bits.zig");
 const float_control = @import("float_control.zig");
 const float_exception = @import("float_exception.zig");
 const float_format = @import("float_format.zig");
+const float_residue = @import("float_residue.zig");
 const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
 
@@ -31,7 +32,7 @@ const NormalizedParts = struct {
     negative: bool,
     exponent: i32,
     significand: u64,
-    lost_bits: u64,
+    residue: float_residue.ShiftResidue,
 };
 
 fn emptyParts(negative: bool) WideFloatParts {
@@ -42,30 +43,23 @@ fn emptyParts(negative: bool) WideFloatParts {
     };
 }
 
-fn shiftRightDouble64(high: u64, low: u64, amount: i32) u64 {
-    return bits.shiftLeft64(high, 64 - amount) | bits.shiftRight64(low, amount);
-}
-
-fn normalizeParts(value: WideFloatParts, comptime fraction_bits: u6) NormalizedParts {
+fn normalizeParts(value: WideFloatParts, comptime fraction_bits: u6, extra_shift: i32) NormalizedParts {
     const highest = @intCast(i32, 63 - @clz(u64, value.significand));
-    const shift = highest - @intCast(i32, fraction_bits);
+    const shift = highest - @intCast(i32, fraction_bits) + extra_shift;
     return NormalizedParts{
         .negative = value.negative,
         .exponent = value.exponent + highest,
         .significand = bits.shiftRight64(value.significand, shift),
-        .lost_bits = shiftRightDouble64(value.significand, 0, shift),
+        .residue = float_residue.classifyRightShiftResidue64(value.significand, shift),
     };
 }
 
-fn shouldRoundUp(mode: float_rounding.RoundingMode, negative: bool, significand: u64, lost_bits: u64) bool {
+fn shouldRoundUp(mode: float_rounding.RoundingMode, negative: bool, significand: u64, residue: float_residue.ShiftResidue) bool {
     return switch (mode) {
-        .nearest => blk: {
-            const half = @as(u64, 1) << 63;
-            break :blk lost_bits > half or (lost_bits == half and (significand & 1) != 0);
-        },
-        .positive => lost_bits != 0 and !negative,
-        .negative => lost_bits != 0 and negative,
-        .nearest_away => lost_bits >= (@as(u64, 1) << 63),
+        .nearest => residue == .above_half or (residue == .half and (significand & 1) != 0),
+        .positive => residue != .zero and !negative,
+        .negative => residue != .zero and negative,
+        .nearest_away => residue == .above_half or residue == .half,
         .zero => false,
     };
 }
@@ -87,7 +81,7 @@ fn roundParts(
         return @intCast(Result, if (value.negative) @as(u64, 1) << (exponent_bits + fraction_bits) else 0);
     }
 
-    var normal = normalizeParts(value, fraction_bits);
+    var normal = normalizeParts(value, fraction_bits, 0);
 
     if (control.fz() and normal.exponent < exponent_min) {
         status.setUnderflow(true);
@@ -101,15 +95,14 @@ fn roundParts(
 
     if (biased_exponent == 0) {
         const shift = exponent_min - normal.exponent;
-        normal.lost_bits = shiftRightDouble64(normal.significand, normal.lost_bits, shift);
-        normal.significand = bits.shiftRight64(normal.significand, shift);
+        normal = normalizeParts(value, fraction_bits, shift);
     }
 
-    if (biased_exponent == 0 and (normal.lost_bits != 0 or control.ufe())) {
+    if (biased_exponent == 0 and (normal.residue != .zero or control.ufe())) {
         try float_exception.processFloatException(.underflow, control, status);
     }
 
-    const increment = shouldRoundUp(mode, normal.negative, normal.significand, normal.lost_bits);
+    const increment = shouldRoundUp(mode, normal.negative, normal.significand, normal.residue);
     const overflow_to_infinity = switch (mode) {
         .nearest => true,
         .positive => !normal.negative,
@@ -145,7 +138,7 @@ fn roundParts(
     result <<= fraction_bits;
     result |= normal.significand & fraction_mask;
 
-    if (normal.lost_bits != 0) {
+    if (normal.residue != .zero) {
         try float_exception.processFloatException(.inexact, control, status);
     }
 
