@@ -171,6 +171,14 @@ pub fn vectorValueBit(value: VectorValue, comptime index: usize) bool {
     return bits.getBit64(value.high, @intCast(u6, index - 64));
 }
 
+pub fn multiplyWide(left: u64, right: u64) VectorValue {
+    const product = @as(u128, left) * @as(u128, right);
+    return VectorValue{
+        .low = @intCast(u64, product),
+        .high = @intCast(u64, product >> 64),
+    };
+}
+
 pub fn vectorValueBefore(left: VectorValue, right: VectorValue) bool {
     return rankVectorValue(left, right) == .before;
 }
