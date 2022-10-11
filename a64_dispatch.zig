@@ -497,6 +497,13 @@ pub const Core64Methods = struct {
             if (vector_float_element_multiply) {
                 return;
             }
+            const scalar_float_element_multiply = self.runScalarFloatMultiplyByElement(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_float_element_multiply) {
+                return;
+            }
             const vector_multiply_add_element = self.runVectorMultiplyAddByElement(word) catch |err| {
                 try self.raiseFault(err);
                 return;

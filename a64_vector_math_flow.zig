@@ -637,6 +637,30 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarFloatMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff00f400) != 0x5f009000) {
+            return false;
+        }
+
+        const double = (word & 0x00800000) != 0;
+        const left_index = @intCast(usize, (word >> 22) & 1);
+        const middle_index = @intCast(usize, (word >> 21) & 1);
+        const high = @intCast(usize, (word >> 11) & 1);
+        if (double and left_index != 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const lane_index = if (double) high else (high << 1) | left_index;
+        const element_reg = ((word >> 16) & 0xf) | (middle_index << 4);
+        const source = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, bytes);
+        const result = floatMul(self.state.floatControl(), self.hooks.float_nan_mode, double, source, element);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorWideningArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed_difference = masked == 0x0e205000 or masked == 0x0e207000;
