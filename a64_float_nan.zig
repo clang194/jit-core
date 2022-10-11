@@ -64,6 +64,50 @@ pub fn processNan64(control: a64_state.FloatControl, value: u64, status: *float_
     return result;
 }
 
+pub fn processTernaryNan32(control: a64_state.FloatControl, first: u32, second: u32, third: u32, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u32 {
+    if (isSignalingNan32(first)) {
+        return try processNan32(control, first, status);
+    }
+    if (isSignalingNan32(second)) {
+        return try processNan32(control, second, status);
+    }
+    if (isSignalingNan32(third)) {
+        return try processNan32(control, third, status);
+    }
+    if (isQuietNan32(first)) {
+        return try processNan32(control, first, status);
+    }
+    if (isQuietNan32(second)) {
+        return try processNan32(control, second, status);
+    }
+    if (isQuietNan32(third)) {
+        return try processNan32(control, third, status);
+    }
+    return null;
+}
+
+pub fn processTernaryNan64(control: a64_state.FloatControl, first: u64, second: u64, third: u64, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u64 {
+    if (isSignalingNan64(first)) {
+        return try processNan64(control, first, status);
+    }
+    if (isSignalingNan64(second)) {
+        return try processNan64(control, second, status);
+    }
+    if (isSignalingNan64(third)) {
+        return try processNan64(control, third, status);
+    }
+    if (isQuietNan64(first)) {
+        return try processNan64(control, first, status);
+    }
+    if (isQuietNan64(second)) {
+        return try processNan64(control, second, status);
+    }
+    if (isQuietNan64(third)) {
+        return try processNan64(control, third, status);
+    }
+    return null;
+}
+
 pub fn chooseBinaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, left: u32, right: u32) ?u32 {
     if (!useAccurateNan(mode) or control.dn()) {
         return null;
