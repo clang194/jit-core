@@ -928,6 +928,54 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorFloatAcrossMinMax(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbfbffc00;
+        const max_number = masked == 0x2e30c800;
+        const max_plain = masked == 0x2e30f800;
+        const min_number = masked == 0x2eb0c800;
+        const min_plain = masked == 0x2eb0f800;
+        if (!max_number and !max_plain and !min_number and !min_plain) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = (word & 0x00400000) != 0;
+        if (!full or double) {
+            return error.ReservedInstruction;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const control = self.state.floatControl();
+        const nan_mode = self.hooks.float_nan_mode;
+        const left = if (max_number)
+            floatMaxNumber(control, nan_mode, false, vectorElement(source, 0, 4), vectorElement(source, 1, 4))
+        else if (max_plain)
+            floatMax(control, nan_mode, false, vectorElement(source, 0, 4), vectorElement(source, 1, 4))
+        else if (min_number)
+            floatMinNumber(control, nan_mode, false, vectorElement(source, 0, 4), vectorElement(source, 1, 4))
+        else
+            floatMin(control, nan_mode, false, vectorElement(source, 0, 4), vectorElement(source, 1, 4));
+        const right = if (max_number)
+            floatMaxNumber(control, nan_mode, false, vectorElement(source, 2, 4), vectorElement(source, 3, 4))
+        else if (max_plain)
+            floatMax(control, nan_mode, false, vectorElement(source, 2, 4), vectorElement(source, 3, 4))
+        else if (min_number)
+            floatMinNumber(control, nan_mode, false, vectorElement(source, 2, 4), vectorElement(source, 3, 4))
+        else
+            floatMin(control, nan_mode, false, vectorElement(source, 2, 4), vectorElement(source, 3, 4));
+        const result = if (max_number)
+            floatMaxNumber(control, nan_mode, false, left, right)
+        else if (max_plain)
+            floatMax(control, nan_mode, false, left, right)
+        else if (min_number)
+            floatMinNumber(control, nan_mode, false, left, right)
+        else
+            floatMin(control, nan_mode, false, left, right);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorAcrossAdd(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf3ffc00;
         const narrow = masked == 0x0e31b800;

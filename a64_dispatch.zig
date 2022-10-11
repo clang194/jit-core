@@ -567,6 +567,13 @@ pub const Core64Methods = struct {
             if (vector_min_max) {
                 return;
             }
+            const vector_float_across_min_max = self.runVectorFloatAcrossMinMax(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_float_across_min_max) {
+                return;
+            }
             const vector_across_add = self.runVectorAcrossAdd(word) catch |err| {
                 try self.raiseFault(err);
                 return;
