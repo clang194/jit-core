@@ -161,6 +161,16 @@ pub fn rankVectorValue(left: VectorValue, right: VectorValue) VectorOrder {
     return .same;
 }
 
+pub fn vectorValueBit(value: VectorValue, comptime index: usize) bool {
+    if (index >= 128) {
+        @compileError("invalid bit index");
+    }
+    if (index < 64) {
+        return bits.getBit64(value.low, @intCast(u6, index));
+    }
+    return bits.getBit64(value.high, @intCast(u6, index - 64));
+}
+
 pub fn vectorValueBefore(left: VectorValue, right: VectorValue) bool {
     return rankVectorValue(left, right) == .before;
 }
