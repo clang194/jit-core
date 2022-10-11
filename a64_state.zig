@@ -139,6 +139,52 @@ pub const VectorValue = struct {
     high: u64,
 };
 
+pub const VectorOrder = enum {
+    before,
+    same,
+    after,
+};
+
+pub fn rankVectorValue(left: VectorValue, right: VectorValue) VectorOrder {
+    if (left.high < right.high) {
+        return .before;
+    }
+    if (left.high > right.high) {
+        return .after;
+    }
+    if (left.low < right.low) {
+        return .before;
+    }
+    if (left.low > right.low) {
+        return .after;
+    }
+    return .same;
+}
+
+pub fn vectorValueBefore(left: VectorValue, right: VectorValue) bool {
+    return rankVectorValue(left, right) == .before;
+}
+
+pub fn vectorValueAfter(left: VectorValue, right: VectorValue) bool {
+    return rankVectorValue(left, right) == .after;
+}
+
+pub fn vectorValueSame(left: VectorValue, right: VectorValue) bool {
+    return rankVectorValue(left, right) == .same;
+}
+
+pub fn vectorValueDifferent(left: VectorValue, right: VectorValue) bool {
+    return !vectorValueSame(left, right);
+}
+
+pub fn vectorValueAtMost(left: VectorValue, right: VectorValue) bool {
+    return rankVectorValue(left, right) != .after;
+}
+
+pub fn vectorValueAtLeast(left: VectorValue, right: VectorValue) bool {
+    return rankVectorValue(left, right) != .before;
+}
+
 pub const MachineState64 = struct {
     regs: [31]u64,
     sp: u64,
