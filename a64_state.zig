@@ -145,6 +145,17 @@ pub const VectorOrder = enum {
     after,
 };
 
+fn wideFromVectorValue(value: VectorValue) u128 {
+    return (@as(u128, value.high) << 64) | @as(u128, value.low);
+}
+
+fn vectorValueFromWide(value: u128) VectorValue {
+    return VectorValue{
+        .low = @truncate(u64, value),
+        .high = @truncate(u64, value >> 64),
+    };
+}
+
 pub fn rankVectorValue(left: VectorValue, right: VectorValue) VectorOrder {
     if (left.high < right.high) {
         return .before;
@@ -174,9 +185,38 @@ pub fn vectorValueBit(value: VectorValue, comptime index: usize) bool {
 pub fn multiplyWide(left: u64, right: u64) VectorValue {
     const product = @as(u128, left) * @as(u128, right);
     return VectorValue{
-        .low = @intCast(u64, product),
-        .high = @intCast(u64, product >> 64),
+        .low = @truncate(u64, product),
+        .high = @truncate(u64, product >> 64),
     };
+}
+
+fn shiftLeftPlainWide(value: VectorValue, amount: i32) VectorValue {
+    if (amount <= 0) {
+        return value;
+    }
+    if (amount >= 128) {
+        return VectorValue{ .low = 0, .high = 0 };
+    }
+    return vectorValueFromWide(wideFromVectorValue(value) << @intCast(u7, amount));
+}
+
+pub fn shiftRightStickyWide(value: VectorValue, amount: i32) VectorValue {
+    if (amount < 0) {
+        return shiftLeftPlainWide(value, -amount);
+    }
+    if (amount == 0) {
+        return value;
+    }
+
+    const wide = wideFromVectorValue(value);
+    if (amount >= 128) {
+        return VectorValue{ .low = if (wide == 0) 0 else 1, .high = 0 };
+    }
+
+    const shift = @intCast(u7, amount);
+    const shifted = wide >> shift;
+    const lost = wide & ((@as(u128, 1) << shift) - 1);
+    return vectorValueFromWide(shifted | if (lost == 0) @as(u128, 0) else @as(u128, 1));
 }
 
 pub fn vectorValueBefore(left: VectorValue, right: VectorValue) bool {
