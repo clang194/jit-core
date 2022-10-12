@@ -62,7 +62,7 @@ fn normalize(value: float_parts.WideFloatParts) float_parts.WideFloatParts {
     };
 }
 
-fn fusedParts(addend_input: float_parts.WideFloatParts, left_input: float_parts.WideFloatParts, right_input: float_parts.WideFloatParts) float_parts.WideFloatParts {
+pub fn fusedParts(addend_input: float_parts.WideFloatParts, left_input: float_parts.WideFloatParts, right_input: float_parts.WideFloatParts) float_parts.WideFloatParts {
     if (left_input.significand == 0 or right_input.significand == 0) {
         return addend_input;
     }

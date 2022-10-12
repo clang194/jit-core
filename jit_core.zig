@@ -13,6 +13,7 @@ pub const float_fixed = @import("float_fixed.zig");
 pub const float_format = @import("float_format.zig");
 pub const float_integer = @import("float_integer.zig");
 pub const float_parts = @import("float_parts.zig");
+pub const float_refine = @import("float_refine.zig");
 pub const float_residue = @import("float_residue.zig");
 pub const float_rounding = @import("float_rounding.zig");
 pub const float_status = @import("float_status.zig");

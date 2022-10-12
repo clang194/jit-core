@@ -26,6 +26,10 @@ pub const Binary32 = struct {
     pub fn defaultNan() u32 {
         return exponent_mask | (@as(u32, 1) << (stored_fraction_bits - 1));
     }
+
+    pub fn oneAndHalf(negative: bool) u32 {
+        return zero(negative) | (@as(u32, 1) << (stored_fraction_bits - 1)) | (exponent_bias << stored_fraction_bits);
+    }
 };
 
 pub const Binary64 = struct {
@@ -55,5 +59,9 @@ pub const Binary64 = struct {
 
     pub fn defaultNan() u64 {
         return exponent_mask | (@as(u64, 1) << (stored_fraction_bits - 1));
+    }
+
+    pub fn oneAndHalf(negative: bool) u64 {
+        return zero(negative) | (@as(u64, 1) << (stored_fraction_bits - 1)) | (exponent_bias << stored_fraction_bits);
     }
 };
