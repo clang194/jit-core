@@ -261,6 +261,39 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorInverseRootEstimate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfbffc00) != 0x2ea1d800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = (word & 0x00400000) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const lanes = (if (full) @as(usize, 16) else @as(usize, 8)) / bytes;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < lanes) : (index += 1) {
+            const value = vectorElement(source, index, bytes);
+            const estimate = if (double)
+                float_estimate.inverseRootEstimate64(value, control, &status) catch return error.MissingFallback
+            else
+                @as(u64, float_estimate.inverseRootEstimate32(@intCast(u32, value), control, &status) catch return error.MissingFallback);
+            setVectorElement(&result, index, bytes, estimate);
+        }
+
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarRootStep(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xffa0fc00) != 0x5ea0fc00) {
             return false;
