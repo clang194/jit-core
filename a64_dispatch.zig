@@ -399,6 +399,13 @@ pub const Core64Methods = struct {
             if (vector_float) {
                 return;
             }
+            const vector_root_step = self.runVectorRootStep(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_root_step) {
+                return;
+            }
             const scalar_float_absolute_difference = self.runScalarFloatAbsoluteDifference(word) catch |err| {
                 try self.raiseFault(err);
                 return;

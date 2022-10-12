@@ -122,6 +122,41 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorRootStep(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfa0fc00) != 0x0ea0fc00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const lanes = (if (full) @as(usize, 16) else @as(usize, 8)) / bytes;
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < lanes) : (index += 1) {
+            const left_value = vectorElement(left, index, bytes);
+            const right_value = vectorElement(right, index, bytes);
+            const refined = if (double)
+                float_refine.rootStep64(left_value, right_value, control, &status) catch return error.MissingFallback
+            else
+                @as(u64, float_refine.rootStep32(@intCast(u32, left_value), @intCast(u32, right_value), control, &status) catch return error.MissingFallback);
+            setVectorElement(&result, index, bytes, refined);
+        }
+
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarFloatAbsoluteDifference(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xffa0fc00) != 0x7ea0d400) {
             return false;
