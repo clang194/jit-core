@@ -498,17 +498,34 @@ pub const Core64Methods = struct {
     pub fn runScalarPairAdd(self: *Core64, word: u32) Core64Error!bool {
         const integer_pair = (word & 0xff20fc00) == 0x5e20bc00;
         const float_pair = (word & 0xffbffc00) == 0x7e30d800;
-        if (!integer_pair and !float_pair) {
+        const masked_float_pair = word & 0xffbffc00;
+        const max_number = masked_float_pair == 0x7e30c800;
+        const max_plain = masked_float_pair == 0x7e30f800;
+        const min_number = masked_float_pair == 0x7eb0c800;
+        const min_plain = masked_float_pair == 0x7eb0f800;
+        const float_min_max = max_number or max_plain or min_number or min_plain;
+        if (!integer_pair and !float_pair and !float_min_max) {
             return false;
         }
 
-        if (float_pair) {
+        if (float_pair or float_min_max) {
             const double = ((word >> 22) & 1) != 0;
             const bytes = if (double) @as(usize, 8) else @as(usize, 4);
             const source = self.state.readVector(vectorRegFromWord(word >> 5));
             const left = vectorElement(source, 0, bytes);
             const right = vectorElement(source, 1, bytes);
-            const result = floatAdd(self.state.floatControl(), self.hooks.float_nan_mode, double, left, right);
+            const control = self.state.floatControl();
+            const nan_mode = self.hooks.float_nan_mode;
+            const result = if (float_pair)
+                floatAdd(control, nan_mode, double, left, right)
+            else if (max_number)
+                floatMaxNumber(control, nan_mode, double, left, right)
+            else if (max_plain)
+                floatMax(control, nan_mode, double, left, right)
+            else if (min_number)
+                floatMinNumber(control, nan_mode, double, left, right)
+            else
+                floatMin(control, nan_mode, double, left, right);
             self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
             self.state.pc +%= 4;
             return true;
