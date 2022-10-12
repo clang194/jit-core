@@ -212,6 +212,12 @@ pub fn shiftRightStickyWide(value: VectorValue, amount: i32) VectorValue {
     if (amount >= 128) {
         return VectorValue{ .low = if (wide == 0) 0 else 1, .high = 0 };
     }
+    if (amount == 64) {
+        return VectorValue{
+            .low = value.high | if (value.low == 0) @as(u64, 0) else @as(u64, 1),
+            .high = 0,
+        };
+    }
 
     const shift = @intCast(u7, amount);
     const shifted = wide >> shift;
