@@ -64,6 +64,38 @@ pub fn processNan64(control: a64_state.FloatControl, value: u64, status: *float_
     return result;
 }
 
+pub fn processPairNan32(control: a64_state.FloatControl, left: u32, right: u32, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u32 {
+    if (isSignalingNan32(left)) {
+        return try processNan32(control, left, status);
+    }
+    if (isSignalingNan32(right)) {
+        return try processNan32(control, right, status);
+    }
+    if (isQuietNan32(left)) {
+        return try processNan32(control, left, status);
+    }
+    if (isQuietNan32(right)) {
+        return try processNan32(control, right, status);
+    }
+    return null;
+}
+
+pub fn processPairNan64(control: a64_state.FloatControl, left: u64, right: u64, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u64 {
+    if (isSignalingNan64(left)) {
+        return try processNan64(control, left, status);
+    }
+    if (isSignalingNan64(right)) {
+        return try processNan64(control, right, status);
+    }
+    if (isQuietNan64(left)) {
+        return try processNan64(control, left, status);
+    }
+    if (isQuietNan64(right)) {
+        return try processNan64(control, right, status);
+    }
+    return null;
+}
+
 pub fn processTernaryNan32(control: a64_state.FloatControl, first: u32, second: u32, third: u32, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u32 {
     if (isSignalingNan32(first)) {
         return try processNan32(control, first, status);
