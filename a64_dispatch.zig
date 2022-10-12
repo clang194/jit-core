@@ -427,6 +427,13 @@ pub const Core64Methods = struct {
             if (scalar_inverse_root_estimate) {
                 return;
             }
+            const scalar_root_step = self.runScalarRootStep(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_root_step) {
+                return;
+            }
             const vector_signed_integer_float = self.runVectorSignedIntegerToFloat(word) catch |err| {
                 try self.raiseFault(err);
                 return;

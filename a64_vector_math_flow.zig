@@ -3,6 +3,7 @@ const bits = @import("bits.zig");
 const float_estimate = @import("float_estimate.zig");
 const float_fixed = @import("float_fixed.zig");
 const float_fused = @import("float_fused.zig");
+const float_refine = @import("float_refine.zig");
 const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
@@ -254,6 +255,27 @@ pub const Core64Methods = struct {
         } else blk: {
             break :blk @as(u64, float_estimate.inverseRootEstimate32(@intCast(u32, source), control, &status) catch return error.MissingFallback);
         };
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runScalarRootStep(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffa0fc00) != 0x5ea0fc00) {
+            return false;
+        }
+
+        const double = ((word >> 22) & 1) != 0;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = if (double)
+            float_refine.rootStep64(left, right, control, &status) catch return error.MissingFallback
+        else
+            @as(u64, float_refine.rootStep32(@intCast(u32, left), @intCast(u32, right), control, &status) catch return error.MissingFallback);
         self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
