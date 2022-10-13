@@ -110,32 +110,15 @@ pub const Core64Methods = struct {
         }
 
         const target_bytes = @as(usize, 1) << size;
-        const source_bytes = target_bytes * 2;
-        const source_bits = @intCast(u6, source_bytes * 8);
-        const target_bits = @intCast(u8, target_bytes * 8);
-        const high = @bitCast(i64, ones(target_bits));
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        var narrowed = a64_state.VectorValue{ .low = 0, .high = 0 };
-        var saturated = false;
-        var index: usize = 0;
-        while (index < 8 / target_bytes) : (index += 1) {
-            const signed = @bitCast(i64, signExtendRuntime(vectorElement(source, index, source_bytes), source_bits));
-            const clamped = if (signed < 0) @as(u64, 0) else if (signed > high) blk: {
-                saturated = true;
-                break :blk @as(u64, @bitCast(u64, high));
-            } else @intCast(u64, signed);
-            if (signed < 0) {
-                saturated = true;
-            }
-            setVectorElement(&narrowed, index, target_bytes, clamped);
-        }
+        const narrowed = signedSaturatingNarrowUnsignedVectorLanes(source, target_bytes, 0, false);
 
-        if (saturated) {
+        if (narrowed.saturated) {
             var status = float_status.FloatStatus.init(self.state.floatStatus());
             status.setSaturated(true);
             self.state.writeFloatStatus(status.raw());
         }
-        const result = if (upper) a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word)).low, .high = narrowed.low } else a64_state.VectorValue{ .low = narrowed.low, .high = 0 };
+        const result = if (upper) a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word)).low, .high = narrowed.value } else a64_state.VectorValue{ .low = narrowed.value, .high = 0 };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;

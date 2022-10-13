@@ -169,3 +169,35 @@ pub fn narrowRoundedShiftRightVectorLanes(value: a64_state.VectorValue, bytes: u
     }
     return result;
 }
+
+pub const NarrowUnsignedResult = struct {
+    value: u64,
+    saturated: bool,
+};
+
+pub fn signedSaturatingNarrowUnsignedVectorLanes(value: a64_state.VectorValue, bytes: usize, amount: u8, rounded: bool) NarrowUnsignedResult {
+    var result = NarrowUnsignedResult{ .value = 0, .saturated = false };
+    const source_bytes = bytes * 2;
+    const source_bits = @intCast(u6, source_bytes * 8);
+    const target_bits = @intCast(u8, bytes * 8);
+    const high = @intCast(i64, ones(target_bits));
+    const round = if (rounded) @as(u64, 1) << @intCast(u6, amount - 1) else 0;
+    var index: usize = 0;
+    while (index < 8 / bytes) : (index += 1) {
+        const raw = vectorElement(value, index, source_bytes);
+        const signed = @bitCast(i64, signExtendRuntime(raw, source_bits));
+        var shifted = signed >> @intCast(u6, amount);
+        if (rounded and (raw & round) != 0) {
+            shifted += 1;
+        }
+        const narrowed = if (shifted < 0) blk: {
+            result.saturated = true;
+            break :blk @as(u64, 0);
+        } else if (shifted > high) blk: {
+            result.saturated = true;
+            break :blk @intCast(u64, high);
+        } else @intCast(u64, shifted);
+        result.value |= narrowed << @intCast(u6, index * bytes * 8);
+    }
+    return result;
+}

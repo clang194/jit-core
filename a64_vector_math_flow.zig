@@ -403,7 +403,7 @@ pub const Core64Methods = struct {
         if (immh == 0) {
             return error.UnallocatedEncoding;
         }
-        if (masked == 0x0f008400 or masked == 0x0f008c00) {
+        if (masked == 0x0f008400 or masked == 0x0f008c00 or masked == 0x2f008400 or masked == 0x2f008c00) {
             if ((immh & 8) != 0) {
                 return error.ReservedInstruction;
             }
@@ -413,10 +413,19 @@ pub const Core64Methods = struct {
             const immediate = @intCast(u8, (word >> 16) & 0x7f);
             const amount = source_lane - immediate;
             const source = self.state.readVector(vectorRegFromWord(word >> 5));
-            const narrowed = if (masked == 0x0f008400)
+            const saturated = masked == 0x2f008400 or masked == 0x2f008c00;
+            const saturated_result = signedSaturatingNarrowUnsignedVectorLanes(source, @intCast(usize, target_lane / 8), amount, masked == 0x2f008c00);
+            const narrowed = if (saturated)
+                saturated_result.value
+            else if (masked == 0x0f008400)
                 narrowShiftRightVectorLanes(source, @intCast(usize, target_lane / 8), amount)
             else
                 narrowRoundedShiftRightVectorLanes(source, @intCast(usize, target_lane / 8), amount);
+            if (saturated and saturated_result.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
             const result = if (full) blk: {
                 var target = self.state.readVector(vectorRegFromWord(word));
                 target.high = narrowed;
