@@ -326,6 +326,13 @@ pub const Core64Methods = struct {
             if (vector_signed_saturating_narrow_signed) {
                 return;
             }
+            const vector_unsigned_saturating_narrow = self.runVectorUnsignedSaturatingNarrow(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_unsigned_saturating_narrow) {
+                return;
+            }
             const vector_count = self.runVectorCount(word) catch |err| {
                 try self.raiseFault(err);
                 return;

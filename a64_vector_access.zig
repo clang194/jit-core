@@ -202,6 +202,23 @@ pub fn signedSaturatingNarrowUnsignedVectorLanes(value: a64_state.VectorValue, b
     return result;
 }
 
+pub fn unsignedSaturatingNarrowVectorLanes(value: a64_state.VectorValue, bytes: usize) NarrowUnsignedResult {
+    var result = NarrowUnsignedResult{ .value = 0, .saturated = false };
+    const source_bytes = bytes * 2;
+    const target_bits = @intCast(u8, bytes * 8);
+    const high = ones(target_bits);
+    var index: usize = 0;
+    while (index < 8 / bytes) : (index += 1) {
+        const raw = vectorElement(value, index, source_bytes);
+        const narrowed = if (raw > high) blk: {
+            result.saturated = true;
+            break :blk high;
+        } else raw;
+        result.value |= narrowed << @intCast(u6, index * bytes * 8);
+    }
+    return result;
+}
+
 pub const NarrowSignedResult = struct {
     value: u64,
     saturated: bool,

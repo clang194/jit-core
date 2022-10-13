@@ -150,6 +150,32 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorUnsignedSaturatingNarrow(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x2e214800) {
+            return false;
+        }
+
+        const upper = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const target_bytes = @as(usize, 1) << size;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const narrowed = unsignedSaturatingNarrowVectorLanes(source, target_bytes);
+
+        if (narrowed.saturated) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
+        }
+        const result = if (upper) a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word)).low, .high = narrowed.value } else a64_state.VectorValue{ .low = narrowed.value, .high = 0 };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorCount(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf3ffc00) != 0x0e205800) {
             return false;
