@@ -1,5 +1,6 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const Core64 = main.Core64;
 const Core64Error = main.Core64Error;
@@ -92,6 +93,49 @@ pub const Core64Methods = struct {
             target.high = narrowed;
             break :blk target;
         } else a64_state.VectorValue{ .low = narrowed, .high = 0 };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runVectorSignedSaturatingNarrowUnsigned(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x2e212800) {
+            return false;
+        }
+
+        const upper = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const target_bytes = @as(usize, 1) << size;
+        const source_bytes = target_bytes * 2;
+        const source_bits = @intCast(u6, source_bytes * 8);
+        const target_bits = @intCast(u8, target_bytes * 8);
+        const high = @bitCast(i64, ones(target_bits));
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        var narrowed = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var saturated = false;
+        var index: usize = 0;
+        while (index < 8 / target_bytes) : (index += 1) {
+            const signed = @bitCast(i64, signExtendRuntime(vectorElement(source, index, source_bytes), source_bits));
+            const clamped = if (signed < 0) @as(u64, 0) else if (signed > high) blk: {
+                saturated = true;
+                break :blk @as(u64, @bitCast(u64, high));
+            } else @intCast(u64, signed);
+            if (signed < 0) {
+                saturated = true;
+            }
+            setVectorElement(&narrowed, index, target_bytes, clamped);
+        }
+
+        if (saturated) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
+        }
+        const result = if (upper) a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word)).low, .high = narrowed.low } else a64_state.VectorValue{ .low = narrowed.low, .high = 0 };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
