@@ -201,3 +201,37 @@ pub fn signedSaturatingNarrowUnsignedVectorLanes(value: a64_state.VectorValue, b
     }
     return result;
 }
+
+pub const NarrowSignedResult = struct {
+    value: u64,
+    saturated: bool,
+};
+
+pub fn signedSaturatingNarrowSignedVectorLanes(value: a64_state.VectorValue, bytes: usize, amount: u8, rounded: bool) NarrowSignedResult {
+    var result = NarrowSignedResult{ .value = 0, .saturated = false };
+    const source_bytes = bytes * 2;
+    const source_bits = @intCast(u6, source_bytes * 8);
+    const target_bits = @intCast(u8, bytes * 8);
+    const mask = ones(target_bits);
+    const low = -(@as(i64, 1) << @intCast(u6, target_bits - 1));
+    const high = (@as(i64, 1) << @intCast(u6, target_bits - 1)) - 1;
+    const round = if (rounded) @as(u64, 1) << @intCast(u6, amount - 1) else 0;
+    var index: usize = 0;
+    while (index < 8 / bytes) : (index += 1) {
+        const raw = vectorElement(value, index, source_bytes);
+        const signed = @bitCast(i64, signExtendRuntime(raw, source_bits));
+        var shifted = signed >> @intCast(u6, amount);
+        if (rounded and (raw & round) != 0) {
+            shifted += 1;
+        }
+        const clamped = if (shifted < low) blk: {
+            result.saturated = true;
+            break :blk low;
+        } else if (shifted > high) blk: {
+            result.saturated = true;
+            break :blk high;
+        } else shifted;
+        result.value |= (@bitCast(u64, clamped) & mask) << @intCast(u6, index * bytes * 8);
+    }
+    return result;
+}
