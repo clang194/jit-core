@@ -163,7 +163,7 @@ pub const Core64Methods = struct {
 
         const target_bytes = @as(usize, 1) << size;
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        const narrowed = unsignedSaturatingNarrowVectorLanes(source, target_bytes);
+        const narrowed = unsignedSaturatingNarrowVectorLanes(source, target_bytes, 0, false);
 
         if (narrowed.saturated) {
             var status = float_status.FloatStatus.init(self.state.floatStatus());

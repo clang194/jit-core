@@ -394,7 +394,7 @@ pub const Core64Methods = struct {
 
     pub fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f009400 and masked != 0x0f009c00 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f00a400) {
+        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f009400 and masked != 0x0f009c00 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f009400 and masked != 0x2f009c00 and masked != 0x2f00a400) {
             return false;
         }
 
@@ -403,7 +403,7 @@ pub const Core64Methods = struct {
         if (immh == 0) {
             return error.UnallocatedEncoding;
         }
-        if (masked == 0x0f008400 or masked == 0x0f008c00 or masked == 0x0f009400 or masked == 0x0f009c00 or masked == 0x2f008400 or masked == 0x2f008c00) {
+        if (masked == 0x0f008400 or masked == 0x0f008c00 or masked == 0x0f009400 or masked == 0x0f009c00 or masked == 0x2f008400 or masked == 0x2f008c00 or masked == 0x2f009400 or masked == 0x2f009c00) {
             if ((immh & 8) != 0) {
                 return error.ReservedInstruction;
             }
@@ -417,6 +417,10 @@ pub const Core64Methods = struct {
             var saturated = false;
             const narrowed = if (masked == 0x2f008400 or masked == 0x2f008c00) blk: {
                 const saturated_result = signedSaturatingNarrowUnsignedVectorLanes(source, target_bytes, amount, masked == 0x2f008c00);
+                saturated = saturated_result.saturated;
+                break :blk saturated_result.value;
+            } else if (masked == 0x2f009400 or masked == 0x2f009c00) blk: {
+                const saturated_result = unsignedSaturatingNarrowVectorLanes(source, target_bytes, amount, masked == 0x2f009c00);
                 saturated = saturated_result.saturated;
                 break :blk saturated_result.value;
             } else if (masked == 0x0f009400 or masked == 0x0f009c00) blk: {
