@@ -1,6 +1,7 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const float_control = @import("float_control.zig");
+const float_estimate = @import("float_estimate.zig");
 const float_exception = @import("float_exception.zig");
 const float_fused = @import("float_fused.zig");
 const float_status = @import("float_status.zig");
@@ -91,6 +92,22 @@ pub fn fusedMultiplyAddFloatVector(control: float_control.Control, status: *floa
         else
             @as(u64, try float_fused.mulAdd32(@intCast(u32, vectorElement(addend, index, bytes)), @intCast(u32, vectorElement(left, index, bytes)), @intCast(u32, vectorElement(right, index, bytes)), control, status));
         setVectorElement(&result, index, bytes, value);
+    }
+    return result;
+}
+
+pub fn reciprocalEstimateFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const value = vectorElement(source, index, bytes);
+        const estimate = if (double)
+            try float_estimate.reciprocalEstimate64(value, control, status)
+        else
+            @as(u64, try float_estimate.reciprocalEstimate32(@intCast(u32, value), control, status));
+        setVectorElement(&result, index, bytes, estimate);
     }
     return result;
 }
