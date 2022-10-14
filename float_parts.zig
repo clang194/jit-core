@@ -7,6 +7,7 @@ const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
 
 const infinity_exponent_marker: i32 = 1000000;
+pub const normalized_point: i32 = 62;
 
 pub const FloatKind = enum {
     finite,
@@ -43,12 +44,26 @@ fn emptyParts(negative: bool) WideFloatParts {
     };
 }
 
+pub fn scaledParts(negative: bool, exponent: i32, significand: u64) WideFloatParts {
+    if (significand == 0) {
+        return emptyParts(negative);
+    }
+
+    const highest = @intCast(i32, 63 - @clz(u64, significand));
+    const offset = normalized_point - highest;
+    return WideFloatParts{
+        .negative = negative,
+        .exponent = exponent - offset + normalized_point,
+        .significand = significand << @intCast(u6, offset),
+    };
+}
+
 fn normalizeParts(value: WideFloatParts, comptime fraction_bits: u6, extra_shift: i32) NormalizedParts {
     const highest = @intCast(i32, 63 - @clz(u64, value.significand));
     const shift = highest - @intCast(i32, fraction_bits) + extra_shift;
     return NormalizedParts{
         .negative = value.negative,
-        .exponent = value.exponent + highest,
+        .exponent = value.exponent + highest - normalized_point,
         .significand = bits.shiftRight64(value.significand, shift),
         .residue = float_residue.classifyRightShiftResidue64(value.significand, shift),
     };
@@ -165,11 +180,7 @@ pub fn splitFloat32(value: u32, control: float_control.Control, status: *float_s
         return FloatAnalysis{
             .kind = .finite,
             .negative = negative,
-            .parts = WideFloatParts{
-                .negative = negative,
-                .exponent = float_format.Binary32.exponent_min - @intCast(i32, float_format.Binary32.stored_fraction_bits),
-                .significand = fraction,
-            },
+            .parts = scaledParts(negative, float_format.Binary32.exponent_min - @intCast(i32, float_format.Binary32.stored_fraction_bits), fraction),
         };
     }
 
@@ -178,11 +189,7 @@ pub fn splitFloat32(value: u32, control: float_control.Control, status: *float_s
             return FloatAnalysis{
                 .kind = .infinity,
                 .negative = negative,
-                .parts = WideFloatParts{
-                    .negative = negative,
-                    .exponent = infinity_exponent_marker,
-                    .significand = 1,
-                },
+                .parts = scaledParts(negative, infinity_exponent_marker, 1),
             };
         }
 
@@ -196,11 +203,7 @@ pub fn splitFloat32(value: u32, control: float_control.Control, status: *float_s
     return FloatAnalysis{
         .kind = .finite,
         .negative = negative,
-        .parts = WideFloatParts{
-            .negative = negative,
-            .exponent = @intCast(i32, exponent_raw) - @intCast(i32, float_format.Binary32.exponent_bias) - @intCast(i32, float_format.Binary32.stored_fraction_bits),
-            .significand = fraction | float_format.Binary32.hidden_bit,
-        },
+        .parts = scaledParts(negative, @intCast(i32, exponent_raw) - @intCast(i32, float_format.Binary32.exponent_bias) - @intCast(i32, float_format.Binary32.stored_fraction_bits), fraction | float_format.Binary32.hidden_bit),
     };
 }
 
@@ -224,11 +227,7 @@ pub fn splitFloat64(value: u64, control: float_control.Control, status: *float_s
         return FloatAnalysis{
             .kind = .finite,
             .negative = negative,
-            .parts = WideFloatParts{
-                .negative = negative,
-                .exponent = float_format.Binary64.exponent_min - @intCast(i32, float_format.Binary64.stored_fraction_bits),
-                .significand = fraction,
-            },
+            .parts = scaledParts(negative, float_format.Binary64.exponent_min - @intCast(i32, float_format.Binary64.stored_fraction_bits), fraction),
         };
     }
 
@@ -237,11 +236,7 @@ pub fn splitFloat64(value: u64, control: float_control.Control, status: *float_s
             return FloatAnalysis{
                 .kind = .infinity,
                 .negative = negative,
-                .parts = WideFloatParts{
-                    .negative = negative,
-                    .exponent = infinity_exponent_marker,
-                    .significand = 1,
-                },
+                .parts = scaledParts(negative, infinity_exponent_marker, 1),
             };
         }
 
@@ -255,11 +250,7 @@ pub fn splitFloat64(value: u64, control: float_control.Control, status: *float_s
     return FloatAnalysis{
         .kind = .finite,
         .negative = negative,
-        .parts = WideFloatParts{
-            .negative = negative,
-            .exponent = @intCast(i32, exponent_raw) - @intCast(i32, float_format.Binary64.exponent_bias) - @intCast(i32, float_format.Binary64.stored_fraction_bits),
-            .significand = fraction | float_format.Binary64.hidden_bit,
-        },
+        .parts = scaledParts(negative, @intCast(i32, exponent_raw) - @intCast(i32, float_format.Binary64.exponent_bias) - @intCast(i32, float_format.Binary64.stored_fraction_bits), fraction | float_format.Binary64.hidden_bit),
     };
 }
 

@@ -63,12 +63,12 @@ fn fixedFromParts(
         return 0;
     }
 
-    var parts = analysis.parts;
-    parts.exponent += @intCast(i32, fractional_bits);
+    const parts = analysis.parts;
+    const exponent = parts.exponent + @intCast(i32, fractional_bits) - float_parts.normalized_point;
 
     const signed_magnitude = if (analysis.negative) bits.negate64(parts.significand) else parts.significand;
-    const residue = float_residue.classifyRightShiftResidue64(signed_magnitude, -parts.exponent);
-    var shifted = scaledShift(signed_magnitude, parts.exponent);
+    const residue = float_residue.classifyRightShiftResidue64(signed_magnitude, -exponent);
+    var shifted = scaledShift(signed_magnitude, exponent);
     const raise = shouldRaise(mode, residue, shifted);
 
     if (raise) {
@@ -77,14 +77,14 @@ fn fixedFromParts(
 
     const rounded_significand = parts.significand +% if (raise) @as(u64, 1) else @as(u64, 0);
     const min_exponent = @intCast(i32, integer_bits) - highIndex(rounded_significand) - if (unsigned_result) @as(i32, 0) else @as(i32, 1);
-    if (parts.exponent >= min_exponent) {
+    if (exponent >= min_exponent) {
         if (unsigned_result or !analysis.negative) {
             try float_exception.processFloatException(.invalid_operation, control, status);
             return maskForWidth(integer_bits - if (unsigned_result) @as(usize, 0) else @as(usize, 1));
         }
 
         const lowest = bits.negate64(signLimit(integer_bits));
-        if (!(parts.exponent == min_exponent and shifted == lowest)) {
+        if (!(exponent == min_exponent and shifted == lowest)) {
             try float_exception.processFloatException(.invalid_operation, control, status);
             return signLimit(integer_bits);
         }

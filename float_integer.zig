@@ -48,13 +48,14 @@ fn roundParts32(
         .finite => {},
     }
 
-    if (analysis.parts.exponent >= 0) {
+    const exponent = analysis.parts.exponent - float_parts.normalized_point;
+    if (exponent >= 0) {
         return value;
     }
 
     var integer = signedMagnitude(analysis.negative, analysis.parts.significand);
-    const residue = float_residue.classifyRightShiftResidue64(integer, -analysis.parts.exponent);
-    integer = moveInteger(integer, analysis.parts.exponent);
+    const residue = float_residue.classifyRightShiftResidue64(integer, -exponent);
+    integer = moveInteger(integer, exponent);
 
     if (shouldIncrease(mode, residue, integer)) {
         integer +%= 1;
@@ -66,7 +67,7 @@ fn roundParts32(
         try float_parts.roundFloat32Parts(
             float_parts.WideFloatParts{
                 .negative = bits.topBit64(integer),
-                .exponent = 0,
+                .exponent = float_parts.normalized_point,
                 .significand = unsignedMagnitude(integer),
             },
             control,
@@ -96,13 +97,14 @@ fn roundParts64(
         .finite => {},
     }
 
-    if (analysis.parts.exponent >= 0) {
+    const exponent = analysis.parts.exponent - float_parts.normalized_point;
+    if (exponent >= 0) {
         return value;
     }
 
     var integer = signedMagnitude(analysis.negative, analysis.parts.significand);
-    const residue = float_residue.classifyRightShiftResidue64(integer, -analysis.parts.exponent);
-    integer = moveInteger(integer, analysis.parts.exponent);
+    const residue = float_residue.classifyRightShiftResidue64(integer, -exponent);
+    integer = moveInteger(integer, exponent);
 
     if (shouldIncrease(mode, residue, integer)) {
         integer +%= 1;
@@ -114,7 +116,7 @@ fn roundParts64(
         try float_parts.roundFloat64Parts(
             float_parts.WideFloatParts{
                 .negative = bits.topBit64(integer),
-                .exponent = 0,
+                .exponent = float_parts.normalized_point,
                 .significand = unsignedMagnitude(integer),
             },
             control,

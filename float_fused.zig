@@ -5,7 +5,7 @@ const float_format = @import("float_format.zig");
 const float_parts = @import("float_parts.zig");
 const float_status = @import("float_status.zig");
 
-const target_point: i32 = 62;
+const target_point: i32 = float_parts.normalized_point;
 
 fn highBit64(value: u64) i32 {
     return @intCast(i32, 63 - @clz(u64, value));
@@ -16,6 +16,14 @@ fn bit128(value: u128, comptime index: usize) bool {
         @compileError("invalid bit index");
     }
     return ((value >> @intCast(u7, index)) & 1) != 0;
+}
+
+fn highBit128(value: u128) i32 {
+    const upper = @truncate(u64, value >> 64);
+    if (upper != 0) {
+        return 64 + highBit64(upper);
+    }
+    return highBit64(@truncate(u64, value));
 }
 
 fn stickyRight(value: u128, amount: i32) u128 {
@@ -48,17 +56,8 @@ fn packWide(sign: bool, exponent: i32, value: u128) float_parts.WideFloatParts {
     const lower = @truncate(u64, value);
     return float_parts.WideFloatParts{
         .negative = sign,
-        .exponent = exponent + 64,
+        .exponent = exponent + 2,
         .significand = @truncate(u64, value >> 64) | if (lower == 0) @as(u64, 0) else @as(u64, 1),
-    };
-}
-
-fn normalize(value: float_parts.WideFloatParts) float_parts.WideFloatParts {
-    const offset = target_point - highBit64(value.significand);
-    return float_parts.WideFloatParts{
-        .negative = value.negative,
-        .exponent = value.exponent - offset,
-        .significand = value.significand << @intCast(u6, offset),
     };
 }
 
@@ -67,11 +66,9 @@ pub fn fusedParts(addend_input: float_parts.WideFloatParts, left_input: float_pa
         return addend_input;
     }
 
-    const left = normalize(left_input);
-    const right = normalize(right_input);
-    const product_negative = left.negative != right.negative;
-    var product_exponent = left.exponent + right.exponent;
-    var product = @as(u128, left.significand) * @as(u128, right.significand);
+    const product_negative = left_input.negative != right_input.negative;
+    var product_exponent = left_input.exponent + right_input.exponent;
+    var product = @as(u128, left_input.significand) * @as(u128, right_input.significand);
 
     if (bit128(product, 125)) {
         product >>= 1;
@@ -85,21 +82,20 @@ pub fn fusedParts(addend_input: float_parts.WideFloatParts, left_input: float_pa
         return packWide(product_negative, product_exponent, product);
     }
 
-    const addend = normalize(addend_input);
-    const exponent_gap = product_exponent - (addend.exponent - target_point);
-    if (product_negative == addend.negative) {
+    const exponent_gap = product_exponent - addend_input.exponent;
+    if (product_negative == addend_input.negative) {
         if (exponent_gap <= 0) {
             return float_parts.WideFloatParts{
-                .negative = addend.negative,
-                .exponent = addend.exponent,
-                .significand = addend.significand + @truncate(u64, stickyRight(product, target_point - exponent_gap)),
+                .negative = addend_input.negative,
+                .exponent = addend_input.exponent,
+                .significand = addend_input.significand + @truncate(u64, stickyRight(product, target_point - exponent_gap)),
             };
         }
-        const result = product + stickyRight(@as(u128, addend.significand), exponent_gap - target_point);
+        const result = product + stickyRight(@as(u128, addend_input.significand), exponent_gap - target_point);
         return packWide(product_negative, product_exponent, result);
     }
 
-    const addend_wide = @as(u128, addend.significand) << @intCast(u7, target_point);
+    const addend_wide = @as(u128, addend_input.significand) << @intCast(u7, target_point);
     var result_negative: bool = undefined;
     var result_exponent: i32 = undefined;
     var result: u128 = undefined;
@@ -110,7 +106,7 @@ pub fn fusedParts(addend_input: float_parts.WideFloatParts, left_input: float_pa
         result = product - addend_wide;
     } else if (exponent_gap <= 0) {
         result_negative = !product_negative;
-        result_exponent = addend.exponent - target_point;
+        result_exponent = addend_input.exponent;
         result = addend_wide - stickyRight(product, -exponent_gap);
     } else {
         result_negative = product_negative;
@@ -118,16 +114,11 @@ pub fn fusedParts(addend_input: float_parts.WideFloatParts, left_input: float_pa
         result = product - stickyRight(addend_wide, exponent_gap);
     }
 
-    const upper = @truncate(u64, result >> 64);
-    if (upper == 0) {
-        return float_parts.WideFloatParts{
-            .negative = result_negative,
-            .exponent = result_exponent,
-            .significand = @truncate(u64, result),
-        };
+    if (result == 0) {
+        return float_parts.WideFloatParts{ .negative = result_negative, .exponent = 0, .significand = 0 };
     }
 
-    const needed = target_point - highBit64(upper);
+    const needed = target_point + 64 - highBit128(result);
     result = shiftLeft(result, needed);
     return packWide(result_negative, result_exponent - needed, result);
 }

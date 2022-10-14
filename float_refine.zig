@@ -6,11 +6,7 @@ const float_fused = @import("float_fused.zig");
 const float_parts = @import("float_parts.zig");
 const float_status = @import("float_status.zig");
 
-const three_parts = float_parts.WideFloatParts{
-    .negative = false,
-    .exponent = 0,
-    .significand = 3,
-};
+const three_parts = float_parts.scaledParts(false, 0, 3);
 
 pub fn rootStep32(left: u32, right: u32, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
     const adjusted_left = left ^ float_format.Binary32.sign_mask;

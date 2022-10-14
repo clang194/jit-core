@@ -21,11 +21,9 @@ fn estimateByte(value: u64) u8 {
 }
 
 fn estimateBits(value: float_parts.WideFloatParts, comptime Result: type, comptime fraction_bits: u6, comptime bias: u64, comptime mask: u64) Result {
-    const highest = @intCast(i32, 63 - @clz(u64, value.significand));
-    const combined = value.exponent + highest;
-    const exponent = (-(combined + 1)) >> 1;
-    const even = (combined & 1) == 0;
-    const scaled = bits.shiftRight64(value.significand, highest - if (even) @as(i32, 7) else @as(i32, 8));
+    const exponent = (-(value.exponent + 1)) >> 1;
+    const even = (value.exponent & 1) == 0;
+    const scaled = bits.shiftRight64(value.significand, float_parts.normalized_point - if (even) @as(i32, 7) else @as(i32, 8));
     const estimate = @as(u64, estimateByte(scaled));
     const stored_exponent = @intCast(u64, exponent + @intCast(i32, bias));
     const stored_mantissa = estimate << (fraction_bits - 8);
