@@ -58,14 +58,14 @@ fn reciprocalBits32(analysis: float_parts.FloatAnalysis, control: float_control.
     }
 
     var estimate = @as(u32, reciprocalByte(bits.shiftRight64(analysis.parts.significand, float_parts.normalized_point - 8))) << @intCast(u5, float_format.Binary32.stored_fraction_bits - 8);
-    var result_exponent = -analysis.parts.exponent;
+    var result_exponent = -(analysis.parts.exponent + 1);
     if (result_exponent == float_format.Binary32.exponent_min - 1) {
         estimate |= float_format.Binary32.hidden_bit;
         estimate >>= 1;
     } else if (result_exponent == float_format.Binary32.exponent_min - 2) {
         estimate |= float_format.Binary32.hidden_bit;
         estimate >>= 2;
-        result_exponent = 0;
+        result_exponent += 1;
     }
 
     const stored_exponent = @intCast(u32, result_exponent + @intCast(i32, float_format.Binary32.exponent_bias));
@@ -84,14 +84,14 @@ fn reciprocalBits64(analysis: float_parts.FloatAnalysis, control: float_control.
     }
 
     var estimate = @as(u64, reciprocalByte(bits.shiftRight64(analysis.parts.significand, float_parts.normalized_point - 8))) << @intCast(u6, float_format.Binary64.stored_fraction_bits - 8);
-    var result_exponent = -analysis.parts.exponent;
+    var result_exponent = -(analysis.parts.exponent + 1);
     if (result_exponent == float_format.Binary64.exponent_min - 1) {
         estimate |= float_format.Binary64.hidden_bit;
         estimate >>= 1;
     } else if (result_exponent == float_format.Binary64.exponent_min - 2) {
         estimate |= float_format.Binary64.hidden_bit;
         estimate >>= 2;
-        result_exponent = 0;
+        result_exponent += 1;
     }
 
     const stored_exponent = @intCast(u64, result_exponent + @intCast(i32, float_format.Binary64.exponent_bias));
