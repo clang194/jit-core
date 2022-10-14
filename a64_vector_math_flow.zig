@@ -756,7 +756,11 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorFloatMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf00f400) != 0x0f009000) {
+        const masked = word & 0xbf00f400;
+        const multiply_only = masked == 0x0f009000;
+        const accumulate = masked == 0x0f001000;
+        const subtract = masked == 0x0f005000;
+        if (!multiply_only and !accumulate and !subtract) {
             return false;
         }
 
@@ -780,10 +784,28 @@ pub const Core64Methods = struct {
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const control = self.state.floatControl();
         const nan_mode = self.hooks.float_nan_mode;
+        const prior = self.state.readVector(vectorRegFromWord(word));
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
-        var index: usize = 0;
-        while (index < lanes) : (index += 1) {
-            setVectorElement(&result, index, bytes, floatMul(control, nan_mode, double, vectorElement(source, index, bytes), element));
+        if (multiply_only) {
+            var index: usize = 0;
+            while (index < lanes) : (index += 1) {
+                setVectorElement(&result, index, bytes, floatMul(control, nan_mode, double, vectorElement(source, index, bytes), element));
+            }
+        } else {
+            const fused_control = effectiveFloatControl(control, nan_mode);
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            var index: usize = 0;
+            while (index < lanes) : (index += 1) {
+                const addend = vectorElement(prior, index, bytes);
+                const left = vectorElement(source, index, bytes);
+                const adjusted_left = if (subtract) negateFloat(double, left) else left;
+                const value = if (double)
+                    float_fused.mulAdd64(addend, adjusted_left, element, fused_control, &status) catch return error.MissingFallback
+                else
+                    @as(u64, float_fused.mulAdd32(@intCast(u32, addend), @intCast(u32, adjusted_left), @intCast(u32, element), fused_control, &status) catch return error.MissingFallback);
+                setVectorElement(&result, index, bytes, value);
+            }
+            self.state.writeFloatStatus(status.raw());
         }
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
