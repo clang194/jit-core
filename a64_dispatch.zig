@@ -455,6 +455,13 @@ pub const Core64Methods = struct {
             if (scalar_float_compare) {
                 return;
             }
+            const vector_reciprocal_estimate = self.runVectorReciprocalEstimate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_reciprocal_estimate) {
+                return;
+            }
             const vector_inverse_root_estimate = self.runVectorInverseRootEstimate(word) catch |err| {
                 try self.raiseFault(err);
                 return;

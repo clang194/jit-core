@@ -377,6 +377,27 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorReciprocalEstimate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfbffc00) != 0x2e21d800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = (word & 0x00400000) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = reciprocalEstimateFloatVector(control, &status, double, full, source) catch return error.MissingFallback;
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarRootStep(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xffa0fc00) != 0x5ea0fc00) {
             return false;
