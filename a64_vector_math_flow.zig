@@ -122,6 +122,29 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorFloatMulAdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfa0fc00) != 0x0e20cc00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const addend = self.state.readVector(vectorRegFromWord(word));
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const control = effectiveFloatControl(self.state.floatControl(), self.hooks.float_nan_mode);
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = fusedMultiplyAddFloatVector(control, &status, double, full, addend, left, right) catch return error.MissingFallback;
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorRootStep(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbfa0fc00) != 0x0ea0fc00) {
             return false;
