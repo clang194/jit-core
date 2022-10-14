@@ -4,6 +4,7 @@ const float_control = @import("float_control.zig");
 const float_estimate = @import("float_estimate.zig");
 const float_exception = @import("float_exception.zig");
 const float_fused = @import("float_fused.zig");
+const float_refine = @import("float_refine.zig");
 const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
@@ -108,6 +109,23 @@ pub fn reciprocalEstimateFloatVector(control: float_control.Control, status: *fl
         else
             @as(u64, try float_estimate.reciprocalEstimate32(@intCast(u32, value), control, status));
         setVectorElement(&result, index, bytes, estimate);
+    }
+    return result;
+}
+
+pub fn reciprocalStepFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const left_value = vectorElement(left, index, bytes);
+        const right_value = vectorElement(right, index, bytes);
+        const step = if (double)
+            try float_refine.reciprocalStep64(left_value, right_value, control, status)
+        else
+            @as(u64, try float_refine.reciprocalStep32(@intCast(u32, left_value), @intCast(u32, right_value), control, status));
+        setVectorElement(&result, index, bytes, step);
     }
     return result;
 }

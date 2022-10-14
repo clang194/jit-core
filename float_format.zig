@@ -30,6 +30,10 @@ pub const Binary32 = struct {
     pub fn oneAndHalf(negative: bool) u32 {
         return zero(negative) | (@as(u32, 1) << (stored_fraction_bits - 1)) | (exponent_bias << stored_fraction_bits);
     }
+
+    pub fn two(negative: bool) u32 {
+        return zero(negative) | ((exponent_bias + 1) << stored_fraction_bits);
+    }
 };
 
 pub const Binary64 = struct {
@@ -63,5 +67,9 @@ pub const Binary64 = struct {
 
     pub fn oneAndHalf(negative: bool) u64 {
         return zero(negative) | (@as(u64, 1) << (stored_fraction_bits - 1)) | (exponent_bias << stored_fraction_bits);
+    }
+
+    pub fn two(negative: bool) u64 {
+        return zero(negative) | ((exponent_bias + 1) << stored_fraction_bits);
     }
 };
