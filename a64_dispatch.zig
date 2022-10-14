@@ -462,6 +462,13 @@ pub const Core64Methods = struct {
             if (vector_inverse_root_estimate) {
                 return;
             }
+            const scalar_reciprocal_estimate = self.runScalarReciprocalEstimate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_reciprocal_estimate) {
+                return;
+            }
             const scalar_inverse_root_estimate = self.runScalarInverseRootEstimate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
