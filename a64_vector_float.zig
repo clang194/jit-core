@@ -1,4 +1,5 @@
 const a64_state = @import("a64_state.zig");
+const a64_float_minmax = @import("a64_float_minmax.zig");
 const bits = @import("bits.zig");
 const float_control = @import("float_control.zig");
 const float_estimate = @import("float_estimate.zig");
@@ -126,6 +127,28 @@ pub fn reciprocalStepFloatVector(control: float_control.Control, status: *float_
         else
             @as(u64, try float_refine.reciprocalStep32(@intCast(u32, left_value), @intCast(u32, right_value), control, status));
         setVectorElement(&result, index, bytes, step);
+    }
+    return result;
+}
+
+pub fn maximumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, a64_float_minmax.floatMax(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+    }
+    return result;
+}
+
+pub fn minimumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, a64_float_minmax.floatMin(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
     }
     return result;
 }
