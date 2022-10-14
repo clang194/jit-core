@@ -123,7 +123,9 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorFloatMulAdd(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfa0fc00) != 0x0e20cc00) {
+        const masked = word & 0xbfa0fc00;
+        const subtracting = masked == 0x0ea0cc00;
+        if (masked != 0x0e20cc00 and !subtracting) {
             return false;
         }
 
@@ -136,9 +138,10 @@ pub const Core64Methods = struct {
         const addend = self.state.readVector(vectorRegFromWord(word));
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const adjusted_left = if (subtracting) negateFloatVector(double, full, left) else left;
         const control = effectiveFloatControl(self.state.floatControl(), self.hooks.float_nan_mode);
         var status = float_status.FloatStatus.init(self.state.floatStatus());
-        const result = fusedMultiplyAddFloatVector(control, &status, double, full, addend, left, right) catch return error.MissingFallback;
+        const result = fusedMultiplyAddFloatVector(control, &status, double, full, addend, adjusted_left, right) catch return error.MissingFallback;
         self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
