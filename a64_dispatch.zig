@@ -434,6 +434,13 @@ pub const Core64Methods = struct {
             if (vector_root_step) {
                 return;
             }
+            const vector_reciprocal_step = self.runVectorReciprocalStep(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_reciprocal_step) {
+                return;
+            }
             const scalar_float_absolute_difference = self.runScalarFloatAbsoluteDifference(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -481,6 +488,13 @@ pub const Core64Methods = struct {
                 return;
             };
             if (scalar_inverse_root_estimate) {
+                return;
+            }
+            const scalar_reciprocal_step = self.runScalarReciprocalStep(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_reciprocal_step) {
                 return;
             }
             const scalar_root_step = self.runScalarRootStep(word) catch |err| {

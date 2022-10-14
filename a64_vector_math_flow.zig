@@ -183,6 +183,28 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorReciprocalStep(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfa0fc00) != 0x0e20fc00) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = reciprocalStepFloatVector(control, &status, double, full, left, right) catch return error.MissingFallback;
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarFloatAbsoluteDifference(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xffa0fc00) != 0x7ea0d400) {
             return false;
@@ -338,6 +360,27 @@ pub const Core64Methods = struct {
         } else blk: {
             break :blk @as(u64, float_estimate.reciprocalEstimate32(@intCast(u32, source), control, &status) catch return error.MissingFallback);
         };
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runScalarReciprocalStep(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffa0fc00) != 0x5e20fc00) {
+            return false;
+        }
+
+        const double = ((word >> 22) & 1) != 0;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = if (double)
+            float_refine.reciprocalStep64(left, right, control, &status) catch return error.MissingFallback
+        else
+            @as(u64, float_refine.reciprocalStep32(@intCast(u32, left), @intCast(u32, right), control, &status) catch return error.MissingFallback);
         self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
