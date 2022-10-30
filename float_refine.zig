@@ -24,7 +24,7 @@ pub fn rootStep32(left: u32, right: u32, control: float_control.Control, status:
     const left_zero = left_analysis.kind == .zero;
     const right_zero = right_analysis.kind == .zero;
     if ((left_infinity and right_zero) or (left_zero and right_infinity)) {
-        return float_format.Binary32.oneAndHalf(false);
+        return float_format.Binary32.finite(false, -1, 3);
     }
     if (left_infinity or right_infinity) {
         return float_format.Binary32.infinity(left_analysis.negative != right_analysis.negative);
@@ -53,7 +53,7 @@ pub fn rootStep64(left: u64, right: u64, control: float_control.Control, status:
     const left_zero = left_analysis.kind == .zero;
     const right_zero = right_analysis.kind == .zero;
     if ((left_infinity and right_zero) or (left_zero and right_infinity)) {
-        return float_format.Binary64.oneAndHalf(false);
+        return float_format.Binary64.finite(false, -1, 3);
     }
     if (left_infinity or right_infinity) {
         return float_format.Binary64.infinity(left_analysis.negative != right_analysis.negative);
@@ -82,7 +82,7 @@ pub fn reciprocalStep32(left: u32, right: u32, control: float_control.Control, s
     const left_zero = left_analysis.kind == .zero;
     const right_zero = right_analysis.kind == .zero;
     if ((left_infinity and right_zero) or (left_zero and right_infinity)) {
-        return float_format.Binary32.two(false);
+        return float_format.Binary32.finite(false, 0, 2);
     }
     if (left_infinity or right_infinity) {
         return float_format.Binary32.infinity(left_analysis.negative != right_analysis.negative);
@@ -110,7 +110,7 @@ pub fn reciprocalStep64(left: u64, right: u64, control: float_control.Control, s
     const left_zero = left_analysis.kind == .zero;
     const right_zero = right_analysis.kind == .zero;
     if ((left_infinity and right_zero) or (left_zero and right_infinity)) {
-        return float_format.Binary64.two(false);
+        return float_format.Binary64.finite(false, 0, 2);
     }
     if (left_infinity or right_infinity) {
         return float_format.Binary64.infinity(left_analysis.negative != right_analysis.negative);

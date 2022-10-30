@@ -27,12 +27,21 @@ pub const Binary32 = struct {
         return exponent_mask | (@as(u32, 1) << (stored_fraction_bits - 1));
     }
 
-    pub fn oneAndHalf(negative: bool) u32 {
-        return zero(negative) | (@as(u32, 1) << (stored_fraction_bits - 1)) | (exponent_bias << stored_fraction_bits);
-    }
+    pub fn finite(comptime negative: bool, comptime exponent: i32, comptime significand: u32) u32 {
+        if (significand == 0) {
+            return zero(negative);
+        }
 
-    pub fn two(negative: bool) u32 {
-        return zero(negative) | ((exponent_bias + 1) << stored_fraction_bits);
+        const highest = @intCast(i32, 31 - @clz(u32, significand));
+        const offset = @intCast(i32, stored_fraction_bits) - highest;
+        const normalized_exponent = exponent - offset + @intCast(i32, stored_fraction_bits);
+        if (offset < 0 or normalized_exponent < exponent_min or normalized_exponent > exponent_max) {
+            @compileError("invalid finite value");
+        }
+
+        const fraction = (significand << @intCast(u5, offset)) & fraction_mask;
+        const biased_exponent = @intCast(u32, normalized_exponent + @intCast(i32, exponent_bias));
+        return zero(negative) | fraction | (biased_exponent << stored_fraction_bits);
     }
 };
 
@@ -65,11 +74,20 @@ pub const Binary64 = struct {
         return exponent_mask | (@as(u64, 1) << (stored_fraction_bits - 1));
     }
 
-    pub fn oneAndHalf(negative: bool) u64 {
-        return zero(negative) | (@as(u64, 1) << (stored_fraction_bits - 1)) | (exponent_bias << stored_fraction_bits);
-    }
+    pub fn finite(comptime negative: bool, comptime exponent: i32, comptime significand: u64) u64 {
+        if (significand == 0) {
+            return zero(negative);
+        }
 
-    pub fn two(negative: bool) u64 {
-        return zero(negative) | ((exponent_bias + 1) << stored_fraction_bits);
+        const highest = @intCast(i32, 63 - @clz(u64, significand));
+        const offset = @intCast(i32, stored_fraction_bits) - highest;
+        const normalized_exponent = exponent - offset + @intCast(i32, stored_fraction_bits);
+        if (offset < 0 or normalized_exponent < exponent_min or normalized_exponent > exponent_max) {
+            @compileError("invalid finite value");
+        }
+
+        const fraction = (significand << @intCast(u6, offset)) & fraction_mask;
+        const biased_exponent = @intCast(u64, normalized_exponent + @intCast(i32, exponent_bias));
+        return zero(negative) | fraction | (biased_exponent << stored_fraction_bits);
     }
 };
