@@ -812,12 +812,15 @@ pub const Core64Methods = struct {
 
     pub fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
-        if (masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400) {
+        if (masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400 and masked != 0x2e209c00) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const size = @intCast(u2, (word >> 22) & 3);
+        if (masked == 0x2e209c00 and size != 0) {
+            return error.ReservedInstruction;
+        }
         if (size == 3 and (masked == 0x0e200400 or masked == 0x0e201400 or masked == 0x0e202400 or masked == 0x0e209400 or masked == 0x0e209c00 or masked == 0x2e200400 or masked == 0x2e201400 or masked == 0x2e202400 or masked == 0x2e209400 or !full)) {
             return error.ReservedInstruction;
         }
@@ -825,7 +828,9 @@ pub const Core64Methods = struct {
         const lane = @as(u8, 8) << @intCast(u3, size);
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
-        const result = if (masked == 0x0e209400 or masked == 0x2e209400) blk: {
+        const result = if (masked == 0x2e209c00)
+            polynomialByteVector(full, left, right)
+        else if (masked == 0x0e209400 or masked == 0x2e209400) blk: {
             const prior = self.state.readVector(vectorRegFromWord(word));
             break :blk a64_state.VectorValue{
                 .low = if (masked == 0x0e209400) addVectorLanes(prior.low, multiplyVectorLanes(left.low, right.low, lane), lane) else subtractVectorLanes(prior.low, multiplyVectorLanes(left.low, right.low, lane), lane),
