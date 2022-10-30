@@ -4,8 +4,10 @@ const bits = @import("bits.zig");
 const float_control = @import("float_control.zig");
 const float_estimate = @import("float_estimate.zig");
 const float_exception = @import("float_exception.zig");
+const float_fixed = @import("float_fixed.zig");
 const float_fused = @import("float_fused.zig");
 const float_refine = @import("float_refine.zig");
+const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
@@ -149,6 +151,22 @@ pub fn minimumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64,
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
         setVectorElement(&result, index, bytes, a64_float_minmax.floatMin(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+    }
+    return result;
+}
+
+pub fn fixedFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, fractional_bits: usize, unsigned_result: bool, rounding: float_rounding.RoundingMode, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const value = vectorElement(source, index, bytes);
+        const converted = if (double)
+            try float_fixed.fixedFromFloat64(64, value, fractional_bits, unsigned_result, control, rounding, status)
+        else
+            try float_fixed.fixedFromFloat32(32, @intCast(u32, value), fractional_bits, unsigned_result, control, rounding, status);
+        setVectorElement(&result, index, bytes, converted);
     }
     return result;
 }
