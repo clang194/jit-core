@@ -1000,29 +1000,43 @@ pub const Core64Methods = struct {
         const unsigned_multiply_accumulate = masked == 0x2e208000;
         const unsigned_multiply_subtract = masked == 0x2e20a000;
         const unsigned_multiply_long = masked == 0x2e20c000;
+        const polynomial_wide = masked == 0x0e20e000;
         const multiplying_long = signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long or unsigned_multiply_accumulate or unsigned_multiply_subtract or unsigned_multiply_long;
         const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000 or signed_difference or signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long;
         const subtracting = masked == 0x0e202000 or masked == 0x0e203000 or masked == 0x2e202000 or masked == 0x2e203000;
         const widening_source_pair = masked == 0x0e200000 or masked == 0x0e202000 or masked == 0x2e200000 or masked == 0x2e202000;
         const accumulating_difference = masked == 0x0e205000 or masked == 0x2e205000;
         const absolute_difference = masked == 0x0e207000 or masked == 0x2e207000 or accumulating_difference;
-        if (!signed and masked != 0x2e201000 and masked != 0x2e203000 and !widening_source_pair and !absolute_difference and !multiplying_long) {
+        if (!signed and masked != 0x2e201000 and masked != 0x2e203000 and !widening_source_pair and !absolute_difference and !multiplying_long and !polynomial_wide) {
             return false;
         }
 
         const size = @intCast(u2, (word >> 22) & 3);
-        if (size == 3) {
+        if (polynomial_wide and (size == 1 or size == 2)) {
+            return error.ReservedInstruction;
+        }
+        if (!polynomial_wide and size == 3) {
             return error.ReservedInstruction;
         }
 
         const upper = (word & 0x40000000) != 0;
+        const base = self.state.readVector(vectorRegFromWord(word >> 5));
+        const addend = self.state.readVector(vectorRegFromWord(word >> 16));
+        if (polynomial_wide) {
+            const result = if (size == 3)
+                polynomialWideWordProduct(if (upper) base.high else base.low, if (upper) addend.high else addend.low)
+            else
+                polynomialWideByteVector(upper, base, addend);
+            self.state.writeVector(vectorRegFromWord(word), result);
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const source_bytes = @as(usize, 1) << size;
         const target_bytes = source_bytes * 2;
         const source_bits = @intCast(u8, source_bytes * 8);
         const source_mask = ones(source_bits);
-        const addend = self.state.readVector(vectorRegFromWord(word >> 16));
         const addend_half = if (upper) addend.high else addend.low;
-        const base = self.state.readVector(vectorRegFromWord(word >> 5));
         const base_half = if (upper) base.high else base.low;
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
         var index: usize = 0;

@@ -34,6 +34,33 @@ pub fn polynomialByteProduct(left: u8, right: u8) u8 {
     return result;
 }
 
+pub fn polynomialWideByteProduct(left: u8, right: u8) u16 {
+    var result: u16 = 0;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        if (((left >> @intCast(u3, index)) & 1) != 0) {
+            result ^= @as(u16, right) << @intCast(u4, index);
+        }
+    }
+    return result;
+}
+
+pub fn polynomialWideWordProduct(left: u64, right: u64) a64_state.VectorValue {
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: u8 = 0;
+    while (index < 64) : (index += 1) {
+        if (((left >> @intCast(u6, index)) & 1) != 0) {
+            if (index == 0) {
+                result.low ^= right;
+            } else {
+                result.low ^= right << @intCast(u6, index);
+                result.high ^= right >> @intCast(u6, 64 - index);
+            }
+        }
+    }
+    return result;
+}
+
 pub fn vectorByte(value: a64_state.VectorValue, index: usize) u8 {
     const shift = @intCast(u6, (index & 7) * 8);
     const word = if (index < 8) value.low else value.high;
@@ -74,6 +101,16 @@ pub fn polynomialByteVector(full: bool, left: a64_state.VectorValue, right: a64_
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
         setVectorByte(&result, index, polynomialByteProduct(vectorByte(left, index), vectorByte(right, index)));
+    }
+    return result;
+}
+
+pub fn polynomialWideByteVector(upper: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const first = if (upper) @as(usize, 8) else @as(usize, 0);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < 8) : (index += 1) {
+        setVectorElement(&result, index, 2, polynomialWideByteProduct(vectorByte(left, first + index), vectorByte(right, first + index)));
     }
     return result;
 }
