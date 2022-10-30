@@ -23,6 +23,17 @@ pub fn aesProduct(value: u8, factor: u8) u8 {
     return result;
 }
 
+pub fn polynomialByteProduct(left: u8, right: u8) u8 {
+    var result: u8 = 0;
+    var index: u8 = 0;
+    while (index < 8) : (index += 1) {
+        if (((left >> @intCast(u3, index)) & 1) != 0) {
+            result ^= right << @intCast(u3, index);
+        }
+    }
+    return result;
+}
+
 pub fn vectorByte(value: a64_state.VectorValue, index: usize) u8 {
     const shift = @intCast(u6, (index & 7) * 8);
     const word = if (index < 8) value.low else value.high;
@@ -55,6 +66,16 @@ pub fn setVectorElement(value: *a64_state.VectorValue, index: usize, bytes: usiz
         const byte = @intCast(u8, (element >> @intCast(u6, byte_index * 8)) & 0xff);
         setVectorByte(value, index * bytes + byte_index, byte);
     }
+}
+
+pub fn polynomialByteVector(full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 16) else @as(usize, 8);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorByte(&result, index, polynomialByteProduct(vectorByte(left, index), vectorByte(right, index)));
+    }
+    return result;
 }
 
 pub fn interleaveLowerVector(left: a64_state.VectorValue, right: a64_state.VectorValue, bytes: usize, total: usize) a64_state.VectorValue {
