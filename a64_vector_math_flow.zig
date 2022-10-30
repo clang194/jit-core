@@ -508,8 +508,19 @@ pub const Core64Methods = struct {
         return true;
     }
 
-    pub fn runVectorFloatToSignedInteger(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfbffc00) != 0x2e21b800) {
+    pub fn runVectorFloatToInteger(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbfbffc00;
+        const signed_nearest = masked == 0x0e21a800;
+        const signed_negative = masked == 0x0e21b800;
+        const signed_nearest_away = masked == 0x0e21c800;
+        const signed_positive = masked == 0x0ea1a800;
+        const signed_zero = masked == 0x0ea1b800;
+        const unsigned_nearest = masked == 0x2e21a800;
+        const unsigned_negative = masked == 0x2e21b800;
+        const unsigned_nearest_away = masked == 0x2e21c800;
+        const unsigned_positive = masked == 0x2ea1a800;
+        const unsigned_zero = masked == 0x2ea1b800;
+        if (!signed_nearest and !signed_negative and !signed_nearest_away and !signed_positive and !signed_zero and !unsigned_nearest and !unsigned_negative and !unsigned_nearest_away and !unsigned_positive and !unsigned_zero) {
             return false;
         }
 
@@ -522,7 +533,18 @@ pub const Core64Methods = struct {
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const control = self.state.floatControl();
         var status = float_status.FloatStatus.init(self.state.floatStatus());
-        const result = fixedFloatVector(control, &status, double, full, 0, false, .zero, source) catch return error.MissingFallback;
+        const unsigned_result = unsigned_nearest or unsigned_negative or unsigned_nearest_away or unsigned_positive or unsigned_zero;
+        const rounding = if (signed_nearest or unsigned_nearest)
+            float_rounding.RoundingMode.nearest
+        else if (signed_negative or unsigned_negative)
+            float_rounding.RoundingMode.negative
+        else if (signed_nearest_away or unsigned_nearest_away)
+            float_rounding.RoundingMode.nearest_away
+        else if (signed_positive or unsigned_positive)
+            float_rounding.RoundingMode.positive
+        else
+            float_rounding.RoundingMode.zero;
+        const result = fixedFloatVector(control, &status, double, full, 0, unsigned_result, rounding, source) catch return error.MissingFallback;
         self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;

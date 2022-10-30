@@ -413,11 +413,11 @@ pub const Core64Methods = struct {
             if (vector_float_negate) {
                 return;
             }
-            const vector_float_signed_integer = self.runVectorFloatToSignedInteger(word) catch |err| {
+            const vector_float_integer = self.runVectorFloatToInteger(word) catch |err| {
                 try self.raiseFault(err);
                 return;
             };
-            if (vector_float_signed_integer) {
+            if (vector_float_integer) {
                 return;
             }
             const vector_float = self.runVectorFloatBinary(word) catch |err| {
