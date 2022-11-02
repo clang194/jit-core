@@ -1344,6 +1344,39 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorAcrossMinMax(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbf3ffc00;
+        const signed_max = masked == 0x0e30a800;
+        const signed_min = masked == 0x0e31a800;
+        const unsigned_max = masked == 0x2e30a800;
+        const unsigned_min = masked == 0x2e31a800;
+        if (!signed_max and !signed_min and !unsigned_max and !unsigned_min) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        const full = (word & 0x40000000) != 0;
+        if ((size == 2 and !full) or size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const bytes = @as(usize, 1) << @intCast(u3, size);
+        const lanes = (if (full) @as(usize, 16) else @as(usize, 8)) / bytes;
+        const signed = signed_max or signed_min;
+        const maximum = signed_max or unsigned_max;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        var value = if (signed) signExtendRuntime(vectorElement(source, 0, bytes), @intCast(u6, bytes * 8)) else vectorElement(source, 0, bytes);
+        var index: usize = 1;
+        while (index < lanes) : (index += 1) {
+            const element = if (signed) signExtendRuntime(vectorElement(source, index, bytes), @intCast(u6, bytes * 8)) else vectorElement(source, index, bytes);
+            value = if (maximum) integerMaximum(false, signed, value, element) else integerMinimum(false, signed, value, element);
+        }
+
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value & ones(@intCast(u8, bytes * 8)), .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorAcrossAdd(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf3ffc00;
         const narrow = masked == 0x0e31b800;
