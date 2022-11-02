@@ -1143,6 +1143,42 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorPairExtrema(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbf20fc00;
+        const signed_max = masked == 0x0e20a400;
+        const signed_min = masked == 0x0e20ac00;
+        const unsigned_max = masked == 0x2e20a400;
+        const unsigned_min = masked == 0x2e20ac00;
+        if (!signed_max and !signed_min and !unsigned_max and !unsigned_min) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const signed = signed_max or signed_min;
+        const maximum = signed_max or unsigned_max;
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const result = if (full)
+            a64_state.VectorValue{
+                .low = pairVectorExtrema(left.low, left.high, lane, signed, maximum),
+                .high = pairVectorExtrema(right.low, right.high, lane, signed, maximum),
+            }
+        else
+            a64_state.VectorValue{
+                .low = pairVectorExtrema(left.low, right.low, lane, signed, maximum),
+                .high = 0,
+            };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorEqual(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf20fc00) != 0x2e208c00) {
             return false;

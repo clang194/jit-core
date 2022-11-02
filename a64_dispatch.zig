@@ -616,6 +616,13 @@ pub const Core64Methods = struct {
             if (vector_pair_add) {
                 return;
             }
+            const vector_pair_extrema = self.runVectorPairExtrema(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_pair_extrema) {
+                return;
+            }
             const vector_equal = self.runVectorEqual(word) catch |err| {
                 try self.raiseFault(err);
                 return;
