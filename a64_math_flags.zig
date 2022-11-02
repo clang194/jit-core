@@ -25,6 +25,32 @@ pub fn mathSub(wide: bool, left: u64, right: u64, carry_in: bool) MathResult {
     return mathAdd(wide, left, ~right, carry_in);
 }
 
+pub fn integerMaximum(wide: bool, signed: bool, left: u64, right: u64) u64 {
+    if (signed) {
+        if (wide) {
+            return if (@bitCast(i64, left) >= @bitCast(i64, right)) left else right;
+        }
+        return if (@bitCast(i32, @intCast(u32, left)) >= @bitCast(i32, @intCast(u32, right))) @as(u64, @intCast(u32, left)) else @as(u64, @intCast(u32, right));
+    }
+    if (wide) {
+        return if (left >= right) left else right;
+    }
+    return if (@intCast(u32, left) >= @intCast(u32, right)) @as(u64, @intCast(u32, left)) else @as(u64, @intCast(u32, right));
+}
+
+pub fn integerMinimum(wide: bool, signed: bool, left: u64, right: u64) u64 {
+    if (signed) {
+        if (wide) {
+            return if (@bitCast(i64, left) <= @bitCast(i64, right)) left else right;
+        }
+        return if (@bitCast(i32, @intCast(u32, left)) <= @bitCast(i32, @intCast(u32, right))) @as(u64, @intCast(u32, left)) else @as(u64, @intCast(u32, right));
+    }
+    if (wide) {
+        return if (left <= right) left else right;
+    }
+    return if (@intCast(u32, left) <= @intCast(u32, right)) @as(u64, @intCast(u32, left)) else @as(u64, @intCast(u32, right));
+}
+
 pub fn mathAdd32(left: u32, right: u32, carry_in: bool) MathResult {
     const carry: u64 = if (carry_in) 1 else 0;
     const wide = @as(u64, left) + @as(u64, right) + carry;
@@ -48,4 +74,3 @@ pub fn mathAdd64(left: u64, right: u64, carry_in: bool) MathResult {
         .overflow = overflow,
     };
 }
-
