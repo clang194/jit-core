@@ -113,6 +113,10 @@ pub fn pairVectorHalves(first: u64, second: u64, lane: u8) u64 {
     return pairVectorHalf(first, lane) | (pairVectorHalf(second, lane) << @intCast(u6, 32));
 }
 
+pub fn pairVectorExtrema(first: u64, second: u64, lane: u8, signed: bool, maximum: bool) u64 {
+    return pairVectorExtremaHalf(first, lane, signed, maximum) | (pairVectorExtremaHalf(second, lane, signed, maximum) << @intCast(u6, 32));
+}
+
 pub fn pairVectorHalf(value: u64, lane: u8) u64 {
     const mask = ones(lane);
     const lane_step = @intCast(u8, lane);
@@ -125,6 +129,30 @@ pub fn pairVectorHalf(value: u64, lane: u8) u64 {
         const output_amount = @intCast(u6, output_shift);
         const sum = ((value >> first_shift) & mask) +% ((value >> second_shift) & mask);
         result |= (sum & mask) << output_amount;
+        input_shift += lane_step * 2;
+        output_shift += lane_step;
+    }
+    return result;
+}
+
+pub fn pairVectorExtremaHalf(value: u64, lane: u8, signed: bool, maximum: bool) u64 {
+    const mask = ones(lane);
+    const lane_step = @intCast(u8, lane);
+    var result: u64 = 0;
+    var input_shift: u8 = 0;
+    var output_shift: u8 = 0;
+    while (input_shift < 64) {
+        const first_shift = @intCast(u6, input_shift);
+        const second_shift = @intCast(u6, input_shift + lane_step);
+        const output_amount = @intCast(u6, output_shift);
+        const first = (value >> first_shift) & mask;
+        const second = (value >> second_shift) & mask;
+        const take_first = if (signed) blk: {
+            const first_signed = @bitCast(i64, signExtendRuntime(first, @intCast(u6, lane)));
+            const second_signed = @bitCast(i64, signExtendRuntime(second, @intCast(u6, lane)));
+            break :blk if (maximum) first_signed > second_signed else first_signed < second_signed;
+        } else if (maximum) first > second else first < second;
+        result |= (if (take_first) first else second) << output_amount;
         input_shift += lane_step * 2;
         output_shift += lane_step;
     }
