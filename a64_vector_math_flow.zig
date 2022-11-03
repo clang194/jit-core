@@ -725,17 +725,32 @@ pub const Core64Methods = struct {
 
     pub fn runScalarVectorArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff20fc00;
-        if (masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e204400 and masked != 0x5e208400 and masked != 0x5e208c00 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e208400 and masked != 0x7e208c00) {
+        const saturating_add = masked == 0x5e200c00;
+        const saturating_sub = masked == 0x5e202c00;
+        if (!saturating_add and !saturating_sub and masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e204400 and masked != 0x5e208400 and masked != 0x5e208c00 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e208400 and masked != 0x7e208c00) {
             return false;
         }
 
         const size = @intCast(u2, (word >> 22) & 3);
-        if (size != 3) {
+        if (!saturating_add and !saturating_sub and size != 3) {
             return error.ReservedInstruction;
         }
 
         const left = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const right = self.state.readVector(vectorRegFromWord(word >> 16)).low;
+        if (saturating_add or saturating_sub) {
+            const width = @as(u8, 8) << @intCast(u3, size);
+            const saturated = if (saturating_add) signedSaturatedAdd(width, left, right) else signedSaturatedSub(width, left, right);
+            if (saturated.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = saturated.value, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const result = if (masked == 0x5e208400)
             left +% right
         else if (masked == 0x7e208400)
