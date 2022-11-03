@@ -9,6 +9,32 @@ pub const MathResult = struct {
     overflow: bool,
 };
 
+pub const SaturatingIntegerResult = struct {
+    value: u64,
+    saturated: bool,
+};
+
+fn widthMask(width: u8) u64 {
+    if (width >= 64) {
+        return ~@as(u64, 0);
+    }
+    return (@as(u64, 1) << @intCast(u6, width)) - 1;
+}
+
+fn signedWidthValue(value: u64, width: u8) i128 {
+    const mask = widthMask(width);
+    const narrowed = value & mask;
+    const high = @as(u64, 1) << @intCast(u6, width - 1);
+    if ((narrowed & high) != 0) {
+        return @as(i128, @bitCast(i64, narrowed | ~mask));
+    }
+    return @intCast(i128, narrowed);
+}
+
+fn signedWidthBits(value: i128, width: u8) u64 {
+    return @bitCast(u64, @intCast(i64, value)) & widthMask(width);
+}
+
 pub fn mathAdd(wide: bool, left: u64, right: u64, carry_in: bool) MathResult {
     if (wide) {
         return mathAdd64(left, right, carry_in);
@@ -49,6 +75,36 @@ pub fn integerMinimum(wide: bool, signed: bool, left: u64, right: u64) u64 {
         return if (left <= right) left else right;
     }
     return if (@intCast(u32, left) <= @intCast(u32, right)) @as(u64, @intCast(u32, left)) else @as(u64, @intCast(u32, right));
+}
+
+pub fn signedSaturatedAdd(width: u8, left: u64, right: u64) SaturatingIntegerResult {
+    const left_value = signedWidthValue(left, width);
+    const right_value = signedWidthValue(right, width);
+    const highest = (@as(i128, 1) << @intCast(u7, width - 1)) - 1;
+    const lowest = -(@as(i128, 1) << @intCast(u7, width - 1));
+    const result = left_value + right_value;
+    if (result > highest) {
+        return SaturatingIntegerResult{ .value = signedWidthBits(highest, width), .saturated = true };
+    }
+    if (result < lowest) {
+        return SaturatingIntegerResult{ .value = signedWidthBits(lowest, width), .saturated = true };
+    }
+    return SaturatingIntegerResult{ .value = signedWidthBits(result, width), .saturated = false };
+}
+
+pub fn signedSaturatedSub(width: u8, left: u64, right: u64) SaturatingIntegerResult {
+    const left_value = signedWidthValue(left, width);
+    const right_value = signedWidthValue(right, width);
+    const highest = (@as(i128, 1) << @intCast(u7, width - 1)) - 1;
+    const lowest = -(@as(i128, 1) << @intCast(u7, width - 1));
+    const result = left_value - right_value;
+    if (result > highest) {
+        return SaturatingIntegerResult{ .value = signedWidthBits(highest, width), .saturated = true };
+    }
+    if (result < lowest) {
+        return SaturatingIntegerResult{ .value = signedWidthBits(lowest, width), .saturated = true };
+    }
+    return SaturatingIntegerResult{ .value = signedWidthBits(result, width), .saturated = false };
 }
 
 pub fn mathAdd32(left: u32, right: u32, carry_in: bool) MathResult {
