@@ -551,6 +551,47 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorFloatRound(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbfbffc00;
+        const nearest = masked == 0x0e218800;
+        const negative = masked == 0x0e219800;
+        const positive = masked == 0x0ea18800;
+        const zero = masked == 0x0ea19800;
+        const nearest_away = masked == 0x2e218800;
+        const exact = masked == 0x2e219800;
+        const current = masked == 0x2ea19800;
+        if (!nearest and !negative and !positive and !zero and !nearest_away and !exact and !current) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = ((word >> 22) & 1) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const rounding = if (nearest)
+            float_rounding.RoundingMode.nearest
+        else if (negative)
+            float_rounding.RoundingMode.negative
+        else if (positive)
+            float_rounding.RoundingMode.positive
+        else if (zero)
+            float_rounding.RoundingMode.zero
+        else if (nearest_away)
+            float_rounding.RoundingMode.nearest_away
+        else
+            self.state.floatControl().rounding();
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = roundIntegralFloatVector(control, &status, double, full, rounding, exact, source) catch return error.MissingFallback;
+        self.state.writeFloatStatus(status.raw());
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
         if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f009400 and masked != 0x0f009c00 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f009400 and masked != 0x2f009c00 and masked != 0x2f00a400) {
