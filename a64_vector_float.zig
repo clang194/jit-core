@@ -6,6 +6,7 @@ const float_estimate = @import("float_estimate.zig");
 const float_exception = @import("float_exception.zig");
 const float_fixed = @import("float_fixed.zig");
 const float_fused = @import("float_fused.zig");
+const float_integer = @import("float_integer.zig");
 const float_refine = @import("float_refine.zig");
 const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
@@ -129,6 +130,22 @@ pub fn reciprocalStepFloatVector(control: float_control.Control, status: *float_
         else
             @as(u64, try float_refine.reciprocalStep32(@intCast(u32, left_value), @intCast(u32, right_value), control, status));
         setVectorElement(&result, index, bytes, step);
+    }
+    return result;
+}
+
+pub fn roundIntegralFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, mode: float_rounding.RoundingMode, exact: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const value = vectorElement(source, index, bytes);
+        const rounded = if (double)
+            try float_integer.roundIntegral64(value, control, mode, exact, status)
+        else
+            @as(u64, try float_integer.roundIntegral32(@intCast(u32, value), control, mode, exact, status));
+        setVectorElement(&result, index, bytes, rounded);
     }
     return result;
 }
