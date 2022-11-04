@@ -7,6 +7,7 @@ pub const Binary32 = struct {
     pub const sign_mask: u32 = 0x80000000;
     pub const exponent_mask: u32 = 0x7f800000;
     pub const fraction_mask: u32 = 0x007fffff;
+    pub const fraction_top_bit: u32 = 0x00400000;
     pub const exponent_min: i32 = -126;
     pub const exponent_max: i32 = 127;
     pub const exponent_bias: u32 = 127;
@@ -24,7 +25,7 @@ pub const Binary32 = struct {
     }
 
     pub fn defaultNan() u32 {
-        return exponent_mask | (@as(u32, 1) << (stored_fraction_bits - 1));
+        return exponent_mask | fraction_top_bit;
     }
 
     pub fn finite(comptime negative: bool, comptime exponent: i32, comptime significand: u32) u32 {
@@ -54,6 +55,7 @@ pub const Binary64 = struct {
     pub const sign_mask: u64 = 0x8000000000000000;
     pub const exponent_mask: u64 = 0x7ff0000000000000;
     pub const fraction_mask: u64 = 0x000fffffffffffff;
+    pub const fraction_top_bit: u64 = 0x0008000000000000;
     pub const exponent_min: i32 = -1022;
     pub const exponent_max: i32 = 1023;
     pub const exponent_bias: u64 = 1023;
@@ -71,7 +73,7 @@ pub const Binary64 = struct {
     }
 
     pub fn defaultNan() u64 {
-        return exponent_mask | (@as(u64, 1) << (stored_fraction_bits - 1));
+        return exponent_mask | fraction_top_bit;
     }
 
     pub fn finite(comptime negative: bool, comptime exponent: i32, comptime significand: u64) u64 {
