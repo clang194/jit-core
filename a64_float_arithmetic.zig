@@ -1,7 +1,32 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_format = @import("float_format.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+
+fn isZero32(value: u32) bool {
+    return (value & ~float_format.Binary32.sign_mask) == 0;
+}
+
+fn isZero64(value: u64) bool {
+    return (value & ~float_format.Binary64.sign_mask) == 0;
+}
+
+fn isInfinity32(value: u32) bool {
+    return (value & ~float_format.Binary32.sign_mask) == float_format.Binary32.infinity(false);
+}
+
+fn isInfinity64(value: u64) bool {
+    return (value & ~float_format.Binary64.sign_mask) == float_format.Binary64.infinity(false);
+}
+
+fn invalidFusedNan32(addend: u32, left: u32, right: u32) bool {
+    return isQuietNan32(addend) and ((isInfinity32(left) and isZero32(right)) or (isZero32(left) and isInfinity32(right)));
+}
+
+fn invalidFusedNan64(addend: u64, left: u64, right: u64) bool {
+    return isQuietNan64(addend) and ((isInfinity64(left) and isZero64(right)) or (isZero64(left) and isInfinity64(right)));
+}
 
 pub fn floatAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
     const control = effectiveFloatControl(base_control, mode);
@@ -66,6 +91,9 @@ pub fn floatMulAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, d
         const addend_input = floatInput64(control, addend);
         const left_input = floatInput64(control, left);
         const right_input = floatInput64(control, right);
+        if (invalidFusedNan64(addend_input, left_input, right_input)) {
+            return float_format.Binary64.defaultNan();
+        }
         if (chooseTernaryNan64(control, mode, addend_input, left_input, right_input)) |nan| {
             return nan;
         }
@@ -74,6 +102,9 @@ pub fn floatMulAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, d
     const addend_input = floatInput32(control, @intCast(u32, addend));
     const left_input = floatInput32(control, @intCast(u32, left));
     const right_input = floatInput32(control, @intCast(u32, right));
+    if (invalidFusedNan32(addend_input, left_input, right_input)) {
+        return @as(u64, float_format.Binary32.defaultNan());
+    }
     if (chooseTernaryNan32(control, mode, addend_input, left_input, right_input)) |nan| {
         return @as(u64, nan);
     }
