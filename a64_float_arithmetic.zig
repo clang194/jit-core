@@ -1,6 +1,8 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_fused = @import("float_fused.zig");
 const float_format = @import("float_format.zig");
+const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
 
@@ -26,6 +28,14 @@ fn invalidFusedNan32(addend: u32, left: u32, right: u32) bool {
 
 fn invalidFusedNan64(addend: u64, left: u64, right: u64) bool {
     return isQuietNan64(addend) and ((isInfinity64(left) and isZero64(right)) or (isZero64(left) and isInfinity64(right)));
+}
+
+fn needsPreciseFused32(control: a64_state.FloatControl, value: u32) bool {
+    return control.fz() and (value & ~float_format.Binary32.sign_mask) == float_format.Binary32.hidden_bit;
+}
+
+fn needsPreciseFused64(control: a64_state.FloatControl, value: u64) bool {
+    return control.fz() and (value & ~float_format.Binary64.sign_mask) == float_format.Binary64.hidden_bit;
 }
 
 pub fn floatAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
@@ -97,7 +107,14 @@ pub fn floatMulAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, d
         if (chooseTernaryNan64(control, mode, addend_input, left_input, right_input)) |nan| {
             return nan;
         }
-        return finishFloat64(control, mode, @bitCast(u64, @mulAdd(f64, @bitCast(f64, left_input), @bitCast(f64, right_input), @bitCast(f64, addend_input))));
+        const result = @bitCast(u64, @mulAdd(f64, @bitCast(f64, left_input), @bitCast(f64, right_input), @bitCast(f64, addend_input)));
+        if (needsPreciseFused64(control, result)) {
+            var status = float_status.FloatStatus.init(0);
+            if (float_fused.mulAdd64(addend_input, left_input, right_input, control, &status)) |precise| {
+                return finishFloat64(control, mode, precise);
+            } else |_| {}
+        }
+        return finishFloat64(control, mode, result);
     }
     const addend_input = floatInput32(control, @intCast(u32, addend));
     const left_input = floatInput32(control, @intCast(u32, left));
@@ -109,6 +126,12 @@ pub fn floatMulAdd(base_control: a64_state.FloatControl, mode: FloatNanMode64, d
         return @as(u64, nan);
     }
     const result = @bitCast(u32, @mulAdd(f32, @bitCast(f32, left_input), @bitCast(f32, right_input), @bitCast(f32, addend_input)));
+    if (needsPreciseFused32(control, result)) {
+        var status = float_status.FloatStatus.init(0);
+        if (float_fused.mulAdd32(addend_input, left_input, right_input, control, &status)) |precise| {
+            return @as(u64, finishFloat32(control, mode, precise));
+        } else |_| {}
+    }
     return @as(u64, finishFloat32(control, mode, result));
 }
 
