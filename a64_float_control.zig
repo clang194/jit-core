@@ -1,18 +1,19 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_format = @import("float_format.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
 
 pub fn floatInput32(control: a64_state.FloatControl, value: u32) u32 {
     if (control.fz() and isDenormal32(value)) {
-        return 0;
+        return value & float_format.Binary32.sign_mask;
     }
     return value;
 }
 
 pub fn floatInput64(control: a64_state.FloatControl, value: u64) u64 {
     if (control.fz() and isDenormal64(value)) {
-        return 0;
+        return value & float_format.Binary64.sign_mask;
     }
     return value;
 }
