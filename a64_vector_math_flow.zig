@@ -225,6 +225,21 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarFloatExtendedMultiply(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffa0fc00) != 0x5e20dc00) {
+            return false;
+        }
+
+        const double = ((word >> 22) & 1) != 0;
+        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
+        const result = floatMulExtended(self.state.floatControl(), self.hooks.float_nan_mode, double, left, right);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarFloatCompareZero(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xffbffc00;
         const greater = masked == 0x5ea0c800;
