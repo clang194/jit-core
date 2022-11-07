@@ -30,6 +30,22 @@ fn invalidFusedNan64(addend: u64, left: u64, right: u64) bool {
     return isQuietNan64(addend) and ((isInfinity64(left) and isZero64(right)) or (isZero64(left) and isInfinity64(right)));
 }
 
+fn invalidExtendedProduct32(left: u32, right: u32) bool {
+    return (isInfinity32(left) and isZero32(right)) or (isZero32(left) and isInfinity32(right));
+}
+
+fn invalidExtendedProduct64(left: u64, right: u64) bool {
+    return (isInfinity64(left) and isZero64(right)) or (isZero64(left) and isInfinity64(right));
+}
+
+fn extendedProduct32(left: u32, right: u32) u32 {
+    return (left ^ right) & float_format.Binary32.sign_mask | float_format.Binary32.finite(false, 0, 2);
+}
+
+fn extendedProduct64(left: u64, right: u64) u64 {
+    return (left ^ right) & float_format.Binary64.sign_mask | float_format.Binary64.finite(false, 0, 2);
+}
+
 fn needsPreciseFused32(control: a64_state.FloatControl, value: u32) bool {
     return control.fz() and (value & ~float_format.Binary32.sign_mask) == float_format.Binary32.hidden_bit;
 }
@@ -90,6 +106,31 @@ pub fn floatMul(base_control: a64_state.FloatControl, mode: FloatNanMode64, doub
     const right_input = floatInput32(control, @intCast(u32, right));
     if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
         return @as(u64, nan);
+    }
+    const result = @bitCast(u32, @bitCast(f32, left_input) * @bitCast(f32, right_input));
+    return @as(u64, finishFloat32(control, mode, result));
+}
+
+pub fn floatMulExtended(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
+    const control = effectiveFloatControl(base_control, mode);
+    if (double) {
+        const left_input = floatInput64(control, left);
+        const right_input = floatInput64(control, right);
+        if (chooseBinaryNan64(control, mode, left_input, right_input)) |nan| {
+            return nan;
+        }
+        if (invalidExtendedProduct64(left_input, right_input)) {
+            return extendedProduct64(left_input, right_input);
+        }
+        return finishFloat64(control, mode, @bitCast(u64, @bitCast(f64, left_input) * @bitCast(f64, right_input)));
+    }
+    const left_input = floatInput32(control, @intCast(u32, left));
+    const right_input = floatInput32(control, @intCast(u32, right));
+    if (chooseBinaryNan32(control, mode, left_input, right_input)) |nan| {
+        return @as(u64, nan);
+    }
+    if (invalidExtendedProduct32(left_input, right_input)) {
+        return @as(u64, extendedProduct32(left_input, right_input));
     }
     const result = @bitCast(u32, @bitCast(f32, left_input) * @bitCast(f32, right_input));
     return @as(u64, finishFloat32(control, mode, result));
