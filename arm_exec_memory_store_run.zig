@@ -43,7 +43,7 @@ pub fn runStoreWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.
     const address = if (pre_index) changed else base;
 
     if (writeback) {
-        if (base_reg == .pc) {
+        if (base_reg == .pc or base_reg == data_reg) {
             return error.Unpredictable;
         }
         state.write(base_reg, changed);
@@ -76,7 +76,7 @@ pub fn runStoreByte(word: u32, state: *arm_state.MachineState, hooks: arm_state.
     const address = if (pre_index) changed else base;
 
     if (writeback) {
-        if (base_reg == .pc) {
+        if (base_reg == .pc or base_reg == data_reg) {
             return error.Unpredictable;
         }
         state.write(base_reg, changed);
@@ -110,7 +110,7 @@ pub fn runStoreHalf(word: u32, state: *arm_state.MachineState, hooks: arm_state.
     const address = if (pre_index) changed else base;
 
     if (writeback) {
-        if (base_reg == .pc) {
+        if (base_reg == .pc or base_reg == data_reg) {
             return error.Unpredictable;
         }
         state.write(base_reg, changed);
@@ -138,20 +138,20 @@ pub fn runStoreDouble(word: u32, state: *arm_state.MachineState, hooks: arm_stat
     const writeback = !pre_index or bits.getBit32(word, 21);
     const base_reg = armReg(word >> 16);
     const first_reg = armReg(word >> 12);
+    const second_reg = nextArmReg(first_reg);
     const base = readArmOperand(state, base_reg, pc);
     const offset = transferHalfOffset(word, state, pc);
     const changed = offsetAddress(base, offset, increase);
     const address = if (pre_index) changed else base;
 
     if (writeback) {
-        if (base_reg == .pc) {
+        if (base_reg == .pc or base_reg == first_reg or base_reg == second_reg) {
             return error.Unpredictable;
         }
         state.write(base_reg, changed);
     }
 
     try writeMemory32(state, hooks, address, readArmOperand(state, first_reg, pc));
-    try writeMemory32(state, hooks, address +% 4, readArmOperand(state, nextArmReg(first_reg), pc));
+    try writeMemory32(state, hooks, address +% 4, readArmOperand(state, second_reg, pc));
     state.write(.pc, pc + 4);
 }
-
