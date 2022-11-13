@@ -20,6 +20,125 @@ usingnamespace @import("arm_exec_immediate_run.zig");
 usingnamespace @import("arm_exec_register_memory.zig");
 usingnamespace @import("arm_exec_scalar_bits.zig");
 
+fn usesRetiredArmCondition(word: u32) bool {
+    if ((word >> 28) != 0xf) {
+        return false;
+    }
+
+    const folded = word & 0x0fffffff;
+    return usesExternalArmHandler(folded) or
+        isFloatAdd(folded) or
+        isFloatMulAdd(folded) or
+        isFloatMulSub(folded) or
+        isFloatNegMulAdd(folded) or
+        isFloatNegMulSub(folded) or
+        isFloatSub(folded) or
+        isFloatMul(folded) or
+        isFloatNegMul(folded) or
+        isFloatDiv(folded) or
+        isFloatMoveCoreToPairLow(folded) or
+        isFloatMovePairLowToCore(folded) or
+        isFloatMoveCoreToWord(folded) or
+        isFloatMoveWordToCore(folded) or
+        isFloatMoveTwoCoreToTwoWord(folded) or
+        isFloatMoveTwoWordToTwoCore(folded) or
+        isFloatMoveTwoCoreToPair(folded) or
+        isFloatMovePairToTwoCore(folded) or
+        isFloatMoveReg(folded) or
+        isFloatLoad(folded) or
+        isFloatStore(folded) or
+        isFloatPush(folded) or
+        isFloatStoreMultiple(folded) or
+        isFloatPop(folded) or
+        isFloatLoadMultiple(folded) or
+        isFloatAbs(folded) or
+        isFloatNeg(folded) or
+        isFloatSqrt(folded) or
+        isFloatConvertWidth(folded) or
+        isFloatConvertIntToFloat(folded) or
+        isFloatConvertToUnsigned(folded) or
+        isFloatConvertToSigned(folded) or
+        isFloatCompare(folded) or
+        isFloatStatusWrite(folded) or
+        isFloatStatusRead(folded) or
+        isSignedTopMultiply(folded) or
+        halfMultiplyOp(folded) != null or
+        dualMultiplyOp(folded) != null or
+        isLoadExclusive(folded) or
+        isStoreExclusive(folded) or
+        isSwap(folded) or
+        isStatusRead(folded) or
+        isStatusWriteImmediate(folded) or
+        isStatusWriteRegister(folded) or
+        isCountLeadingZeros(folded) or
+        isSignedSaturatingWord(folded) or
+        isScalarSaturatingMove(folded) or
+        isHalfSaturatingMove(folded) or
+        isUnsignedSaturatingSubBytes(folded) or
+        isSignedSaturatingSubBytes(folded) or
+        isUnsignedSaturatingAddBytes(folded) or
+        isSignedSaturatingAddBytes(folded) or
+        isUnsignedSaturatingSubHalves(folded) or
+        isSignedSaturatingSubHalves(folded) or
+        isUnsignedSaturatingAddHalves(folded) or
+        isSignedSaturatingAddHalves(folded) or
+        isUnsignedSaturatingAddSubHalves(folded) or
+        isUnsignedSaturatingSubAddHalves(folded) or
+        isSignedSaturatingAddSubHalves(folded) or
+        isSignedSaturatingSubAddHalves(folded) or
+        isUnsignedHalvingAddBytes(folded) or
+        isUnsignedHalvingAddHalves(folded) or
+        isSignedHalvingAddBytes(folded) or
+        isSignedHalvingAddHalves(folded) or
+        isUnsignedHalvingAddSubHalves(folded) or
+        isUnsignedHalvingSubAddHalves(folded) or
+        isSignedHalvingAddSubHalves(folded) or
+        isSignedHalvingSubAddHalves(folded) or
+        isUnsignedWrappingAddSubHalves(folded) or
+        isUnsignedWrappingSubAddHalves(folded) or
+        isSignedWrappingAddSubHalves(folded) or
+        isSignedWrappingSubAddHalves(folded) or
+        isUnsignedHalvingSubBytes(folded) or
+        isSignedHalvingSubBytes(folded) or
+        isUnsignedHalvingSubHalves(folded) or
+        isSignedHalvingSubHalves(folded) or
+        isUnsignedWrappingAddBytes(folded) or
+        isSignedWrappingAddBytes(folded) or
+        isUnsignedWrappingAddHalves(folded) or
+        isSignedWrappingAddHalves(folded) or
+        isUnsignedWrappingSubBytes(folded) or
+        isSignedWrappingSubBytes(folded) or
+        isUnsignedWrappingSubHalves(folded) or
+        isSignedWrappingSubHalves(folded) or
+        isByteSelect(folded) or
+        isUnsignedAbsDiffSum(folded) or
+        isHalfwordPack(folded) or
+        isLoadMultiple(folded) or
+        isStoreMultiple(folded) or
+        isBranchImmediate(folded) or
+        isBranchExchange(folded) or
+        isDataProcessing(folded) or
+        isMultiply(folded) or
+        isLoadWord(folded) or
+        isLoadByte(folded) or
+        isLoadHalf(folded) or
+        isLoadSignedByte(folded) or
+        isLoadSignedHalf(folded) or
+        isLoadDouble(folded) or
+        isStoreWord(folded) or
+        isStoreByte(folded) or
+        isStoreHalf(folded) or
+        isStoreDouble(folded) or
+        isAdcImmediate(folded) or
+        isCmpImmediate(folded) or
+        isRev(folded) or
+        isRevHalfwords(folded) or
+        isRevSignedHalf(folded) or
+        extendOp(folded) != null or
+        isSupervisorCall(folded) or
+        isBreakpoint(folded);
+}
+
 pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks) ArmStepError!void {
     const pc = state.read(.pc);
     if (isFloatAdd(word)) {
@@ -408,6 +527,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         return runCoprocessor(word, state, hooks, pc);
     }
 
+    if (usesRetiredArmCondition(word)) {
+        return error.Unpredictable;
+    }
+
     if (usesExternalArmHandler(word)) {
         return runExternalArmHandler(state, hooks, pc);
     }
@@ -541,4 +664,3 @@ pub fn runArmWithHooks(state: *arm_state.MachineState, hooks: arm_state.HostHook
     };
     return runArmWord(word, state, hooks);
 }
-
