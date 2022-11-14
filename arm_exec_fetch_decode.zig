@@ -98,11 +98,11 @@ pub fn isStatusRead(word: u32) bool {
 }
 
 pub fn isStatusWriteImmediate(word: u32) bool {
-    return (word & 0x0ff3f000) == 0x0320f000 and armCondition(word) != null;
+    return (word & 0x0ff0f000) == 0x0320f000 and armCondition(word) != null;
 }
 
 pub fn isStatusWriteRegister(word: u32) bool {
-    return (word & 0x0ff3fff0) == 0x0120f000 and armCondition(word) != null;
+    return (word & 0x0ff0fff0) == 0x0120f000 and armCondition(word) != null;
 }
 
 pub fn isCountLeadingZeros(word: u32) bool {
@@ -424,4 +424,3 @@ pub fn isRevSignedHalf(word: u32) bool {
 pub fn expandArmImmediate(rotate: u8, value: u8) u32 {
     return rotateRightWord(@as(u32, value), rotate * 2);
 }
-

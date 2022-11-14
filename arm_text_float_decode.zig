@@ -15,7 +15,6 @@ usingnamespace @import("arm_text_thumb_format.zig");
 usingnamespace @import("arm_text_thumb32_format.zig");
 usingnamespace @import("arm_text_common_format.zig");
 
-
 pub const ArmExtendText = struct {
     name: []const u8,
     base: bool,
@@ -190,10 +189,9 @@ pub fn isStatusRead(word: u32) bool {
 }
 
 pub fn isStatusWriteImmediate(word: u32) bool {
-    return (word & 0x0ff3f000) == 0x0320f000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+    return (word & 0x0ff0f000) == 0x0320f000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
 }
 
 pub fn isStatusWriteRegister(word: u32) bool {
-    return (word & 0x0ff3fff0) == 0x0120f000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
+    return (word & 0x0ff0fff0) == 0x0120f000 and arm_state.conditionFromNibble(@intCast(u4, word >> 28)) != null;
 }
-

@@ -427,14 +427,20 @@ pub fn regListCount(list: u16) u5 {
     return count;
 }
 
-pub fn statusWriteMask(word: u32) u32 {
-    const field = (word >> 18) & 0x3;
+pub fn statusWriteField(word: u32) u4 {
+    return @intCast(u4, (word >> 16) & 0xf);
+}
+
+pub fn statusWriteMask(field: u4) u32 {
     var mask: u32 = 0;
-    if ((field & 0x2) != 0) {
+    if ((field & 0x8) != 0) {
         mask |= 0xf8000000;
     }
-    if ((field & 0x1) != 0) {
+    if ((field & 0x4) != 0) {
         mask |= 0x000f0000;
+    }
+    if ((field & 0x2) != 0) {
+        mask |= 0x00000200;
     }
     return mask;
 }

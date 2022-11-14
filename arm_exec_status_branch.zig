@@ -34,10 +34,11 @@ pub fn runStatusRead(word: u32, state: *arm_state.MachineState, pc: u32) ArmStep
 }
 
 pub fn runStatusWriteImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
-    const mask = statusWriteMask(word);
-    if (mask == 0) {
+    const field = statusWriteField(word);
+    if (field == 0) {
         return error.Unpredictable;
     }
+    const mask = statusWriteMask(field);
 
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
@@ -54,10 +55,11 @@ pub fn runStatusWriteRegister(word: u32, state: *arm_state.MachineState, pc: u32
         return error.Unpredictable;
     }
 
-    const mask = statusWriteMask(word);
-    if (mask == 0) {
+    const field = statusWriteField(word);
+    if (field == 0) {
         return error.Unpredictable;
     }
+    const mask = statusWriteMask(field);
 
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
@@ -225,4 +227,3 @@ pub fn multiplyOp(word: u32) ?MultiplyOp {
     }
     return null;
 }
-

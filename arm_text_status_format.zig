@@ -15,12 +15,23 @@ usingnamespace @import("arm_text_thumb_format.zig");
 usingnamespace @import("arm_text_thumb32_format.zig");
 usingnamespace @import("arm_text_common_format.zig");
 
-
 pub fn statusMaskName(word: u32) TextError![]const u8 {
-    return switch ((word >> 18) & 0x3) {
-        0x1 => "g",
-        0x2 => "nzcvq",
-        0x3 => "nzcvqg",
+    return switch ((word >> 16) & 0xf) {
+        0x1 => "m",
+        0x2 => "e",
+        0x3 => "em",
+        0x4 => "g",
+        0x5 => "gm",
+        0x6 => "ge",
+        0x7 => "gem",
+        0x8 => "nzcvq",
+        0x9 => "nzcvqm",
+        0xa => "nzcvqe",
+        0xb => "nzcvqem",
+        0xc => "nzcvqg",
+        0xd => "nzcvqgm",
+        0xe => "nzcvqge",
+        0xf => "nzcvqgem",
         else => error.UnknownInstruction,
     };
 }
@@ -49,4 +60,3 @@ pub fn formatStatusWriteRegister(buf: []u8, word: u32, cond: u4) TextError![]u8 
         arm_state.regName(source),
     }) catch error.NoSpaceLeft;
 }
-
