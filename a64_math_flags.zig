@@ -107,6 +107,24 @@ pub fn signedSaturatedSub(width: u8, left: u64, right: u64) SaturatingIntegerRes
     return SaturatingIntegerResult{ .value = signedWidthBits(result, width), .saturated = false };
 }
 
+pub fn unsignedSaturatedAdd(width: u8, left: u64, right: u64) SaturatingIntegerResult {
+    const mask = widthMask(width);
+    const result = @as(u128, left & mask) + @as(u128, right & mask);
+    if (result > mask) {
+        return SaturatingIntegerResult{ .value = mask, .saturated = true };
+    }
+    return SaturatingIntegerResult{ .value = @intCast(u64, result), .saturated = false };
+}
+
+pub fn unsignedSaturatedSub(width: u8, left: u64, right: u64) SaturatingIntegerResult {
+    const left_value = left & widthMask(width);
+    const right_value = right & widthMask(width);
+    if (left_value < right_value) {
+        return SaturatingIntegerResult{ .value = 0, .saturated = true };
+    }
+    return SaturatingIntegerResult{ .value = left_value - right_value, .saturated = false };
+}
+
 pub fn mathAdd32(left: u32, right: u32, carry_in: bool) MathResult {
     const carry: u64 = if (carry_in) 1 else 0;
     const wide = @as(u64, left) + @as(u64, right) + carry;
