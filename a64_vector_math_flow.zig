@@ -892,7 +892,11 @@ pub const Core64Methods = struct {
 
     pub fn runVectorAdd(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
-        if (masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400 and masked != 0x2e209c00) {
+        const signed_saturating_add = masked == 0x0e200c00;
+        const signed_saturating_sub = masked == 0x0e202c00;
+        const unsigned_saturating_add = masked == 0x2e200c00;
+        const unsigned_saturating_sub = masked == 0x2e202c00;
+        if (!signed_saturating_add and !signed_saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400 and masked != 0x2e209c00) {
             return false;
         }
 
@@ -908,6 +912,18 @@ pub const Core64Methods = struct {
         const lane = @as(u8, 8) << @intCast(u3, size);
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        if (signed_saturating_add or signed_saturating_sub or unsigned_saturating_add or unsigned_saturating_sub) {
+            const low = saturatingVectorLanes(left.low, right.low, lane, signed_saturating_add or signed_saturating_sub, signed_saturating_add or unsigned_saturating_add);
+            const high = if (full) saturatingVectorLanes(left.high, right.high, lane, signed_saturating_add or signed_saturating_sub, signed_saturating_add or unsigned_saturating_add) else SaturatingVectorResult{ .value = 0, .saturated = false };
+            if (low.saturated or high.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = low.value, .high = high.value });
+            self.state.pc +%= 4;
+            return true;
+        }
         const result = if (masked == 0x2e209c00)
             polynomialByteVector(full, left, right)
         else if (masked == 0x0e209400 or masked == 0x2e209400) blk: {

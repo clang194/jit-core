@@ -1,7 +1,13 @@
 const a64_state = @import("a64_state.zig");
+const math_flags = @import("a64_math_flags.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+
+pub const SaturatingVectorResult = struct {
+    value: u64,
+    saturated: bool,
+};
 
 pub fn addVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
@@ -31,6 +37,29 @@ pub fn subtractVectorLanes(left: u64, right: u64, lane: u8) u64 {
         const amount = @intCast(u6, shift);
         const difference = ((left >> amount) & mask) -% ((right >> amount) & mask);
         result |= (difference & mask) << amount;
+    }
+    return result;
+}
+
+pub fn saturatingVectorLanes(left: u64, right: u64, lane: u8, signed: bool, add: bool) SaturatingVectorResult {
+    const mask = ones(lane);
+    var result = SaturatingVectorResult{ .value = 0, .saturated = false };
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_lane = (left >> amount) & mask;
+        const right_lane = (right >> amount) & mask;
+        const saturated = if (signed)
+            if (add)
+                math_flags.signedSaturatedAdd(lane, left_lane, right_lane)
+            else
+                math_flags.signedSaturatedSub(lane, left_lane, right_lane)
+        else if (add)
+            math_flags.unsignedSaturatedAdd(lane, left_lane, right_lane)
+        else
+            math_flags.unsignedSaturatedSub(lane, left_lane, right_lane);
+        result.value |= (saturated.value & mask) << amount;
+        result.saturated = result.saturated or saturated.saturated;
     }
     return result;
 }
