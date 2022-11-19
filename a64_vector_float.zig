@@ -194,6 +194,17 @@ pub fn maximumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64,
     return result;
 }
 
+pub fn maximumNumberFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, a64_float_minmax.floatMaxNumber(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+    }
+    return result;
+}
+
 pub fn minimumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
@@ -201,6 +212,17 @@ pub fn minimumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64,
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
         setVectorElement(&result, index, bytes, a64_float_minmax.floatMin(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
+    }
+    return result;
+}
+
+pub fn minimumNumberFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, a64_float_minmax.floatMinNumber(control, mode, double, vectorElement(left, index, bytes), vectorElement(right, index, bytes)));
     }
     return result;
 }
