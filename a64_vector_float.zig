@@ -53,6 +53,39 @@ pub fn addFloatPairsVector(control: a64_state.FloatControl, mode: FloatNanMode64
     return result;
 }
 
+pub fn extremaFloatPairsVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue, maximum: bool, numeric: bool) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const pairs = if (double) @as(usize, 1) else if (full) @as(usize, 2) else @as(usize, 1);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < pairs) : (index += 1) {
+        const value = if (maximum)
+            if (numeric)
+                a64_float_minmax.floatMaxNumber(control, mode, double, vectorElement(left, index * 2, bytes), vectorElement(left, index * 2 + 1, bytes))
+            else
+                a64_float_minmax.floatMax(control, mode, double, vectorElement(left, index * 2, bytes), vectorElement(left, index * 2 + 1, bytes))
+        else if (numeric)
+            a64_float_minmax.floatMinNumber(control, mode, double, vectorElement(left, index * 2, bytes), vectorElement(left, index * 2 + 1, bytes))
+        else
+            a64_float_minmax.floatMin(control, mode, double, vectorElement(left, index * 2, bytes), vectorElement(left, index * 2 + 1, bytes));
+        setVectorElement(&result, index, bytes, value);
+    }
+    index = 0;
+    while (index < pairs) : (index += 1) {
+        const value = if (maximum)
+            if (numeric)
+                a64_float_minmax.floatMaxNumber(control, mode, double, vectorElement(right, index * 2, bytes), vectorElement(right, index * 2 + 1, bytes))
+            else
+                a64_float_minmax.floatMax(control, mode, double, vectorElement(right, index * 2, bytes), vectorElement(right, index * 2 + 1, bytes))
+        else if (numeric)
+            a64_float_minmax.floatMinNumber(control, mode, double, vectorElement(right, index * 2, bytes), vectorElement(right, index * 2 + 1, bytes))
+        else
+            a64_float_minmax.floatMin(control, mode, double, vectorElement(right, index * 2, bytes), vectorElement(right, index * 2 + 1, bytes));
+        setVectorElement(&result, index + pairs, bytes, value);
+    }
+    return result;
+}
+
 pub fn subtractFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
