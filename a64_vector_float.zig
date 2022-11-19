@@ -192,6 +192,10 @@ pub fn widenSingleFloatVector(control: a64_state.FloatControl, source: a64_state
     };
 }
 
+pub fn narrowDoubleFloatVector(control: a64_state.FloatControl, source: a64_state.VectorValue) u64 {
+    return @as(u64, a64_float_control.float64To32(control, source.low)) | (@as(u64, a64_float_control.float64To32(control, source.high)) << 32);
+}
+
 pub fn maximumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);

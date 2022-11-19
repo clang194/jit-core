@@ -434,6 +434,13 @@ pub const Core64Methods = struct {
             if (vector_float_widen) {
                 return;
             }
+            const vector_float_narrow = self.runVectorFloatNarrow(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_float_narrow) {
+                return;
+            }
             const vector_float = self.runVectorFloatBinary(word) catch |err| {
                 try self.raiseFault(err);
                 return;
