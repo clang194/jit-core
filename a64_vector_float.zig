@@ -1,4 +1,5 @@
 const a64_state = @import("a64_state.zig");
+const a64_float_control = @import("a64_float_control.zig");
 const a64_float_minmax = @import("a64_float_minmax.zig");
 const bits = @import("bits.zig");
 const float_control = @import("float_control.zig");
@@ -181,6 +182,14 @@ pub fn roundIntegralFloatVector(control: float_control.Control, status: *float_s
         setVectorElement(&result, index, bytes, rounded);
     }
     return result;
+}
+
+pub fn widenSingleFloatVector(control: a64_state.FloatControl, source: a64_state.VectorValue, upper: bool) a64_state.VectorValue {
+    const half = if (upper) source.high else source.low;
+    return a64_state.VectorValue{
+        .low = a64_float_control.float32To64(control, @intCast(u32, half)),
+        .high = a64_float_control.float32To64(control, @intCast(u32, half >> 32)),
+    };
 }
 
 pub fn maximumFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
