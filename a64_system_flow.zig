@@ -389,6 +389,7 @@ pub const Core64Methods = struct {
             0xd53b4420 => @as(u64, self.state.floatStatus()),
             0xd53bd040 => if (self.hooks.thread_value) |cell| cell.* else @as(u64, 0),
             0xd53bd060 => if (self.hooks.read_only_thread_value) |cell| cell.* else @as(u64, 0),
+            0xd53be000 => @as(u64, self.hooks.counter_frequency_value),
             0xd53be020 => if (self.hooks.counter_value) |callback| callback(self.hooks.context) else @as(u64, 0),
             else => return false,
         };
