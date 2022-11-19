@@ -163,7 +163,7 @@ pub const Core64Methods = struct {
         if (store) {
             const status_reg = regFromWord(word >> 16);
             const second_reg = regFromWord(word >> 10);
-            if (pair and (status_reg == data_reg or status_reg == second_reg)) {
+            if ((status_reg == data_reg or (pair and status_reg == second_reg)) and !self.hooks.resolve_unpredictable_cases) {
                 return error.Unpredictable;
             }
             if (status_reg == base_reg and base_reg != .sp) {
