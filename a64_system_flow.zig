@@ -351,8 +351,13 @@ pub const Core64Methods = struct {
 
     pub fn runBarrier(self: *Core64, word: u32) bool {
         const masked = word & 0xfffff0ff;
-        if (masked != 0xd503309f and masked != 0xd50330bf) {
+        if (masked != 0xd503309f and masked != 0xd50330bf and masked != 0xd50330df) {
             return false;
+        }
+        if (masked == 0xd50330df) {
+            if (self.hooks.instruction_barrier) |callback| {
+                callback(self.hooks.context);
+            }
         }
         self.state.pc +%= 4;
         return true;
