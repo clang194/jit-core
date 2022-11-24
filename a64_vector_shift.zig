@@ -160,6 +160,58 @@ pub fn variableSignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
     return result;
 }
 
+fn signedElementRightShift(element: u64, lane: u8, amount: u8) u64 {
+    const mask = ones(lane);
+    const sign = @as(u64, 1) << @intCast(u6, lane - 1);
+    if ((element & sign) == 0) {
+        return element >> @intCast(u6, amount);
+    }
+    return (element >> @intCast(u6, amount)) | (mask ^ (mask >> @intCast(u6, amount)));
+}
+
+pub fn variableRoundedUnsignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
+    const mask = ones(lane);
+    const limit = @as(i16, lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const amount = @as(i16, @bitCast(i8, @intCast(u8, (shifts >> position) & 0xff)));
+        const shifted = if (amount >= limit or amount < -limit)
+            @as(u64, 0)
+        else if (amount < 0) blk: {
+            const round = (element >> @intCast(u6, -amount - 1)) & 1;
+            if (amount == -limit) {
+                break :blk round;
+            }
+            break :blk ((element >> @intCast(u6, -amount)) +% round) & mask;
+        } else (element << @intCast(u6, amount)) & mask;
+        result |= shifted << position;
+    }
+    return result;
+}
+
+pub fn variableRoundedSignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
+    const mask = ones(lane);
+    const limit = @as(i16, lane);
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const amount = @as(i16, @bitCast(i8, @intCast(u8, (shifts >> position) & 0xff)));
+        const shifted = if (amount >= limit or amount <= -limit)
+            @as(u64, 0)
+        else if (amount < 0) blk: {
+            const round = (element >> @intCast(u6, -amount - 1)) & 1;
+            break :blk (signedElementRightShift(element, lane, @intCast(u8, -amount)) +% round) & mask;
+        } else (element << @intCast(u6, amount)) & mask;
+        result |= shifted << position;
+    }
+    return result;
+}
+
 pub fn widenShiftLeftVectorHalf(value: u64, lane: u8, amount: u6) a64_state.VectorValue {
     const output_lane = lane * 2;
     const input_mask = ones(lane);
