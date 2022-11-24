@@ -824,7 +824,7 @@ pub const Core64Methods = struct {
         const saturating_sub = masked == 0x5e202c00;
         const unsigned_saturating_add = masked == 0x7e200c00;
         const unsigned_saturating_sub = masked == 0x7e202c00;
-        if (!saturating_add and !saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e204400 and masked != 0x5e208400 and masked != 0x5e208c00 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e208400 and masked != 0x7e208c00) {
+        if (!saturating_add and !saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e204400 and masked != 0x5e205400 and masked != 0x5e208400 and masked != 0x5e208c00 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e205400 and masked != 0x7e208400 and masked != 0x7e208c00) {
             return false;
         }
 
@@ -873,8 +873,12 @@ pub const Core64Methods = struct {
             sharedBitVectorLanes(left, right, 64)
         else if (masked == 0x5e204400)
             variableSignedShiftVectorLanes(left, right, 64)
+        else if (masked == 0x5e205400)
+            variableRoundedSignedShiftVectorLanes(left, right, 64)
         else if (masked == 0x7e204400)
             variableUnsignedShiftVectorLanes(left, right, 64)
+        else if (masked == 0x7e205400)
+            variableRoundedUnsignedShiftVectorLanes(left, right, 64)
         else
             0;
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
@@ -1415,7 +1419,9 @@ pub const Core64Methods = struct {
     pub fn runVectorUnsignedShift(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed = masked == 0x0e204400;
-        if (!signed and masked != 0x2e204400) {
+        const rounded_signed = masked == 0x0e205400;
+        const rounded_unsigned = masked == 0x2e205400;
+        if (!signed and !rounded_signed and masked != 0x2e204400 and !rounded_unsigned) {
             return false;
         }
 
@@ -1429,8 +1435,8 @@ pub const Core64Methods = struct {
         const left = self.state.readVector(vectorRegFromWord(word >> 5));
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const result = a64_state.VectorValue{
-            .low = if (signed) variableSignedShiftVectorLanes(left.low, right.low, lane) else variableUnsignedShiftVectorLanes(left.low, right.low, lane),
-            .high = if (full) if (signed) variableSignedShiftVectorLanes(left.high, right.high, lane) else variableUnsignedShiftVectorLanes(left.high, right.high, lane) else 0,
+            .low = if (signed) variableSignedShiftVectorLanes(left.low, right.low, lane) else if (rounded_signed) variableRoundedSignedShiftVectorLanes(left.low, right.low, lane) else if (rounded_unsigned) variableRoundedUnsignedShiftVectorLanes(left.low, right.low, lane) else variableUnsignedShiftVectorLanes(left.low, right.low, lane),
+            .high = if (full) if (signed) variableSignedShiftVectorLanes(left.high, right.high, lane) else if (rounded_signed) variableRoundedSignedShiftVectorLanes(left.high, right.high, lane) else if (rounded_unsigned) variableRoundedUnsignedShiftVectorLanes(left.high, right.high, lane) else variableUnsignedShiftVectorLanes(left.high, right.high, lane) else 0,
         };
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
