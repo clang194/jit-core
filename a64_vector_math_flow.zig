@@ -28,6 +28,7 @@ usingnamespace @import("a64_vector_integer.zig");
 usingnamespace @import("a64_vector_float.zig");
 usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
+usingnamespace @import("a64_vector_dot.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
@@ -1028,6 +1029,26 @@ pub const Core64Methods = struct {
             setVectorElement(&result, index, bytes, value);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runVectorDotProduct(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbf20fc00;
+        const signed = masked == 0x0e009400;
+        if (!signed and masked != 0x2e009400) {
+            return false;
+        }
+
+        if (((word >> 22) & 3) != 2) {
+            return error.ReservedInstruction;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const target = self.state.readVector(vectorRegFromWord(word));
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        self.state.writeVector(vectorRegFromWord(word), accumulateByteDots(target, left, right, full, signed));
         self.state.pc +%= 4;
         return true;
     }
