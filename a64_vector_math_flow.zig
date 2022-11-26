@@ -1244,7 +1244,9 @@ pub const Core64Methods = struct {
         const paired = pattern == 0x0e20bc00;
         const wide_signed = pattern == 0x0e202800;
         const wide_unsigned = pattern == 0x2e202800;
-        const wide = wide_signed or wide_unsigned;
+        const accumulating_signed = pattern == 0x0e203800;
+        const accumulating_unsigned = pattern == 0x2e203800;
+        const wide = wide_signed or wide_unsigned or accumulating_signed or accumulating_unsigned;
         if (!paired and !wide) {
             return false;
         }
@@ -1259,7 +1261,16 @@ pub const Core64Methods = struct {
             const bytes = @as(usize, 1) << @intCast(u6, size);
             const total = if (full) @as(usize, 16) else @as(usize, 8);
             const source = self.state.readVector(vectorRegFromWord(word >> 5));
-            self.state.writeVector(vectorRegFromWord(word), pairwiseAddWideVector(source, bytes, total, wide_signed));
+            var result = pairwiseAddWideVector(source, bytes, total, wide_signed or accumulating_signed);
+            if (accumulating_signed or accumulating_unsigned) {
+                const target = self.state.readVector(vectorRegFromWord(word));
+                const lane = @as(u8, 16) << @intCast(u3, size);
+                result = a64_state.VectorValue{
+                    .low = addVectorLanes(target.low, result.low, lane),
+                    .high = if (full) addVectorLanes(target.high, result.high, lane) else 0,
+                };
+            }
+            self.state.writeVector(vectorRegFromWord(word), result);
             self.state.pc +%= 4;
             return true;
         }
