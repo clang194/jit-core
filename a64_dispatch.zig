@@ -69,6 +69,9 @@ pub const Core64Methods = struct {
             if (vector_structure_transfer) {
                 return;
             }
+            if (self.runVectorTableLookup(word)) {
+                return;
+            }
             const logical_immediate = self.runLogicalImmediate(word) catch |err| {
                 try self.raiseFault(err);
                 return;

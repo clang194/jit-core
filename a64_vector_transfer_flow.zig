@@ -61,6 +61,30 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorTableLookup(self: *Core64, word: u32) bool {
+        const masked = word & 0xbfe09c00;
+        const replacing = masked == 0x0e001000;
+        if (masked != 0x0e000000 and !replacing) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const total = if (full) @as(usize, 16) else @as(usize, 8);
+        const count = @as(usize, ((word >> 13) & 3) + 1);
+        const first = @intCast(usize, (word >> 5) & 0x1f);
+        var table: [4]a64_state.VectorValue = undefined;
+        var index: usize = 0;
+        while (index < 4) : (index += 1) {
+            table[index] = self.state.readVector(@intCast(u5, (first + index) & 0x1f));
+        }
+
+        const defaults = if (replacing) self.state.readVector(vectorRegFromWord(word)) else a64_state.VectorValue{ .low = 0, .high = 0 };
+        const indices = self.state.readVector(vectorRegFromWord(word >> 16));
+        self.state.writeVector(vectorRegFromWord(word), lookupVectorBytes(defaults, table, count, indices, total));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorDuplicate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfe0fc00;
         if (masked != 0x0e000400 and masked != 0x0e000c00) {
