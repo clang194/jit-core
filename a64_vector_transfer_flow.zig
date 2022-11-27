@@ -22,6 +22,7 @@ usingnamespace @import("a64_vector_integer.zig");
 usingnamespace @import("a64_vector_float.zig");
 usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
+usingnamespace @import("a64_vector_table.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
