@@ -27,3 +27,19 @@ pub fn accumulateByteDots(target: a64_state.VectorValue, left: a64_state.VectorV
     }
     return result;
 }
+
+pub fn accumulateByteDotsWithLane(target: a64_state.VectorValue, left: a64_state.VectorValue, right: a64_state.VectorValue, full: bool, lane_index: usize, signed: bool) a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 4) else @as(usize, 2);
+    var result = if (full) target else a64_state.VectorValue{ .low = target.low, .high = 0 };
+    var lane: usize = 0;
+    while (lane < lanes) : (lane += 1) {
+        var total: u64 = 0;
+        var part: usize = 0;
+        while (part < 4) : (part += 1) {
+            total +%= dotTerm(vectorElement(left, lane * 4 + part, 1), vectorElement(right, lane_index * 4 + part, 1), signed);
+        }
+        const prior = vectorElement(result, lane, 4);
+        setVectorElement(&result, lane, 4, prior +% total);
+    }
+    return result;
+}

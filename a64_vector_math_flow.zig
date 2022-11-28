@@ -1053,6 +1053,28 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorDotProductByElement(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xbf00f400;
+        const signed = masked == 0x0f00e000;
+        if (!signed and masked != 0x2f00e000) {
+            return false;
+        }
+
+        if (((word >> 22) & 3) != 2) {
+            return error.ReservedInstruction;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const lane_index = @intCast(usize, ((word >> 21) & 1) | (((word >> 11) & 1) << 1));
+        const element_reg = ((word >> 16) & 0xf) | (((word >> 20) & 1) << 4);
+        const target = self.state.readVector(vectorRegFromWord(word));
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(element_reg));
+        self.state.writeVector(vectorRegFromWord(word), accumulateByteDotsWithLane(target, left, right, full, lane_index, signed));
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorFloatMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf00f400;
         const multiply_only = masked == 0x0f009000;
