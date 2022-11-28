@@ -176,6 +176,49 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarSaturatingNarrow(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xff3ffc00;
+        const signed_unsigned = masked == 0x7e212800;
+        const signed_signed = masked == 0x5e214800;
+        const unsigned = masked == 0x7e214800;
+        if (!signed_unsigned and !signed_signed and !unsigned) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const target_bytes = @as(usize, 1) << size;
+        const source_bits = @intCast(u8, target_bytes * 16);
+        const source = a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word >> 5)).low & ones(source_bits), .high = 0 };
+        var narrowed_value: u64 = 0;
+        var saturated = false;
+        if (signed_unsigned) {
+            const narrowed = signedSaturatingNarrowUnsignedVectorLanes(source, target_bytes, 0, false);
+            narrowed_value = narrowed.value;
+            saturated = narrowed.saturated;
+        } else if (signed_signed) {
+            const narrowed = signedSaturatingNarrowSignedVectorLanes(source, target_bytes, 0, false);
+            narrowed_value = narrowed.value;
+            saturated = narrowed.saturated;
+        } else {
+            const narrowed = unsignedSaturatingNarrowVectorLanes(source, target_bytes, 0, false);
+            narrowed_value = narrowed.value;
+            saturated = narrowed.saturated;
+        }
+
+        if (saturated) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
+        }
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = narrowed_value, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorCount(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf3ffc00) != 0x0e205800) {
             return false;
