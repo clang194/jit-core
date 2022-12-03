@@ -17,21 +17,21 @@ usingnamespace @import("arm_text_common_format.zig");
 
 pub fn statusMaskName(word: u32) TextError![]const u8 {
     return switch ((word >> 16) & 0xf) {
-        0x1 => "m",
-        0x2 => "e",
-        0x3 => "em",
-        0x4 => "g",
-        0x5 => "gm",
-        0x6 => "ge",
-        0x7 => "gem",
-        0x8 => "nzcvq",
-        0x9 => "nzcvqm",
-        0xa => "nzcvqe",
-        0xb => "nzcvqem",
-        0xc => "nzcvqg",
-        0xd => "nzcvqgm",
-        0xe => "nzcvqge",
-        0xf => "nzcvqgem",
+        0x1 => "c",
+        0x2 => "x",
+        0x3 => "cx",
+        0x4 => "s",
+        0x5 => "cs",
+        0x6 => "xs",
+        0x7 => "cxs",
+        0x8 => "f",
+        0x9 => "cf",
+        0xa => "xf",
+        0xb => "cxf",
+        0xc => "sf",
+        0xd => "csf",
+        0xe => "xsf",
+        0xf => "cxsf",
         else => error.UnknownInstruction,
     };
 }
@@ -45,7 +45,7 @@ pub fn formatStatusRead(buf: []u8, word: u32, cond: u4) TextError![]u8 {
 }
 
 pub fn formatStatusWriteImmediate(buf: []u8, word: u32, cond: u4) TextError![]u8 {
-    return std.fmt.bufPrint(buf, "msr{} apsr_{}, #{}", .{
+    return std.fmt.bufPrint(buf, "msr{} cpsr_{}, #{}", .{
         condName(cond),
         try statusMaskName(word),
         arm_exec.expandArmImmediate(@intCast(u8, (word >> 8) & 0xf), @intCast(u8, word & 0xff)),
@@ -54,7 +54,7 @@ pub fn formatStatusWriteImmediate(buf: []u8, word: u32, cond: u4) TextError![]u8
 
 pub fn formatStatusWriteRegister(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     const source = armReg(word);
-    return std.fmt.bufPrint(buf, "msr{} apsr_{}, {}", .{
+    return std.fmt.bufPrint(buf, "msr{} cpsr_{}, {}", .{
         condName(cond),
         try statusMaskName(word),
         arm_state.regName(source),
