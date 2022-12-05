@@ -334,6 +334,7 @@ pub const HostHooks = struct {
     exception: ?fn (u32, FaultKind, *MachineState, ?*anyopaque) void,
     coprocessors: [16]?CoprocessorHooks,
     cycles: CycleHooks,
+    resolve_unpredictable_cases: bool,
 
     pub fn empty() HostHooks {
         return HostHooks{
@@ -345,6 +346,7 @@ pub const HostHooks = struct {
             .exception = null,
             .coprocessors = [_]?CoprocessorHooks{null} ** 16,
             .cycles = CycleHooks.empty(),
+            .resolve_unpredictable_cases = false,
         };
     }
 };
