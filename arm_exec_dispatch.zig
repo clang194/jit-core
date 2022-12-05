@@ -637,8 +637,13 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     }
 
     if (isBreakpoint(word)) {
-        if (armCondition(word).? != .al) {
+        const code = armCondition(word).?;
+        if (code != .al and !hooks.resolve_unpredictable_cases) {
             return error.Unpredictable;
+        }
+        if (!state.conditionHolds(code)) {
+            state.write(.pc, pc + 4);
+            return;
         }
         if (hooks.exception) |callback| {
             callback(pc, .breakpoint, state, hooks.context);
