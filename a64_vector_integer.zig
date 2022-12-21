@@ -196,6 +196,34 @@ pub fn absoluteVectorLanes(value: u64, lane: u8) u64 {
     return result;
 }
 
+pub fn signedSaturatingAbsoluteVectorLanes(value: u64, lane: u8) SaturatingVectorResult {
+    const sign = @as(u64, 1) << @intCast(u6, lane - 1);
+    const high = sign - 1;
+    if (lane == 64) {
+        if (value == sign) {
+            return SaturatingVectorResult{ .value = high, .saturated = true };
+        }
+        return SaturatingVectorResult{
+            .value = if ((value & sign) != 0) 0 -% value else value,
+            .saturated = false,
+        };
+    }
+
+    const mask = ones(lane);
+    var result = SaturatingVectorResult{ .value = 0, .saturated = false };
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const element = (value >> amount) & mask;
+        const magnitude = if (element == sign) blk: {
+            result.saturated = true;
+            break :blk high;
+        } else if ((element & sign) != 0) 0 -% element else element;
+        result.value |= (magnitude & mask) << amount;
+    }
+    return result;
+}
+
 pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return left *% right;
