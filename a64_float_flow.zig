@@ -234,13 +234,8 @@ pub const Core64Methods = struct {
         }
         const double = mode == 1;
         const fraction = @as(u8, 64) - scale;
-        const factor = if (double)
-            (@as(u64, fraction + 1023) << 52)
-        else
-            @as(u64, @as(u32, fraction + 127) << 23);
-        const control = self.state.floatControl();
-        const scaled = floatMul(control, self.hooks.float_nan_mode, double, vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (double) @as(usize, 8) else @as(usize, 4)), factor);
-        const result = try fixedFromFloat(self, double, scaled, if (wide) @as(usize, 64) else @as(usize, 32), 0, masked == 0x1e190000, .zero);
+        const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (double) @as(usize, 8) else @as(usize, 4));
+        const result = try fixedFromFloat(self, double, input, if (wide) @as(usize, 64) else @as(usize, 32), fraction, masked == 0x1e190000, .zero);
         self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
