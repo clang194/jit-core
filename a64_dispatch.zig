@@ -409,6 +409,13 @@ pub const Core64Methods = struct {
             if (scalar_vector_absolute) {
                 return;
             }
+            const scalar_saturating_absolute = self.runScalarSaturatingAbsolute(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_saturating_absolute) {
+                return;
+            }
             const vector_negate = self.runVectorNegate(word) catch |err| {
                 try self.raiseFault(err);
                 return;

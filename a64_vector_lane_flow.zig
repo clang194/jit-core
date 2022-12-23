@@ -482,4 +482,22 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
+
+    pub fn runScalarSaturatingAbsolute(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff3ffc00) != 0x5e207800) {
+            return false;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, (word >> 22) & 3);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low & ones(lane);
+        const result = signedSaturatingAbsoluteVectorLanes(source, lane);
+        if (result.saturated) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
+        }
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result.value, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
 };
