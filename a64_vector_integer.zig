@@ -224,6 +224,30 @@ pub fn signedSaturatingAbsoluteVectorLanes(value: u64, lane: u8) SaturatingVecto
     return result;
 }
 
+pub fn signedSaturatingDoublingMultiplyHighVectorLanes(left: u64, right: u64, lane: u8) SaturatingVectorResult {
+    const mask = ones(lane);
+    const highest = (@as(i128, 1) << @intCast(u7, lane - 1)) - 1;
+    const lowest = -(@as(i128, 1) << @intCast(u7, lane - 1));
+    var result = SaturatingVectorResult{ .value = 0, .saturated = false };
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_lane = @intCast(i128, @bitCast(i64, signExtendRuntime((left >> amount) & mask, @intCast(u6, lane))));
+        const right_lane = @intCast(i128, @bitCast(i64, signExtendRuntime((right >> amount) & mask, @intCast(u6, lane))));
+        const doubled = left_lane * right_lane * 2;
+        var lane_result = doubled >> @intCast(u7, lane);
+        if (lane_result > highest) {
+            lane_result = highest;
+            result.saturated = true;
+        } else if (lane_result < lowest) {
+            lane_result = lowest;
+            result.saturated = true;
+        }
+        result.value |= (@bitCast(u64, @intCast(i64, lane_result)) & mask) << amount;
+    }
+    return result;
+}
+
 pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return left *% right;
