@@ -940,12 +940,16 @@ pub const Core64Methods = struct {
         const signed_saturating_sub = masked == 0x0e202c00;
         const unsigned_saturating_add = masked == 0x2e200c00;
         const unsigned_saturating_sub = masked == 0x2e202c00;
-        if (!signed_saturating_add and !signed_saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400 and masked != 0x2e209c00) {
+        const signed_saturating_multiply_high = masked == 0x0e20b400;
+        if (!signed_saturating_add and !signed_saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and !signed_saturating_multiply_high and masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400 and masked != 0x2e209c00) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const size = @intCast(u2, (word >> 22) & 3);
+        if (signed_saturating_multiply_high and (size == 0 or size == 3)) {
+            return error.ReservedInstruction;
+        }
         if (masked == 0x2e209c00 and size != 0) {
             return error.ReservedInstruction;
         }
@@ -959,6 +963,18 @@ pub const Core64Methods = struct {
         if (signed_saturating_add or signed_saturating_sub or unsigned_saturating_add or unsigned_saturating_sub) {
             const low = saturatingVectorLanes(left.low, right.low, lane, signed_saturating_add or signed_saturating_sub, signed_saturating_add or unsigned_saturating_add);
             const high = if (full) saturatingVectorLanes(left.high, right.high, lane, signed_saturating_add or signed_saturating_sub, signed_saturating_add or unsigned_saturating_add) else SaturatingVectorResult{ .value = 0, .saturated = false };
+            if (low.saturated or high.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = low.value, .high = high.value });
+            self.state.pc +%= 4;
+            return true;
+        }
+        if (signed_saturating_multiply_high) {
+            const low = signedSaturatingDoublingMultiplyHighVectorLanes(left.low, right.low, lane);
+            const high = if (full) signedSaturatingDoublingMultiplyHighVectorLanes(left.high, right.high, lane) else SaturatingVectorResult{ .value = 0, .saturated = false };
             if (low.saturated or high.saturated) {
                 var status = float_status.FloatStatus.init(self.state.floatStatus());
                 status.setSaturated(true);
