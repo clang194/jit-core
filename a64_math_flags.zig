@@ -107,6 +107,22 @@ pub fn signedSaturatedSub(width: u8, left: u64, right: u64) SaturatingIntegerRes
     return SaturatingIntegerResult{ .value = signedWidthBits(result, width), .saturated = false };
 }
 
+pub fn signedSaturatedDoublingMultiplyHigh(width: u8, left: u64, right: u64) SaturatingIntegerResult {
+    const left_value = signedWidthValue(left, width);
+    const right_value = signedWidthValue(right, width);
+    const highest = (@as(i128, 1) << @intCast(u7, width - 1)) - 1;
+    const lowest = -(@as(i128, 1) << @intCast(u7, width - 1));
+    const doubled = left_value * right_value * 2;
+    const result = doubled >> @intCast(u7, width);
+    if (result > highest) {
+        return SaturatingIntegerResult{ .value = signedWidthBits(highest, width), .saturated = true };
+    }
+    if (result < lowest) {
+        return SaturatingIntegerResult{ .value = signedWidthBits(lowest, width), .saturated = true };
+    }
+    return SaturatingIntegerResult{ .value = signedWidthBits(result, width), .saturated = false };
+}
+
 pub fn unsignedSaturatedAdd(width: u8, left: u64, right: u64) SaturatingIntegerResult {
     const mask = widthMask(width);
     const result = @as(u128, left & mask) + @as(u128, right & mask);
