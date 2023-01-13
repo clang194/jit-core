@@ -1020,9 +1020,10 @@ pub const Core64Methods = struct {
     pub fn runVectorMultiplyAddByElement(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf00f400;
         const multiply_only = masked == 0x0f008000;
+        const saturating_multiply_high = masked == 0x0f00c000;
         const accumulate = masked == 0x2f000000;
         const subtracting = masked == 0x2f004000;
-        if (!multiply_only and !accumulate and !subtracting) {
+        if (!multiply_only and !saturating_multiply_high and !accumulate and !subtracting) {
             return false;
         }
 
@@ -1049,16 +1050,27 @@ pub const Core64Methods = struct {
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const prior = self.state.readVector(vectorRegFromWord(word));
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var saturated_any = false;
         var index: usize = 0;
         while (index < total / bytes) : (index += 1) {
-            const product = vectorElement(source, index, bytes) *% element;
-            const value = if (accumulate)
-                vectorElement(prior, index, bytes) +% product
-            else if (subtracting)
-                vectorElement(prior, index, bytes) -% product
+            const left = vectorElement(source, index, bytes);
+            const product = if (saturating_multiply_high)
+                signedSaturatedDoublingMultiplyHigh(@intCast(u8, bytes * 8), left, element)
             else
-                product;
+                SaturatingIntegerResult{ .value = left *% element, .saturated = false };
+            const value = if (accumulate)
+                vectorElement(prior, index, bytes) +% product.value
+            else if (subtracting)
+                vectorElement(prior, index, bytes) -% product.value
+            else
+                product.value;
+            saturated_any = saturated_any or product.saturated;
             setVectorElement(&result, index, bytes, value);
+        }
+        if (saturated_any) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
         }
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
