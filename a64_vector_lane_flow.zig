@@ -466,6 +466,31 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorSaturatingNegate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x2e207800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3 and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const low = signedSaturatingNegateVectorLanes(source.low, lane);
+        const high = if (full) signedSaturatingNegateVectorLanes(source.high, lane) else SaturatingVectorResult{ .value = 0, .saturated = false };
+        if (low.saturated or high.saturated) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
+        }
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = low.value, .high = high.value });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarVectorAbsolute(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xff3ffc00) != 0x5e20b800) {
             return false;
@@ -479,6 +504,24 @@ pub const Core64Methods = struct {
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const result = if (@bitCast(i64, source) < 0) 0 -% source else source;
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runScalarSaturatingNegate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xff3ffc00) != 0x7e207800) {
+            return false;
+        }
+
+        const lane = @as(u8, 8) << @intCast(u3, (word >> 22) & 3);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low & ones(lane);
+        const result = signedSaturatingNegateVectorLanes(source, lane);
+        if (result.saturated) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
+        }
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result.value, .high = 0 });
         self.state.pc +%= 4;
         return true;
     }
