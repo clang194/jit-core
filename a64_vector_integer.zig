@@ -224,6 +224,34 @@ pub fn signedSaturatingAbsoluteVectorLanes(value: u64, lane: u8) SaturatingVecto
     return result;
 }
 
+pub fn signedSaturatingNegateVectorLanes(value: u64, lane: u8) SaturatingVectorResult {
+    const sign = @as(u64, 1) << @intCast(u6, lane - 1);
+    const high = sign - 1;
+    if (lane == 64) {
+        if (value == sign) {
+            return SaturatingVectorResult{ .value = high, .saturated = true };
+        }
+        return SaturatingVectorResult{
+            .value = 0 -% value,
+            .saturated = false,
+        };
+    }
+
+    const mask = ones(lane);
+    var result = SaturatingVectorResult{ .value = 0, .saturated = false };
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const element = (value >> amount) & mask;
+        const negated = if (element == sign) blk: {
+            result.saturated = true;
+            break :blk high;
+        } else 0 -% element;
+        result.value |= (negated & mask) << amount;
+    }
+    return result;
+}
+
 pub fn signedSaturatingDoublingMultiplyHighVectorLanes(left: u64, right: u64, lane: u8) SaturatingVectorResult {
     const mask = ones(lane);
     const highest = (@as(i128, 1) << @intCast(u7, lane - 1)) - 1;
