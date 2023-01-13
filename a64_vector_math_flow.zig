@@ -1217,6 +1217,42 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarMultiplyHighByElement(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0xff00f400;
+        if (masked != 0x5f00c000) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 0 or size == 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const bytes = @as(usize, 1) << size;
+        const high = @intCast(usize, (word >> 11) & 1);
+        const left_index = @intCast(usize, (word >> 21) & 1);
+        const middle_index = @intCast(usize, (word >> 20) & 1);
+        const lane_index = if (size == 1)
+            (high << 2) | (left_index << 1) | middle_index
+        else
+            (high << 1) | left_index;
+        const element_reg = if (size == 1)
+            (word >> 16) & 0xf
+        else
+            ((word >> 16) & 0xf) | (((word >> 20) & 1) << 4);
+        const source = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, bytes);
+        const result = signedSaturatedDoublingMultiplyHigh(@intCast(u8, bytes * 8), source, element);
+        if (result.saturated) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            status.setSaturated(true);
+            self.state.writeFloatStatus(status.raw());
+        }
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result.value, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorWideningArithmetic(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed_difference = masked == 0x0e205000 or masked == 0x0e207000;
