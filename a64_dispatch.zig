@@ -535,6 +535,13 @@ pub const Core64Methods = struct {
             if (scalar_float_compare) {
                 return;
             }
+            const vector_unsigned_reciprocal_estimate = self.runVectorUnsignedReciprocalEstimate(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_unsigned_reciprocal_estimate) {
+                return;
+            }
             const vector_reciprocal_estimate = self.runVectorReciprocalEstimate(word) catch |err| {
                 try self.raiseFault(err);
                 return;
