@@ -151,6 +151,17 @@ pub fn reciprocalEstimateFloatVector(control: float_control.Control, status: *fl
     return result;
 }
 
+pub fn reciprocalEstimateUnsignedVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const value = @intCast(u32, vectorElement(source, index, 4));
+        setVectorElement(&result, index, 4, float_estimate.unsignedReciprocalEstimate32(value));
+    }
+    return result;
+}
+
 pub fn reciprocalStepFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);

@@ -26,6 +26,16 @@ fn reciprocalByte(value: u64) u8 {
     return @intCast(u8, (reciprocal + 1) / 2);
 }
 
+pub fn unsignedReciprocalEstimate32(value: u32) u32 {
+    if ((value & 0x80000000) == 0) {
+        return 0xffffffff;
+    }
+
+    const input = (value >> 23) & 0x1ff;
+    const estimate = @as(u32, reciprocalByte(input));
+    return (0x100 | estimate) << 23;
+}
+
 fn reciprocalOverflows(negative: bool, control: float_control.Control) bool {
     return switch (control.rounding()) {
         .nearest => true,
