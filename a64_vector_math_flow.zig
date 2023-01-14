@@ -452,6 +452,24 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorUnsignedInverseRootEstimate(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfbffc00) != 0x2ea1c800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const wide = (word & 0x00400000) != 0;
+        if (wide) {
+            return error.ReservedInstruction;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = inverseRootEstimateUnsignedVector(full, source);
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorReciprocalEstimate(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbfbffc00) != 0x2e21d800) {
             return false;
