@@ -1114,7 +1114,9 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorWideningMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbf00f400) != 0x0f00a000) {
+        const masked = word & 0xbf00f400;
+        const signed = masked == 0x0f00a000;
+        if (!signed and masked != 0x2f00a000) {
             return false;
         }
 
@@ -1140,15 +1142,16 @@ pub const Core64Methods = struct {
             ((word >> 16) & 0xf) | (((word >> 20) & 1) << 4);
         const source_half = if (upper) self.state.readVector(vectorRegFromWord(word >> 5)).high else self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, source_bytes);
-        const signed_element = @bitCast(i64, signExtendRuntime(element, @intCast(u6, source_bits)));
+        const right = if (signed) signExtendRuntime(element, @intCast(u6, source_bits)) else element;
         const source_mask = ones(source_bits);
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
         var index: usize = 0;
         while (index < 8 / source_bytes) : (index += 1) {
             const shift = @intCast(u6, index * source_bytes * 8);
             const source = (source_half >> shift) & source_mask;
-            const signed_source = @bitCast(i64, signExtendRuntime(source, @intCast(u6, source_bits)));
-            setVectorElement(&result, index, target_bytes, @bitCast(u64, signed_source *% signed_element));
+            const left = if (signed) signExtendRuntime(source, @intCast(u6, source_bits)) else source;
+            const product = if (signed) @bitCast(u64, @bitCast(i64, left) *% @bitCast(i64, right)) else left *% right;
+            setVectorElement(&result, index, target_bytes, product);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
