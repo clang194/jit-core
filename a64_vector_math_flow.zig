@@ -1115,8 +1115,9 @@ pub const Core64Methods = struct {
 
     pub fn runVectorWideningMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf00f400;
-        const signed = masked == 0x0f00a000;
-        if (!signed and masked != 0x2f00a000) {
+        const signed = masked == 0x0f002000 or masked == 0x0f006000 or masked == 0x0f00a000;
+        const unsigned = masked == 0x2f002000 or masked == 0x2f006000 or masked == 0x2f00a000;
+        if (!signed and !unsigned) {
             return false;
         }
 
@@ -1144,6 +1145,9 @@ pub const Core64Methods = struct {
         const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, source_bytes);
         const right = if (signed) signExtendRuntime(element, @intCast(u6, source_bits)) else element;
         const source_mask = ones(source_bits);
+        const prior = self.state.readVector(vectorRegFromWord(word));
+        const accumulating = masked == 0x0f002000 or masked == 0x2f002000;
+        const subtracting = masked == 0x0f006000 or masked == 0x2f006000;
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
         var index: usize = 0;
         while (index < 8 / source_bytes) : (index += 1) {
@@ -1151,7 +1155,13 @@ pub const Core64Methods = struct {
             const source = (source_half >> shift) & source_mask;
             const left = if (signed) signExtendRuntime(source, @intCast(u6, source_bits)) else source;
             const product = if (signed) @bitCast(u64, @bitCast(i64, left) *% @bitCast(i64, right)) else left *% right;
-            setVectorElement(&result, index, target_bytes, product);
+            const value = if (accumulating)
+                vectorElement(prior, index, target_bytes) +% product
+            else if (subtracting)
+                vectorElement(prior, index, target_bytes) -% product
+            else
+                product;
+            setVectorElement(&result, index, target_bytes, value);
         }
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
