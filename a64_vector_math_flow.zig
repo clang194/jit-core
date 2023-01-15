@@ -1113,6 +1113,48 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorWideningMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf00f400) != 0x0f00a000) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 0 or size == 3) {
+            return error.UnallocatedEncoding;
+        }
+
+        const upper = (word & 0x40000000) != 0;
+        const source_bytes = @as(usize, 1) << size;
+        const target_bytes = source_bytes * 2;
+        const source_bits = @intCast(u8, source_bytes * 8);
+        const high = @intCast(usize, (word >> 11) & 1);
+        const left_index = @intCast(usize, (word >> 21) & 1);
+        const middle_index = @intCast(usize, (word >> 20) & 1);
+        const lane_index = if (size == 1)
+            (high << 2) | (left_index << 1) | middle_index
+        else
+            (high << 1) | left_index;
+        const element_reg = if (size == 1)
+            (word >> 16) & 0xf
+        else
+            ((word >> 16) & 0xf) | (((word >> 20) & 1) << 4);
+        const source_half = if (upper) self.state.readVector(vectorRegFromWord(word >> 5)).high else self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, source_bytes);
+        const signed_element = @bitCast(i64, signExtendRuntime(element, @intCast(u6, source_bits)));
+        const source_mask = ones(source_bits);
+        var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < 8 / source_bytes) : (index += 1) {
+            const shift = @intCast(u6, index * source_bytes * 8);
+            const source = (source_half >> shift) & source_mask;
+            const signed_source = @bitCast(i64, signExtendRuntime(source, @intCast(u6, source_bits)));
+            setVectorElement(&result, index, target_bytes, @bitCast(u64, signed_source *% signed_element));
+        }
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorDotProduct(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed = masked == 0x0e009400;

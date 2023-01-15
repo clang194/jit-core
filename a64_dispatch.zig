@@ -682,6 +682,13 @@ pub const Core64Methods = struct {
             if (vector_multiply_add_element) {
                 return;
             }
+            const vector_widening_element_multiply = self.runVectorWideningMultiplyByElement(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_widening_element_multiply) {
+                return;
+            }
             const vector_dot_product = self.runVectorDotProduct(word) catch |err| {
                 try self.raiseFault(err);
                 return;
