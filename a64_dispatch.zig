@@ -416,6 +416,13 @@ pub const Core64Methods = struct {
             if (vector_signed_saturating_accumulate_unsigned) {
                 return;
             }
+            const vector_unsigned_saturating_accumulate_signed = self.runVectorUnsignedSaturatingAccumulateSigned(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_unsigned_saturating_accumulate_signed) {
+                return;
+            }
             const scalar_vector_absolute = self.runScalarVectorAbsolute(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -428,6 +435,13 @@ pub const Core64Methods = struct {
                 return;
             };
             if (scalar_signed_saturating_accumulate_unsigned) {
+                return;
+            }
+            const scalar_unsigned_saturating_accumulate_signed = self.runScalarUnsignedSaturatingAccumulateSigned(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_unsigned_saturating_accumulate_signed) {
                 return;
             }
             const scalar_saturating_absolute = self.runScalarSaturatingAbsolute(word) catch |err| {
