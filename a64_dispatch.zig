@@ -409,11 +409,25 @@ pub const Core64Methods = struct {
             if (vector_saturating_negate) {
                 return;
             }
+            const vector_signed_saturating_accumulate_unsigned = self.runVectorSignedSaturatingAccumulateUnsigned(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_signed_saturating_accumulate_unsigned) {
+                return;
+            }
             const scalar_vector_absolute = self.runScalarVectorAbsolute(word) catch |err| {
                 try self.raiseFault(err);
                 return;
             };
             if (scalar_vector_absolute) {
+                return;
+            }
+            const scalar_signed_saturating_accumulate_unsigned = self.runScalarSignedSaturatingAccumulateUnsigned(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_signed_saturating_accumulate_unsigned) {
                 return;
             }
             const scalar_saturating_absolute = self.runScalarSaturatingAbsolute(word) catch |err| {
