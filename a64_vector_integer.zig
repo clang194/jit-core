@@ -1,12 +1,26 @@
 const a64_state = @import("a64_state.zig");
+const a64_immediate_vectors = @import("a64_immediate_vectors.zig");
+const a64_logic_masks = @import("a64_logic_masks.zig");
 const math_flags = @import("a64_math_flags.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const ones = a64_logic_masks.ones;
+const signExtendRuntime = a64_immediate_vectors.signExtendRuntime;
 
 pub const SaturatingVectorResult = struct {
     value: u64,
     saturated: bool,
+};
+
+pub const LaneProductParts = struct {
+    high: u64,
+    low: u64,
+};
+
+pub const VectorProductParts = struct {
+    high: a64_state.VectorValue,
+    low: a64_state.VectorValue,
 };
 
 pub fn addVectorLanes(left: u64, right: u64, lane: u8) u64 {
@@ -342,6 +356,34 @@ pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
         result |= (product & mask) << amount;
     }
     return result;
+}
+
+pub fn splitLaneProducts64(left: u64, right: u64, lane: u8, signed: bool) LaneProductParts {
+    const mask = a64_logic_masks.ones(lane);
+    var result = LaneProductParts{ .high = 0, .low = 0 };
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const amount = @intCast(u6, shift);
+        const left_raw = (left >> amount) & mask;
+        const right_raw = (right >> amount) & mask;
+        const product = if (signed) blk: {
+            const left_signed = @intCast(i128, @bitCast(i64, a64_immediate_vectors.signExtendRuntime(left_raw, @intCast(u6, lane))));
+            const right_signed = @intCast(i128, @bitCast(i64, a64_immediate_vectors.signExtendRuntime(right_raw, @intCast(u6, lane))));
+            break :blk @bitCast(u128, left_signed * right_signed);
+        } else @intCast(u128, left_raw) * @intCast(u128, right_raw);
+        result.low |= @intCast(u64, product & @intCast(u128, mask)) << amount;
+        result.high |= @intCast(u64, (product >> @intCast(u7, lane)) & @intCast(u128, mask)) << amount;
+    }
+    return result;
+}
+
+pub fn splitLaneProductsVector(left: a64_state.VectorValue, right: a64_state.VectorValue, full: bool, lane: u8, signed: bool) VectorProductParts {
+    const lower = splitLaneProducts64(left.low, right.low, lane, signed);
+    const upper = if (full) splitLaneProducts64(left.high, right.high, lane, signed) else LaneProductParts{ .high = 0, .low = 0 };
+    return VectorProductParts{
+        .high = a64_state.VectorValue{ .low = lower.high, .high = upper.high },
+        .low = a64_state.VectorValue{ .low = lower.low, .high = upper.low },
+    };
 }
 
 pub fn countVectorBytes(value: u64) u64 {
