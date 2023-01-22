@@ -993,13 +993,14 @@ pub const Core64Methods = struct {
         const unsigned_saturating_add = masked == 0x2e200c00;
         const unsigned_saturating_sub = masked == 0x2e202c00;
         const signed_saturating_multiply_high = masked == 0x0e20b400;
-        if (!signed_saturating_add and !signed_saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and !signed_saturating_multiply_high and masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400 and masked != 0x2e209c00) {
+        const signed_rounding_saturating_multiply_high = masked == 0x2e20b400;
+        if (!signed_saturating_add and !signed_saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and !signed_saturating_multiply_high and !signed_rounding_saturating_multiply_high and masked != 0x0e200400 and masked != 0x0e201400 and masked != 0x0e202400 and masked != 0x0e208400 and masked != 0x0e209400 and masked != 0x0e209c00 and masked != 0x2e200400 and masked != 0x2e201400 and masked != 0x2e202400 and masked != 0x2e208400 and masked != 0x2e209400 and masked != 0x2e209c00) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const size = @intCast(u2, (word >> 22) & 3);
-        if (signed_saturating_multiply_high and (size == 0 or size == 3)) {
+        if ((signed_saturating_multiply_high or signed_rounding_saturating_multiply_high) and (size == 0 or size == 3)) {
             return error.ReservedInstruction;
         }
         if (masked == 0x2e209c00 and size != 0) {
@@ -1033,6 +1034,21 @@ pub const Core64Methods = struct {
                 self.state.writeFloatStatus(status.raw());
             }
             self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = low.value, .high = high.value });
+            self.state.pc +%= 4;
+            return true;
+        }
+        if (signed_rounding_saturating_multiply_high) {
+            const parts = signedSaturatingDoublingProductPartsVector(left, right, full, lane);
+            if (parts.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            const rounded = a64_state.VectorValue{
+                .low = addVectorLanes(parts.high.low, shiftRightVectorLanes(parts.low.low, lane, lane - 1), lane),
+                .high = if (full) addVectorLanes(parts.high.high, shiftRightVectorLanes(parts.low.high, lane, lane - 1), lane) else 0,
+            };
+            self.state.writeVector(vectorRegFromWord(word), rounded);
             self.state.pc +%= 4;
             return true;
         }
