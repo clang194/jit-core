@@ -35,6 +35,11 @@ pub const VectorSaturatingProductParts = struct {
     saturated: bool,
 };
 
+pub const WideSaturatingVectorResult = struct {
+    value: a64_state.VectorValue,
+    saturated: bool,
+};
+
 pub fn addVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return left +% right;
@@ -368,6 +373,42 @@ pub fn signedSaturatingDoublingProductPartsVector(left: a64_state.VectorValue, r
         .low = a64_state.VectorValue{ .low = lower.low, .high = upper.low },
         .saturated = lower.saturated or upper.saturated,
     };
+}
+
+pub fn signedSaturatingDoublingLongProductHalf(left: u64, right: u64, lane: u8) WideSaturatingVectorResult {
+    const mask = ones(lane);
+    const target_bits = lane * 2;
+    const highest = (@as(i128, 1) << @intCast(u7, target_bits - 1)) - 1;
+    const lowest = -(@as(i128, 1) << @intCast(u7, target_bits - 1));
+    var result = WideSaturatingVectorResult{ .value = a64_state.VectorValue{ .low = 0, .high = 0 }, .saturated = false };
+    var index: u8 = 0;
+    while (index < 64 / lane) : (index += 1) {
+        const source_shift = @intCast(u6, index * lane);
+        const left_lane = @intCast(i128, @bitCast(i64, signExtendRuntime((left >> source_shift) & mask, @intCast(u6, lane))));
+        const right_lane = @intCast(i128, @bitCast(i64, signExtendRuntime((right >> source_shift) & mask, @intCast(u6, lane))));
+        var doubled = left_lane * right_lane * 2;
+        if (doubled > highest) {
+            doubled = highest;
+            result.saturated = true;
+        } else if (doubled < lowest) {
+            doubled = lowest;
+            result.saturated = true;
+        }
+        const output = @bitCast(u64, @intCast(i64, doubled));
+        if (lane == 16) {
+            const shift = @intCast(u6, index * 32);
+            if (index < 2) {
+                result.value.low |= (output & 0xffffffff) << shift;
+            } else {
+                result.value.high |= (output & 0xffffffff) << @intCast(u6, (index - 2) * 32);
+            }
+        } else if (index == 0) {
+            result.value.low = output;
+        } else {
+            result.value.high = output;
+        }
+    }
+    return result;
 }
 
 pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
