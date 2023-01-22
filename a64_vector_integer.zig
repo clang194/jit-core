@@ -23,6 +23,18 @@ pub const VectorProductParts = struct {
     low: a64_state.VectorValue,
 };
 
+pub const SaturatingProductParts = struct {
+    high: u64,
+    low: u64,
+    saturated: bool,
+};
+
+pub const VectorSaturatingProductParts = struct {
+    high: a64_state.VectorValue,
+    low: a64_state.VectorValue,
+    saturated: bool,
+};
+
 pub fn addVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {
         return left +% right;
@@ -319,16 +331,22 @@ pub fn signedSaturatingNegateVectorLanes(value: u64, lane: u8) SaturatingVectorR
 }
 
 pub fn signedSaturatingDoublingMultiplyHighVectorLanes(left: u64, right: u64, lane: u8) SaturatingVectorResult {
+    const parts = signedSaturatingDoublingProductParts64(left, right, lane);
+    return SaturatingVectorResult{ .value = parts.high, .saturated = parts.saturated };
+}
+
+pub fn signedSaturatingDoublingProductParts64(left: u64, right: u64, lane: u8) SaturatingProductParts {
     const mask = ones(lane);
     const highest = (@as(i128, 1) << @intCast(u7, lane - 1)) - 1;
     const lowest = -(@as(i128, 1) << @intCast(u7, lane - 1));
-    var result = SaturatingVectorResult{ .value = 0, .saturated = false };
+    var result = SaturatingProductParts{ .high = 0, .low = 0, .saturated = false };
     var shift: u8 = 0;
     while (shift < 64) : (shift += lane) {
         const amount = @intCast(u6, shift);
         const left_lane = @intCast(i128, @bitCast(i64, signExtendRuntime((left >> amount) & mask, @intCast(u6, lane))));
         const right_lane = @intCast(i128, @bitCast(i64, signExtendRuntime((right >> amount) & mask, @intCast(u6, lane))));
         const doubled = left_lane * right_lane * 2;
+        result.low |= @intCast(u64, @bitCast(u128, doubled) & @intCast(u128, mask)) << amount;
         var lane_result = doubled >> @intCast(u7, lane);
         if (lane_result > highest) {
             lane_result = highest;
@@ -337,9 +355,19 @@ pub fn signedSaturatingDoublingMultiplyHighVectorLanes(left: u64, right: u64, la
             lane_result = lowest;
             result.saturated = true;
         }
-        result.value |= (@bitCast(u64, @intCast(i64, lane_result)) & mask) << amount;
+        result.high |= (@bitCast(u64, @intCast(i64, lane_result)) & mask) << amount;
     }
     return result;
+}
+
+pub fn signedSaturatingDoublingProductPartsVector(left: a64_state.VectorValue, right: a64_state.VectorValue, full: bool, lane: u8) VectorSaturatingProductParts {
+    const lower = signedSaturatingDoublingProductParts64(left.low, right.low, lane);
+    const upper = if (full) signedSaturatingDoublingProductParts64(left.high, right.high, lane) else SaturatingProductParts{ .high = 0, .low = 0, .saturated = false };
+    return VectorSaturatingProductParts{
+        .high = a64_state.VectorValue{ .low = lower.high, .high = upper.high },
+        .low = a64_state.VectorValue{ .low = lower.low, .high = upper.low },
+        .saturated = lower.saturated or upper.saturated,
+    };
 }
 
 pub fn multiplyVectorLanes(left: u64, right: u64, lane: u8) u64 {
