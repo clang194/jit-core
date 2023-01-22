@@ -1350,12 +1350,13 @@ pub const Core64Methods = struct {
         const signed_multiply_accumulate = masked == 0x0e208000;
         const signed_multiply_subtract = masked == 0x0e20a000;
         const signed_multiply_long = masked == 0x0e20c000;
+        const signed_saturating_multiply_long = masked == 0x0e20d000;
         const unsigned_multiply_accumulate = masked == 0x2e208000;
         const unsigned_multiply_subtract = masked == 0x2e20a000;
         const unsigned_multiply_long = masked == 0x2e20c000;
         const polynomial_wide = masked == 0x0e20e000;
-        const multiplying_long = signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long or unsigned_multiply_accumulate or unsigned_multiply_subtract or unsigned_multiply_long;
-        const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000 or signed_difference or signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long;
+        const multiplying_long = signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long or signed_saturating_multiply_long or unsigned_multiply_accumulate or unsigned_multiply_subtract or unsigned_multiply_long;
+        const signed = masked == 0x0e200000 or masked == 0x0e201000 or masked == 0x0e202000 or masked == 0x0e203000 or signed_difference or signed_multiply_accumulate or signed_multiply_subtract or signed_multiply_long or signed_saturating_multiply_long;
         const subtracting = masked == 0x0e202000 or masked == 0x0e203000 or masked == 0x2e202000 or masked == 0x2e203000;
         const widening_source_pair = masked == 0x0e200000 or masked == 0x0e202000 or masked == 0x2e200000 or masked == 0x2e202000;
         const accumulating_difference = masked == 0x0e205000 or masked == 0x2e205000;
@@ -1369,6 +1370,9 @@ pub const Core64Methods = struct {
             return error.ReservedInstruction;
         }
         if (!polynomial_wide and size == 3) {
+            return error.ReservedInstruction;
+        }
+        if (signed_saturating_multiply_long and size == 0) {
             return error.ReservedInstruction;
         }
 
@@ -1391,6 +1395,17 @@ pub const Core64Methods = struct {
         const source_mask = ones(source_bits);
         const addend_half = if (upper) addend.high else addend.low;
         const base_half = if (upper) base.high else base.low;
+        if (signed_saturating_multiply_long) {
+            const saturated = signedSaturatingDoublingLongProductHalf(base_half, addend_half, source_bits);
+            if (saturated.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), saturated.value);
+            self.state.pc +%= 4;
+            return true;
+        }
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
         var index: usize = 0;
         while (index < 8 / source_bytes) : (index += 1) {
