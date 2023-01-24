@@ -3,6 +3,11 @@ const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
 
+pub const SaturatingShiftResult = struct {
+    value: u64,
+    saturated: bool,
+};
+
 pub fn shiftLeftVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     if (amount >= lane) {
         return 0;
@@ -156,6 +161,40 @@ pub fn variableSignedShiftVectorLanes(value: u64, shifts: u64, lane: u8) u64 {
         else
             (element << @intCast(u6, amount)) & mask;
         result |= shifted << position;
+    }
+    return result;
+}
+
+pub fn variableSignedSaturatingShiftLeftVectorLanes(value: u64, shifts: u64, lane: u8) SaturatingShiftResult {
+    const mask = ones(lane);
+    const sign = @as(u64, 1) << @intCast(u6, lane - 1);
+    const highest = sign - 1;
+    const lowest = sign;
+    const limit = @as(i16, lane - 1);
+    var result = SaturatingShiftResult{ .value = 0, .saturated = false };
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const amount = @as(i16, @bitCast(i8, @intCast(u8, (shifts >> position) & 0xff)));
+        const shifted = if (element == 0)
+            @as(u64, 0)
+        else if (amount < 0) blk: {
+            const right = if (amount < -limit) limit else -amount;
+            break :blk signedElementRightShift(element, lane, @intCast(u8, right)) & mask;
+        } else if (amount > limit) blk: {
+            result.saturated = true;
+            break :blk if ((element & sign) == 0) highest else lowest;
+        } else blk: {
+            const widened = @as(u128, element) << @intCast(u7, amount);
+            const shifted_element = @intCast(u64, widened & @intCast(u128, mask));
+            if ((signedElementRightShift(shifted_element, lane, @intCast(u8, amount)) & mask) != element) {
+                result.saturated = true;
+                break :blk if ((element & sign) == 0) highest else lowest;
+            }
+            break :blk shifted_element;
+        };
+        result.value |= shifted << position;
     }
     return result;
 }
