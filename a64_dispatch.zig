@@ -350,6 +350,13 @@ pub const Core64Methods = struct {
             if (vector_count) {
                 return;
             }
+            const vector_leading_sign_count = self.runVectorLeadingSignCount(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_leading_sign_count) {
+                return;
+            }
             const vector_leading_zero_count = self.runVectorLeadingZeroCount(word) catch |err| {
                 try self.raiseFault(err);
                 return;

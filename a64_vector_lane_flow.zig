@@ -239,6 +239,27 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorLeadingSignCount(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbf3ffc00) != 0x0e204800) {
+            return false;
+        }
+
+        const size = @intCast(u2, (word >> 22) & 3);
+        if (size == 3) {
+            return error.ReservedInstruction;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const lane = @as(u8, 8) << @intCast(u3, size);
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{
+            .low = countLeadingSignBitsVectorLanes(source.low, lane),
+            .high = if (full) countLeadingSignBitsVectorLanes(source.high, lane) else 0,
+        });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorLeadingZeroCount(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbf3ffc00) != 0x2e204800) {
             return false;
