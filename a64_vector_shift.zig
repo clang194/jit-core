@@ -8,6 +8,15 @@ pub const SaturatingShiftResult = struct {
     saturated: bool,
 };
 
+pub fn repeatedShiftAmountVector(lane: u8, amount: u8) u64 {
+    var result: u64 = 0;
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        result |= @as(u64, amount) << @intCast(u6, shift);
+    }
+    return result;
+}
+
 pub fn shiftLeftVectorLanes(value: u64, lane: u8, amount: u8) u64 {
     if (amount >= lane) {
         return 0;
