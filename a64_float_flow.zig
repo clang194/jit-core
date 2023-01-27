@@ -173,6 +173,38 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runFixedToFloat(self: *Core64, word: u32) Core64Error!bool {
+        const masked = word & 0x7f3f0000;
+        const signed = masked == 0x1e020000;
+        const unsigned = masked == 0x1e030000;
+        if (!signed and !unsigned) {
+            return false;
+        }
+
+        const mode = @intCast(u2, (word >> 22) & 3);
+        if (mode > 1) {
+            return error.UnallocatedEncoding;
+        }
+
+        const wide = (word & 0x80000000) != 0;
+        const scale = @intCast(u6, (word >> 10) & 0x3f);
+        if (!wide and (scale & 0x20) == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const input = self.readSized(wide, regFromWord(word >> 5), false);
+        const control = self.state.floatControl();
+        const fraction = @as(usize, 64) - @as(usize, scale);
+        const result = if (mode == 0)
+            @as(u64, if (wide) if (signed) signedDoublewordToFloat32(control, input, fraction) else unsignedDoublewordToFloat32(control, input, fraction) else if (signed) signedWordToFloat32(@intCast(u32, input), fraction) else unsignedWordToFloat32(@intCast(u32, input), fraction))
+        else if (wide)
+            if (signed) signedDoublewordToFloat64(input, fraction) else unsignedDoublewordToFloat64(control, input, fraction)
+        else if (signed) signedWordToFloat64(@intCast(u32, input), fraction) else unsignedWordToFloat64(@intCast(u32, input), fraction);
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runFloatGeneralMove(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0x7f36fc00) != 0x1e260000) {
             return false;

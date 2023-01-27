@@ -176,6 +176,13 @@ pub const Core64Methods = struct {
             if (integer_to_float) {
                 return;
             }
+            const fixed_to_float = self.runFixedToFloat(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (fixed_to_float) {
+                return;
+            }
             const float_general_move = self.runFloatGeneralMove(word) catch |err| {
                 try self.raiseFault(err);
                 return;
