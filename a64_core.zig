@@ -21,6 +21,7 @@ pub const FaultKind64 = enum {
     wait_for_interrupt,
     send_event,
     send_event_local,
+    breakpoint,
 };
 
 pub const CacheAction64 = enum {

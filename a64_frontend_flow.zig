@@ -129,4 +129,13 @@ pub const Core64Methods = struct {
         self.clearReservation();
         return true;
     }
+
+    pub fn runBreakpoint(self: *Core64, word: u32) bool {
+        if ((word & 0xffe0001f) != 0xd4200000) {
+            return false;
+        }
+        const callback = self.hooks.exception orelse return false;
+        callback(self.state.pc, .breakpoint, self.hooks.context);
+        return true;
+    }
 };

@@ -41,6 +41,9 @@ pub const Core64Methods = struct {
             if (self.runSupervisorCall(word)) {
                 return;
             }
+            if (self.runBreakpoint(word)) {
+                return;
+            }
             const load_store = self.runLoadStore(word) catch |err| {
                 try self.raiseFault(err);
                 return;
