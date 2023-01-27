@@ -208,6 +208,35 @@ pub fn variableSignedSaturatingShiftLeftVectorLanes(value: u64, shifts: u64, lan
     return result;
 }
 
+pub fn variableUnsignedSaturatingShiftLeftVectorLanes(value: u64, shifts: u64, lane: u8) SaturatingShiftResult {
+    const mask = ones(lane);
+    const limit = @as(i16, lane);
+    var result = SaturatingShiftResult{ .value = 0, .saturated = false };
+    var shift: u8 = 0;
+    while (shift < 64) : (shift += lane) {
+        const position = @intCast(u6, shift);
+        const element = (value >> position) & mask;
+        const amount = @as(i16, @bitCast(i8, @intCast(u8, (shifts >> position) & 0xff)));
+        const shifted = if (element == 0 or amount <= -limit)
+            @as(u64, 0)
+        else if (amount < 0)
+            element >> @intCast(u6, -amount)
+        else if (amount >= limit) blk: {
+            result.saturated = true;
+            break :blk mask;
+        } else blk: {
+            const shifted_element = (element << @intCast(u6, amount)) & mask;
+            if ((shifted_element >> @intCast(u6, amount)) != element) {
+                result.saturated = true;
+                break :blk mask;
+            }
+            break :blk shifted_element;
+        };
+        result.value |= shifted << position;
+    }
+    return result;
+}
+
 fn signedElementRightShift(element: u64, lane: u8, amount: u8) u64 {
     const mask = ones(lane);
     const sign = @as(u64, 1) << @intCast(u6, lane - 1);
