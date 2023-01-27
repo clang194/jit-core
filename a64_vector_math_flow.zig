@@ -543,9 +543,9 @@ pub const Core64Methods = struct {
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const result = if (double)
-            signedDoublewordsToFloatVector(source)
+            signedDoublewordsToFloatVector(source, 0)
         else
-            signedWordsToFloatVector(full, source);
+            signedWordsToFloatVector(full, source, 0);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
@@ -564,9 +564,9 @@ pub const Core64Methods = struct {
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const result = if (double)
-            unsignedDoublewordsToFloatVector(self.state.floatControl(), source)
+            unsignedDoublewordsToFloatVector(self.state.floatControl(), source, 0)
         else
-            unsignedWordsToFloatVector(full, source);
+            unsignedWordsToFloatVector(full, source, 0);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
