@@ -62,10 +62,10 @@ pub fn runFloatConvertIntToFloat(word: u32, state: *arm_state.MachineState, hook
     if (state.conditionHolds(code)) {
         const raw = state.readFloatWord(floatWordIndex(word, bits.getBit32(word, 5)));
         if (bits.getBit32(word, 8)) {
-            const value = if (bits.getBit32(word, 7)) floatFromSigned32To64(state, raw) else floatFromUnsigned32To64(state, raw);
+            const value = if (bits.getBit32(word, 7)) floatFromSigned32To64(state, raw, 0) else floatFromUnsigned32To64(state, raw, 0);
             writeFloatPair(state, floatPairIndex(word >> 12, bits.getBit32(word, 22)), value);
         } else {
-            const value = if (bits.getBit32(word, 7)) floatFromSigned32To32(state, raw) else floatFromUnsigned32To32(state, raw);
+            const value = if (bits.getBit32(word, 7)) floatFromSigned32To32(state, raw, 0) else floatFromUnsigned32To32(state, raw, 0);
             state.writeFloatWord(floatWordIndex(word >> 12, bits.getBit32(word, 22)), value);
         }
     }

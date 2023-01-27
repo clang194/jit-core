@@ -96,20 +96,36 @@ pub fn float64To32(control: a64_state.FloatControl, value: u64) u32 {
     return floatOutput32(control, @bitCast(u32, @floatCast(f32, input)));
 }
 
-pub fn signedWordToFloat32(value: u32) u32 {
-    return @bitCast(u32, @intToFloat(f32, @bitCast(i32, value)));
+fn applyFraction32(value: u32, fractional_bits: usize) u32 {
+    if (fractional_bits == 0 or value == 0) {
+        return value;
+    }
+    const exponent = @intCast(u32, 127 - @intCast(i32, fractional_bits));
+    return @bitCast(u32, @bitCast(f32, value) * @bitCast(f32, exponent << 23));
 }
 
-pub fn unsignedWordToFloat32(value: u32) u32 {
-    return @bitCast(u32, @intToFloat(f32, value));
+fn applyFraction64(value: u64, fractional_bits: usize) u64 {
+    if (fractional_bits == 0 or value == 0) {
+        return value;
+    }
+    const exponent = @intCast(u64, 1023 - @intCast(i32, fractional_bits));
+    return @bitCast(u64, @bitCast(f64, value) * @bitCast(f64, exponent << 52));
 }
 
-fn roundedUnsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u64, negative: bool) u32 {
+pub fn signedWordToFloat32(value: u32, fractional_bits: usize) u32 {
+    return applyFraction32(@bitCast(u32, @intToFloat(f32, @bitCast(i32, value))), fractional_bits);
+}
+
+pub fn unsignedWordToFloat32(value: u32, fractional_bits: usize) u32 {
+    return applyFraction32(@bitCast(u32, @intToFloat(f32, value)), fractional_bits);
+}
+
+fn roundedUnsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u64, negative: bool, fractional_bits: usize) u32 {
     if (value == 0) {
         return 0;
     }
     if (value < (@as(u64, 1) << 24)) {
-        return @bitCast(u32, @intToFloat(f32, value));
+        return applyFraction32(@bitCast(u32, @intToFloat(f32, value)), fractional_bits);
     }
 
     var exponent = @intCast(u8, 63 - @clz(u64, value));
@@ -134,31 +150,31 @@ fn roundedUnsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u6
             exponent += 1;
         }
     }
-    return (@as(u32, exponent) + 127) << 23 | @intCast(u32, significand & ((@as(u64, 1) << 23) - 1));
+    return applyFraction32((@as(u32, exponent) + 127) << 23 | @intCast(u32, significand & ((@as(u64, 1) << 23) - 1)), fractional_bits);
 }
 
-pub fn signedDoublewordToFloat32(control: a64_state.FloatControl, value: u64) u32 {
+pub fn signedDoublewordToFloat32(control: a64_state.FloatControl, value: u64, fractional_bits: usize) u32 {
     const negative = @bitCast(i64, value) < 0;
     const magnitude = if (negative) ~value +% 1 else value;
-    const converted = roundedUnsignedDoublewordToFloat32(control, magnitude, negative);
+    const converted = roundedUnsignedDoublewordToFloat32(control, magnitude, negative, fractional_bits);
     return converted | (if (negative) @as(u32, 0x80000000) else 0);
 }
 
-pub fn unsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u64) u32 {
-    return roundedUnsignedDoublewordToFloat32(control, value, false);
+pub fn unsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u64, fractional_bits: usize) u32 {
+    return roundedUnsignedDoublewordToFloat32(control, value, false, fractional_bits);
 }
 
-pub fn signedWordToFloat64(value: u32) u64 {
-    return @bitCast(u64, @intToFloat(f64, @bitCast(i32, value)));
+pub fn signedWordToFloat64(value: u32, fractional_bits: usize) u64 {
+    return applyFraction64(@bitCast(u64, @intToFloat(f64, @bitCast(i32, value))), fractional_bits);
 }
 
-pub fn signedDoublewordToFloat64(value: u64) u64 {
-    return @bitCast(u64, @intToFloat(f64, @bitCast(i64, value)));
+pub fn signedDoublewordToFloat64(value: u64, fractional_bits: usize) u64 {
+    return applyFraction64(@bitCast(u64, @intToFloat(f64, @bitCast(i64, value))), fractional_bits);
 }
 
-pub fn unsignedDoublewordToFloat64(control: a64_state.FloatControl, value: u64) u64 {
+pub fn unsignedDoublewordToFloat64(control: a64_state.FloatControl, value: u64, fractional_bits: usize) u64 {
     if (value < (@as(u64, 1) << 53)) {
-        return @bitCast(u64, @intToFloat(f64, value));
+        return applyFraction64(@bitCast(u64, @intToFloat(f64, value)), fractional_bits);
     }
 
     var exponent = @intCast(u11, 63 - @clz(u64, value));
@@ -182,11 +198,11 @@ pub fn unsignedDoublewordToFloat64(control: a64_state.FloatControl, value: u64) 
             exponent += 1;
         }
     }
-    return ((@as(u64, exponent) + 1023) << 52) | (significand & ((@as(u64, 1) << 52) - 1));
+    return applyFraction64(((@as(u64, exponent) + 1023) << 52) | (significand & ((@as(u64, 1) << 52) - 1)), fractional_bits);
 }
 
-pub fn unsignedWordToFloat64(value: u32) u64 {
-    return @bitCast(u64, @intToFloat(f64, value));
+pub fn unsignedWordToFloat64(value: u32, fractional_bits: usize) u64 {
+    return applyFraction64(@bitCast(u64, @intToFloat(f64, value)), fractional_bits);
 }
 
 pub fn floatToSignedWord(control: a64_state.FloatControl, double: bool, value: u64) u32 {

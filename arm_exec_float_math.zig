@@ -202,20 +202,36 @@ pub fn convertFloat64To32(state: *arm_state.MachineState, value: u64) u32 {
     return result;
 }
 
-pub fn floatFromSigned32To32(state: *arm_state.MachineState, value: u32) u32 {
-    return floatOutput32(state, @bitCast(u32, @intToFloat(f32, @bitCast(i32, value))));
+fn scaleConverted32(value: u32, fractional_bits: usize) u32 {
+    if (fractional_bits == 0 or value == 0) {
+        return value;
+    }
+    const exponent = @intCast(u32, 127 - @intCast(i32, fractional_bits));
+    return @bitCast(u32, @bitCast(f32, value) * @bitCast(f32, exponent << 23));
 }
 
-pub fn floatFromUnsigned32To32(state: *arm_state.MachineState, value: u32) u32 {
-    return floatOutput32(state, @bitCast(u32, @intToFloat(f32, value)));
+fn scaleConverted64(value: u64, fractional_bits: usize) u64 {
+    if (fractional_bits == 0 or value == 0) {
+        return value;
+    }
+    const exponent = @intCast(u64, 1023 - @intCast(i32, fractional_bits));
+    return @bitCast(u64, @bitCast(f64, value) * @bitCast(f64, exponent << 52));
 }
 
-pub fn floatFromSigned32To64(state: *arm_state.MachineState, value: u32) u64 {
-    return floatOutput64(state, @bitCast(u64, @intToFloat(f64, @bitCast(i32, value))));
+pub fn floatFromSigned32To32(state: *arm_state.MachineState, value: u32, fractional_bits: usize) u32 {
+    return floatOutput32(state, scaleConverted32(@bitCast(u32, @intToFloat(f32, @bitCast(i32, value))), fractional_bits));
 }
 
-pub fn floatFromUnsigned32To64(state: *arm_state.MachineState, value: u32) u64 {
-    return floatOutput64(state, @bitCast(u64, @intToFloat(f64, value)));
+pub fn floatFromUnsigned32To32(state: *arm_state.MachineState, value: u32, fractional_bits: usize) u32 {
+    return floatOutput32(state, scaleConverted32(@bitCast(u32, @intToFloat(f32, value)), fractional_bits));
+}
+
+pub fn floatFromSigned32To64(state: *arm_state.MachineState, value: u32, fractional_bits: usize) u64 {
+    return floatOutput64(state, scaleConverted64(@bitCast(u64, @intToFloat(f64, @bitCast(i32, value))), fractional_bits));
+}
+
+pub fn floatFromUnsigned32To64(state: *arm_state.MachineState, value: u32, fractional_bits: usize) u64 {
+    return floatOutput64(state, scaleConverted64(@bitCast(u64, @intToFloat(f64, value)), fractional_bits));
 }
 
 pub fn convertFloat32ToSigned32(state: *arm_state.MachineState, value: u32, round_towards_zero: bool) u32 {

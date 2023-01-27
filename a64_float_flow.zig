@@ -164,10 +164,10 @@ pub const Core64Methods = struct {
         const control = self.state.floatControl();
         const signed = masked == 0x1e220000;
         const result = if (mode == 0)
-            @as(u64, if (wide) if (signed) signedDoublewordToFloat32(control, input) else unsignedDoublewordToFloat32(control, input) else if (signed) signedWordToFloat32(@intCast(u32, input)) else unsignedWordToFloat32(@intCast(u32, input)))
+            @as(u64, if (wide) if (signed) signedDoublewordToFloat32(control, input, 0) else unsignedDoublewordToFloat32(control, input, 0) else if (signed) signedWordToFloat32(@intCast(u32, input), 0) else unsignedWordToFloat32(@intCast(u32, input), 0))
         else if (wide)
-            if (signed) signedDoublewordToFloat64(input) else unsignedDoublewordToFloat64(control, input)
-        else if (signed) signedWordToFloat64(@intCast(u32, input)) else unsignedWordToFloat64(@intCast(u32, input));
+            if (signed) signedDoublewordToFloat64(input, 0) else unsignedDoublewordToFloat64(control, input, 0)
+        else if (signed) signedWordToFloat64(@intCast(u32, input), 0) else unsignedWordToFloat64(@intCast(u32, input), 0);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;

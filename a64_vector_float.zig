@@ -435,15 +435,15 @@ pub fn signedWordsToFloatVector(full: bool, source: a64_state.VectorValue) a64_s
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
-        setVectorElement(&result, index, 4, signedWordToFloat32(@intCast(u32, vectorElement(source, index, 4))));
+        setVectorElement(&result, index, 4, signedWordToFloat32(@intCast(u32, vectorElement(source, index, 4)), 0));
     }
     return result;
 }
 
 pub fn signedDoublewordsToFloatVector(source: a64_state.VectorValue) a64_state.VectorValue {
     return a64_state.VectorValue{
-        .low = signedDoublewordToFloat64(source.low),
-        .high = signedDoublewordToFloat64(source.high),
+        .low = signedDoublewordToFloat64(source.low, 0),
+        .high = signedDoublewordToFloat64(source.high, 0),
     };
 }
 
@@ -452,14 +452,14 @@ pub fn unsignedWordsToFloatVector(full: bool, source: a64_state.VectorValue) a64
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
     var index: usize = 0;
     while (index < lanes) : (index += 1) {
-        setVectorElement(&result, index, 4, unsignedWordToFloat32(@intCast(u32, vectorElement(source, index, 4))));
+        setVectorElement(&result, index, 4, unsignedWordToFloat32(@intCast(u32, vectorElement(source, index, 4)), 0));
     }
     return result;
 }
 
 pub fn unsignedDoublewordsToFloatVector(control: a64_state.FloatControl, source: a64_state.VectorValue) a64_state.VectorValue {
     return a64_state.VectorValue{
-        .low = unsignedDoublewordToFloat64(control, source.low),
-        .high = unsignedDoublewordToFloat64(control, source.high),
+        .low = unsignedDoublewordToFloat64(control, source.low, 0),
+        .high = unsignedDoublewordToFloat64(control, source.high, 0),
     };
 }
