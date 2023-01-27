@@ -379,6 +379,54 @@ pub fn Immediate(comptime width: u6) type {
             }
             return ((self.value >> index) & 1) != 0;
         }
+
+        pub fn isEqual(self: @This(), other: @This()) bool {
+            return self.value == other.value;
+        }
+
+        pub fn isDifferent(self: @This(), other: @This()) bool {
+            return !self.isEqual(other);
+        }
+
+        pub fn isBelow(self: @This(), other: @This()) bool {
+            return self.value < other.value;
+        }
+
+        pub fn isAtMost(self: @This(), other: @This()) bool {
+            return self.value <= other.value;
+        }
+
+        pub fn isAbove(self: @This(), other: @This()) bool {
+            return self.value > other.value;
+        }
+
+        pub fn isAtLeast(self: @This(), other: @This()) bool {
+            return self.value >= other.value;
+        }
+
+        pub fn equalsValue(self: @This(), other: u32) bool {
+            return self.value == other;
+        }
+
+        pub fn differsFromValue(self: @This(), other: u32) bool {
+            return !self.equalsValue(other);
+        }
+
+        pub fn isBelowValue(self: @This(), other: u32) bool {
+            return self.value < other;
+        }
+
+        pub fn isAtMostValue(self: @This(), other: u32) bool {
+            return self.value <= other;
+        }
+
+        pub fn isAboveValue(self: @This(), other: u32) bool {
+            return self.value > other;
+        }
+
+        pub fn isAtLeastValue(self: @This(), other: u32) bool {
+            return self.value >= other;
+        }
     };
 }
 
