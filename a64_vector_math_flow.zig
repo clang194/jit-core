@@ -335,7 +335,7 @@ pub const Core64Methods = struct {
 
     pub fn runScalarFloatToFixed(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff80fc00;
-        if (masked != 0x5f007c00 and masked != 0x7f007c00) {
+        if (masked != 0x5f007400 and masked != 0x5f007c00 and masked != 0x7f007400 and masked != 0x7f007c00) {
             return false;
         }
 
@@ -348,7 +348,12 @@ pub const Core64Methods = struct {
         const immediate = @as(u8, immh) << 3 | @intCast(u8, (word >> 16) & 7);
         const fractional_bits = (if (double) @as(usize, 128) else @as(usize, 64)) - @as(usize, immediate);
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
-        const result = try fixedScalarFloat(self, double, source, fractional_bits, masked == 0x7f007c00, .zero);
+        const result = if (masked == 0x5f007400)
+            if (double) signedDoublewordToFloat64(source, fractional_bits) else @as(u64, signedWordToFloat32(@intCast(u32, source), fractional_bits))
+        else if (masked == 0x7f007400)
+            if (double) unsignedDoublewordToFloat64(self.state.floatControl(), source, fractional_bits) else @as(u64, unsignedWordToFloat32(@intCast(u32, source), fractional_bits))
+        else
+            try fixedScalarFloat(self, double, source, fractional_bits, masked == 0x7f007c00, .zero);
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
         self.state.pc +%= 4;
         return true;
