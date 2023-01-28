@@ -685,7 +685,7 @@ pub const Core64Methods = struct {
 
     pub fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f007400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f009400 and masked != 0x0f009c00 and masked != 0x0f00a400 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f007400 and masked != 0x2f009400 and masked != 0x2f009c00 and masked != 0x2f00a400) {
+        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f007400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f009400 and masked != 0x0f009c00 and masked != 0x0f00a400 and masked != 0x0f00e400 and masked != 0x0f00fc00 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f007400 and masked != 0x2f009400 and masked != 0x2f009c00 and masked != 0x2f00a400 and masked != 0x2f00e400 and masked != 0x2f00fc00) {
             return false;
         }
 
@@ -693,6 +693,35 @@ pub const Core64Methods = struct {
         const immh = @intCast(u4, (word >> 19) & 0xf);
         if (immh == 0) {
             return error.UnallocatedEncoding;
+        }
+        const fixed_to_float = masked == 0x0f00e400 or masked == 0x2f00e400;
+        const float_to_fixed = masked == 0x0f00fc00 or masked == 0x2f00fc00;
+        if (fixed_to_float or float_to_fixed) {
+            if ((immh & 0xc) == 0) {
+                return error.ReservedInstruction;
+            }
+            if ((immh & 8) != 0 and !full) {
+                return error.ReservedInstruction;
+            }
+
+            const double = (immh & 8) != 0;
+            const immediate = @as(u8, immh) << 3 | @intCast(u8, (word >> 16) & 7);
+            const fractional_bits = (if (double) @as(usize, 128) else @as(usize, 64)) - @as(usize, immediate);
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            const result = if (fixed_to_float) blk: {
+                break :blk if (masked == 0x0f00e400)
+                    if (double) signedDoublewordsToFloatVector(source, fractional_bits) else signedWordsToFloatVector(full, source, fractional_bits)
+                else if (double) unsignedDoublewordsToFloatVector(self.state.floatControl(), source, fractional_bits) else unsignedWordsToFloatVector(full, source, fractional_bits);
+            } else blk: {
+                const control = self.state.floatControl();
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                const converted = fixedFloatVector(control, &status, double, full, fractional_bits, masked == 0x2f00fc00, .zero, source) catch return error.MissingFallback;
+                self.state.writeFloatStatus(status.raw());
+                break :blk converted;
+            };
+            self.state.writeVector(vectorRegFromWord(word), result);
+            self.state.pc +%= 4;
+            return true;
         }
         if (masked == 0x0f008400 or masked == 0x0f008c00 or masked == 0x0f009400 or masked == 0x0f009c00 or masked == 0x2f008400 or masked == 0x2f008c00 or masked == 0x2f009400 or masked == 0x2f009c00) {
             if ((immh & 8) != 0) {
