@@ -811,11 +811,11 @@ pub const Core64Methods = struct {
             if (vector_higher) {
                 return;
             }
-            const vector_unsigned_shift = self.runVectorUnsignedShift(word) catch |err| {
+            const vector_variable_shift = self.runVectorVariableShift(word) catch |err| {
                 try self.raiseFault(err);
                 return;
             };
-            if (vector_unsigned_shift) {
+            if (vector_variable_shift) {
                 return;
             }
             const vector_min_max = self.runVectorMinMax(word) catch |err| {

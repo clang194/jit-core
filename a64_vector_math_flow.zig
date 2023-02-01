@@ -1734,7 +1734,7 @@ pub const Core64Methods = struct {
         return true;
     }
 
-    pub fn runVectorUnsignedShift(self: *Core64, word: u32) Core64Error!bool {
+    pub fn runVectorVariableShift(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf20fc00;
         const signed = masked == 0x0e204400;
         const signed_saturating = masked == 0x0e204c00;
