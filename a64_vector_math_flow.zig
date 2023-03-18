@@ -1293,9 +1293,10 @@ pub const Core64Methods = struct {
     pub fn runVectorFloatMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf00f400;
         const multiply_only = masked == 0x0f009000;
+        const extended_multiply = masked == 0x2f009000;
         const accumulate = masked == 0x0f001000;
         const subtract = masked == 0x0f005000;
-        if (!multiply_only and !accumulate and !subtract) {
+        if (!multiply_only and !extended_multiply and !accumulate and !subtract) {
             return false;
         }
 
@@ -1321,10 +1322,15 @@ pub const Core64Methods = struct {
         const nan_mode = self.hooks.float_nan_mode;
         const prior = self.state.readVector(vectorRegFromWord(word));
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
-        if (multiply_only) {
+        if (multiply_only or extended_multiply) {
             var index: usize = 0;
             while (index < lanes) : (index += 1) {
-                setVectorElement(&result, index, bytes, floatMul(control, nan_mode, double, vectorElement(source, index, bytes), element));
+                const left = vectorElement(source, index, bytes);
+                const value = if (extended_multiply)
+                    floatMulExtended(control, nan_mode, double, left, element)
+                else
+                    floatMul(control, nan_mode, double, left, element);
+                setVectorElement(&result, index, bytes, value);
             }
         } else {
             const fused_control = effectiveFloatControl(control, nan_mode);
