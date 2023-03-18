@@ -82,7 +82,7 @@ pub const Core64Methods = struct {
 
     pub fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfa0fc00;
-        if (masked != 0x0e20c400 and masked != 0x0e20d400 and masked != 0x0e20e400 and masked != 0x0e20f400 and masked != 0x0ea0c400 and masked != 0x0ea0d400 and masked != 0x0ea0f400 and masked != 0x2e20c400 and masked != 0x2e20d400 and masked != 0x2e20dc00 and masked != 0x2e20e400 and masked != 0x2e20ec00 and masked != 0x2e20f400 and masked != 0x2e20fc00 and masked != 0x2ea0c400 and masked != 0x2ea0d400 and masked != 0x2ea0e400 and masked != 0x2ea0ec00 and masked != 0x2ea0f400) {
+        if (masked != 0x0e20c400 and masked != 0x0e20d400 and masked != 0x0e20dc00 and masked != 0x0e20e400 and masked != 0x0e20f400 and masked != 0x0ea0c400 and masked != 0x0ea0d400 and masked != 0x0ea0f400 and masked != 0x2e20c400 and masked != 0x2e20d400 and masked != 0x2e20dc00 and masked != 0x2e20e400 and masked != 0x2e20ec00 and masked != 0x2e20f400 and masked != 0x2e20fc00 and masked != 0x2ea0c400 and masked != 0x2ea0d400 and masked != 0x2ea0e400 and masked != 0x2ea0ec00 and masked != 0x2ea0f400) {
             return false;
         }
 
@@ -110,6 +110,8 @@ pub const Core64Methods = struct {
             extremaFloatPairsVector(control, nan_mode, double, full, left, right, false, false)
         else if (masked == 0x2e20dc00)
             multiplyFloatVector(control, nan_mode, double, full, left, right)
+        else if (masked == 0x0e20dc00)
+            multiplyExtendedFloatVector(control, nan_mode, double, full, left, right)
         else if (masked == 0x2e20fc00)
             divideFloatVector(control, nan_mode, double, full, left, right)
         else if (masked == 0x2ea0d400)
