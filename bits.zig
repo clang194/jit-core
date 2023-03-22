@@ -86,6 +86,32 @@ pub fn lowByte(value: u32) u8 {
     return @intCast(u8, value & 0xff);
 }
 
+pub fn swapBytes16(value: u16) u16 {
+    return @intCast(u16, (@as(u32, value) >> 8) | (@as(u32, value) << 8));
+}
+
+pub fn swapBytes32(value: u32) u32 {
+    return ((value & 0x000000ff) << 24) |
+        ((value & 0x0000ff00) << 8) |
+        ((value & 0x00ff0000) >> 8) |
+        ((value & 0xff000000) >> 24);
+}
+
+pub fn swapLaneBytes32(value: u32) u32 {
+    return ((value & 0x00ff00ff) << 8) | ((value & 0xff00ff00) >> 8);
+}
+
+pub fn swapBytes64(value: u64) u64 {
+    return ((value & 0x00000000000000ff) << 56) |
+        ((value & 0x000000000000ff00) << 40) |
+        ((value & 0x0000000000ff0000) << 24) |
+        ((value & 0x00000000ff000000) << 8) |
+        ((value & 0x000000ff00000000) >> 8) |
+        ((value & 0x0000ff0000000000) >> 24) |
+        ((value & 0x00ff000000000000) >> 40) |
+        ((value & 0xff00000000000000) >> 56);
+}
+
 pub fn topBit(value: u32) bool {
     return (value & 0x80000000) != 0;
 }

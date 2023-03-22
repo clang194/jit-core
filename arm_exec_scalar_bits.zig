@@ -124,18 +124,15 @@ pub fn rotateRight(value: u32, amount: u8, carry_in: bool) ShiftResult {
 }
 
 pub fn byteReverseWord(value: u32) u32 {
-    return ((value & 0x000000ff) << 24) |
-        ((value & 0x0000ff00) << 8) |
-        ((value & 0x00ff0000) >> 8) |
-        ((value & 0xff000000) >> 24);
+    return bits.swapBytes32(value);
 }
 
 pub fn byteReverseHalf(value: u32) u32 {
-    return ((value & 0xff) << 8) | ((value >> 8) & 0xff);
+    return bits.swapBytes16(@intCast(u16, value));
 }
 
 pub fn byteReverseHalfwords(value: u32) u32 {
-    return ((value & 0x00ff00ff) << 8) | ((value & 0xff00ff00) >> 8);
+    return bits.swapLaneBytes32(value);
 }
 
 pub fn signExtendByte(value: u32) u32 {
