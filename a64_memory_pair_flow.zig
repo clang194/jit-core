@@ -25,7 +25,6 @@ usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
-
 pub const Core64Methods = struct {
     pub fn runPairLoadStore(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0x3e000000) != 0x28000000) {
@@ -36,13 +35,11 @@ pub const Core64Methods = struct {
         const not_postindex = ((word >> 24) & 1) != 0;
         const writeback = ((word >> 23) & 1) != 0;
         const load = ((word >> 22) & 1) != 0;
-        if (!not_postindex and !writeback) {
-            return error.UnallocatedEncoding;
-        }
         if ((!load and (opcode & 1) != 0) or opcode == 3) {
             return error.UnallocatedEncoding;
         }
 
+        const offset_first = not_postindex or !writeback;
         const signed_load = (opcode & 1) != 0;
         const bytes = if ((opcode & 2) != 0) @as(usize, 8) else @as(usize, 4);
         const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 15) & 0x7f), 7)) << @intCast(u6, if (bytes == 8) 3 else 2);
@@ -58,8 +55,7 @@ pub const Core64Methods = struct {
         }
 
         var address = self.readSized(true, base_reg, true);
-        const postindex = !not_postindex;
-        if (!postindex) {
+        if (offset_first) {
             address +%= offset;
         }
 
@@ -79,7 +75,7 @@ pub const Core64Methods = struct {
         }
 
         if (writeback) {
-            if (postindex) {
+            if (!offset_first) {
                 address +%= offset;
             }
             self.writeSized(true, base_reg, address, true);
@@ -97,13 +93,11 @@ pub const Core64Methods = struct {
         const not_postindex = ((word >> 24) & 1) != 0;
         const writeback = ((word >> 23) & 1) != 0;
         const load = ((word >> 22) & 1) != 0;
-        if (!not_postindex and !writeback) {
-            return error.UnallocatedEncoding;
-        }
         if (opcode == 3) {
             return error.UnallocatedEncoding;
         }
 
+        const offset_first = not_postindex or !writeback;
         const bytes = @as(usize, 4) << opcode;
         const offset = @bitCast(u64, bits.signExtend64(@as(u64, (word >> 15) & 0x7f), 7)) << @intCast(u6, 2 + opcode);
         const first = vectorRegFromWord(word);
@@ -115,8 +109,7 @@ pub const Core64Methods = struct {
         }
 
         var address = self.readSized(true, base_reg, true);
-        const postindex = !not_postindex;
-        if (!postindex) {
+        if (offset_first) {
             address +%= offset;
         }
 
@@ -131,7 +124,7 @@ pub const Core64Methods = struct {
         }
 
         if (writeback) {
-            if (postindex) {
+            if (!offset_first) {
                 address +%= offset;
             }
             self.writeSized(true, base_reg, address, true);
@@ -139,5 +132,4 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
-
 };

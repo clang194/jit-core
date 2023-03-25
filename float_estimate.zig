@@ -144,6 +144,28 @@ pub fn reciprocalEstimate64(value: u64, control: float_control.Control, status: 
     }
 }
 
+pub fn reciprocalExponent32(value: u32, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+    if ((value & ~float_format.Binary32.sign_mask) > float_format.Binary32.infinity(false)) {
+        return try a64_float_nan.processNan32(control, value, status);
+    }
+
+    const sign = value & float_format.Binary32.sign_mask;
+    const exponent = (value & float_format.Binary32.exponent_mask) >> @intCast(u5, float_format.Binary32.stored_fraction_bits);
+    const output_exponent = if (exponent == 0) (@as(u32, 1) << @intCast(u5, float_format.Binary32.exponent_bits)) - 2 else (~exponent) & ((@as(u32, 1) << @intCast(u5, float_format.Binary32.exponent_bits)) - 1);
+    return sign | (output_exponent << @intCast(u5, float_format.Binary32.stored_fraction_bits));
+}
+
+pub fn reciprocalExponent64(value: u64, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+    if ((value & ~float_format.Binary64.sign_mask) > float_format.Binary64.infinity(false)) {
+        return try a64_float_nan.processNan64(control, value, status);
+    }
+
+    const sign = value & float_format.Binary64.sign_mask;
+    const exponent = (value & float_format.Binary64.exponent_mask) >> @intCast(u6, float_format.Binary64.stored_fraction_bits);
+    const output_exponent = if (exponent == 0) (@as(u64, 1) << @intCast(u6, float_format.Binary64.exponent_bits)) - 2 else (~exponent) & ((@as(u64, 1) << @intCast(u6, float_format.Binary64.exponent_bits)) - 1);
+    return sign | (output_exponent << @intCast(u6, float_format.Binary64.stored_fraction_bits));
+}
+
 pub fn inverseRootEstimate32(value: u32, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
     const analysis = try float_parts.splitFloat32(value, control, status);
     switch (analysis.kind) {
