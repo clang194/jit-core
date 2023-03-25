@@ -748,6 +748,20 @@ pub const Core64Methods = struct {
             if (vector_widening_element_multiply) {
                 return;
             }
+            const vector_complex_add = self.runVectorComplexAdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_complex_add) {
+                return;
+            }
+            const vector_complex_multiply_add = self.runVectorComplexMultiplyAdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_complex_multiply_add) {
+                return;
+            }
             const vector_dot_product = self.runVectorDotProduct(word) catch |err| {
                 try self.raiseFault(err);
                 return;
