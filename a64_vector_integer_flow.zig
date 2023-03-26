@@ -36,7 +36,9 @@ pub const Core64Methods = struct {
         const unsigned_saturating_add = masked == 0x7e200c00;
         const unsigned_saturating_sub = masked == 0x7e202c00;
         const saturating_multiply_high = masked == 0x5e20b400;
-        if (!saturating_add and !saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and !saturating_multiply_high and masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e204400 and masked != 0x5e205400 and masked != 0x5e208400 and masked != 0x5e208c00 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e205400 and masked != 0x7e208400 and masked != 0x7e208c00) {
+        const signed_saturating_shift = masked == 0x5e204c00;
+        const unsigned_saturating_shift = masked == 0x7e204c00;
+        if (!saturating_add and !saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and !saturating_multiply_high and !signed_saturating_shift and !unsigned_saturating_shift and masked != 0x5e203400 and masked != 0x5e203c00 and masked != 0x5e204400 and masked != 0x5e205400 and masked != 0x5e208400 and masked != 0x5e208c00 and masked != 0x7e203400 and masked != 0x7e203c00 and masked != 0x7e204400 and masked != 0x7e205400 and masked != 0x7e208400 and masked != 0x7e208c00) {
             return false;
         }
 
@@ -44,7 +46,7 @@ pub const Core64Methods = struct {
         if (saturating_multiply_high and (size == 0 or size == 3)) {
             return error.ReservedInstruction;
         }
-        if (!saturating_add and !saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and !saturating_multiply_high and size != 3) {
+        if (!saturating_add and !saturating_sub and !unsigned_saturating_add and !unsigned_saturating_sub and !saturating_multiply_high and !signed_saturating_shift and !unsigned_saturating_shift and size != 3) {
             return error.ReservedInstruction;
         }
 
@@ -78,6 +80,22 @@ pub const Core64Methods = struct {
                 self.state.writeFloatStatus(status.raw());
             }
             self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = saturated.value, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
+        }
+        if (signed_saturating_shift or unsigned_saturating_shift) {
+            const width = @as(u8, 8) << @intCast(u3, size);
+            const mask = ones(width);
+            const shifted = if (signed_saturating_shift)
+                variableSignedSaturatingShiftLeftVectorLanes(left & mask, right & mask, width)
+            else
+                variableUnsignedSaturatingShiftLeftVectorLanes(left & mask, right & mask, width);
+            if (shifted.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = shifted.value & mask, .high = 0 });
             self.state.pc +%= 4;
             return true;
         }
