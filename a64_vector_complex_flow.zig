@@ -9,7 +9,10 @@ usingnamespace @import("a64_vector_complex.zig");
 fn complexFloatShape(word: u32) Core64Error!struct { full: bool, double: bool } {
     const size = @intCast(u2, (word >> 22) & 3);
     const full = (word & 0x40000000) != 0;
-    if (size < 2 or (size == 3 and !full)) {
+    if (size == 1) {
+        return error.MissingFallback;
+    }
+    if (size == 0 or (size == 3 and !full)) {
         return error.UnallocatedEncoding;
     }
     return .{ .full = full, .double = size == 3 };
