@@ -144,6 +144,24 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorFloatSquareRoot(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfbffc00) != 0x2ea1f800) {
+            return false;
+        }
+
+        const full = (word & 0x40000000) != 0;
+        const double = (word & 0x00400000) != 0;
+        if (double and !full) {
+            return error.ReservedInstruction;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        const result = squareRootFloatVector(self.state.floatControl(), self.hooks.float_nan_mode, double, full, source);
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorRootStep(self: *Core64, word: u32) Core64Error!bool {
         if ((word & 0xbfa0fc00) != 0x0ea0fc00) {
             return false;

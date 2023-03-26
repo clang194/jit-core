@@ -131,6 +131,17 @@ pub fn multiplyExtendedFloatVector(control: a64_state.FloatControl, mode: FloatN
     return result;
 }
 
+pub fn squareRootFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        setVectorElement(&result, index, bytes, floatSqrt(control, mode, double, vectorElement(source, index, bytes)));
+    }
+    return result;
+}
+
 pub fn fusedMultiplyAddFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, addend: a64_state.VectorValue, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);

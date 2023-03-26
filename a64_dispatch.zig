@@ -545,6 +545,13 @@ pub const Core64Methods = struct {
             if (vector_float_mul_add) {
                 return;
             }
+            const vector_float_square_root = self.runVectorFloatSquareRoot(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_float_square_root) {
+                return;
+            }
             const vector_root_step = self.runVectorRootStep(word) catch |err| {
                 try self.raiseFault(err);
                 return;
