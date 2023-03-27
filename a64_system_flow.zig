@@ -349,6 +349,65 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runFlagCarryInvert(self: *Core64, word: u32) bool {
+        if (word != 0xd500401f) {
+            return false;
+        }
+
+        self.state.writeNzcv(self.state.readNzcv() ^ 0x20000000);
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runFlagRotateInsert(self: *Core64, word: u32) bool {
+        if ((word & 0xffe07c10) != 0xba000400) {
+            return false;
+        }
+
+        const mask = @intCast(u4, word & 0xf);
+        if (mask == 0) {
+            self.state.writeNzcv(self.state.readNzcv());
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        const amount = @intCast(u6, (word >> 15) & 0x3f);
+        const source = self.readSized(true, regFromWord(word >> 5), false);
+        const shifted = @truncate(u32, rotateRightSized(true, source, amount) << 28);
+        const keep = (@as(u32, if ((mask & 0x8) == 0) 1 else 0) << 31) |
+            (@as(u32, if ((mask & 0x4) == 0) 1 else 0) << 30) |
+            (@as(u32, if ((mask & 0x2) == 0) 1 else 0) << 29) |
+            (@as(u32, if ((mask & 0x1) == 0) 1 else 0) << 28);
+        self.state.writeNzcv((self.state.readNzcv() & keep) | (shifted & ~keep));
+        self.state.pc +%= 4;
+        return true;
+    }
+
+    pub fn runFlagFormat(self: *Core64, word: u32) bool {
+        if (word != 0xd500403f and word != 0xd500405f) {
+            return false;
+        }
+
+        const nzcv = self.state.readNzcv();
+        const z = nzcv & 0x40000000;
+        const c = nzcv & 0x20000000;
+        const result = if (word == 0xd500405f) blk: {
+            const v = nzcv & 0x10000000;
+            break :blk ((v << 2) | z) | (c & ~(v << 1) & 0x20000000);
+        } else blk: {
+            const not_z = (~z) & 0x40000000;
+            const not_c = (~c) & 0x20000000;
+            const new_n = (not_c << 2) & (not_z << 1);
+            const new_z = z & (c << 1);
+            const new_c = c | (z >> 1);
+            const new_v = (not_c >> 1) & (z >> 2);
+            break :blk new_n | new_z | new_c | new_v;
+        };
+        self.state.writeNzcv(result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runBarrier(self: *Core64, word: u32) bool {
         const masked = word & 0xfffff0ff;
         if (masked != 0xd503309f and masked != 0xd50330bf and masked != 0xd50330df) {

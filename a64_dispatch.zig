@@ -954,6 +954,15 @@ pub const Core64Methods = struct {
             if (self.runBarrier(word)) {
                 return;
             }
+            if (self.runFlagCarryInvert(word)) {
+                return;
+            }
+            if (self.runFlagRotateInsert(word)) {
+                return;
+            }
+            if (self.runFlagFormat(word)) {
+                return;
+            }
             if (self.runSystemRegisterWrite(word)) {
                 return;
             }
