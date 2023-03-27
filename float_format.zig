@@ -1,3 +1,51 @@
+pub const Binary16 = struct {
+    pub const total_bits: usize = 16;
+    pub const exponent_bits: usize = 5;
+    pub const stored_fraction_bits: usize = 10;
+    pub const precision_bits: usize = stored_fraction_bits + 1;
+    pub const hidden_bit: u16 = @as(u16, 1) << stored_fraction_bits;
+    pub const sign_mask: u16 = 0x8000;
+    pub const exponent_mask: u16 = 0x7c00;
+    pub const fraction_mask: u16 = 0x03ff;
+    pub const fraction_top_bit: u16 = 0x0200;
+    pub const exponent_min: i32 = -14;
+    pub const exponent_max: i32 = 15;
+    pub const exponent_bias: u16 = 15;
+
+    pub fn zero(negative: bool) u16 {
+        return if (negative) sign_mask else 0;
+    }
+
+    pub fn infinity(negative: bool) u16 {
+        return exponent_mask | zero(negative);
+    }
+
+    pub fn maxNormal(negative: bool) u16 {
+        return (exponent_mask - 1) | zero(negative);
+    }
+
+    pub fn defaultNan() u16 {
+        return exponent_mask | fraction_top_bit;
+    }
+
+    pub fn finite(comptime negative: bool, comptime exponent: i32, comptime significand: u16) u16 {
+        if (significand == 0) {
+            return zero(negative);
+        }
+
+        const highest = @intCast(i32, 15 - @clz(u16, significand));
+        const offset = @intCast(i32, stored_fraction_bits) - highest;
+        const normalized_exponent = exponent - offset + @intCast(i32, stored_fraction_bits);
+        if (offset < 0 or normalized_exponent < exponent_min or normalized_exponent > exponent_max) {
+            @compileError("invalid finite value");
+        }
+
+        const fraction = (significand << @intCast(u4, offset)) & fraction_mask;
+        const biased_exponent = @intCast(u16, normalized_exponent + @intCast(i32, exponent_bias));
+        return zero(negative) | fraction | (biased_exponent << stored_fraction_bits);
+    }
+};
+
 pub const Binary32 = struct {
     pub const total_bits: usize = 32;
     pub const exponent_bits: usize = 8;
