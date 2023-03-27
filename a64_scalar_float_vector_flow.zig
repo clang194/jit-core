@@ -185,6 +185,22 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runScalarFloatNarrowOdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xffbffc00) != 0x7e216800) {
+            return false;
+        }
+
+        if ((word & 0x00800000) == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
+        const result = @as(u64, float64To32Odd(self.state.floatControl(), source));
+        self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runScalarInverseRootEstimate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xffbffc00;
         if (masked != 0x7e21d800 and masked != 0x7ea1d800) {

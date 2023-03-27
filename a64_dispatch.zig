@@ -531,6 +531,13 @@ pub const Core64Methods = struct {
             if (vector_float_narrow) {
                 return;
             }
+            const vector_float_narrow_odd = self.runVectorFloatNarrowOdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_float_narrow_odd) {
+                return;
+            }
             const vector_float = self.runVectorFloatBinary(word) catch |err| {
                 try self.raiseFault(err);
                 return;
@@ -690,6 +697,13 @@ pub const Core64Methods = struct {
                 return;
             };
             if (scalar_float_fixed) {
+                return;
+            }
+            const scalar_float_narrow_odd = self.runScalarFloatNarrowOdd(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (scalar_float_narrow_odd) {
                 return;
             }
             const scalar_shift_immediate = self.runScalarShiftImmediate(word) catch |err| {

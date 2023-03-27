@@ -96,6 +96,48 @@ pub fn float64To32(control: a64_state.FloatControl, value: u64) u32 {
     return floatOutput32(control, @bitCast(u32, @floatCast(f32, input)));
 }
 
+pub fn float64To32Odd(control: a64_state.FloatControl, value: u64) u32 {
+    const input = floatInput64(control, value);
+    const sign = if ((input & float_format.Binary64.sign_mask) != 0) float_format.Binary32.sign_mask else @as(u32, 0);
+    const exponent_raw = (input & float_format.Binary64.exponent_mask) >> @intCast(u6, float_format.Binary64.stored_fraction_bits);
+    const fraction = input & float_format.Binary64.fraction_mask;
+    if (exponent_raw == 0 and fraction == 0) {
+        return sign;
+    }
+    if (exponent_raw == (@as(u64, 1) << @intCast(u6, float_format.Binary64.exponent_bits)) - 1) {
+        return float64To32(control, value);
+    }
+
+    const exponent = if (exponent_raw == 0) float_format.Binary64.exponent_min else @intCast(i32, exponent_raw) - @intCast(i32, float_format.Binary64.exponent_bias);
+    const mantissa = if (exponent_raw == 0) fraction else float_format.Binary64.hidden_bit | fraction;
+    if (exponent > float_format.Binary32.exponent_max) {
+        return sign | (float_format.Binary32.exponent_mask - 1);
+    }
+    if (control.fz() and exponent < float_format.Binary32.exponent_min) {
+        return sign;
+    }
+
+    var result: u32 = sign;
+    var discarded = false;
+    if (exponent >= float_format.Binary32.exponent_min) {
+        const dropped = mantissa & ((@as(u64, 1) << 29) - 1);
+        const kept = @intCast(u32, mantissa >> 29);
+        result |= @intCast(u32, exponent + @intCast(i32, float_format.Binary32.exponent_bias)) << @intCast(u5, float_format.Binary32.stored_fraction_bits);
+        result |= kept & float_format.Binary32.fraction_mask;
+        discarded = dropped != 0;
+    } else {
+        const scale = exponent + 97;
+        const kept = if (scale >= 0) mantissa << @intCast(u6, scale) else if (-scale >= 64) @as(u64, 0) else mantissa >> @intCast(u6, -scale);
+        const dropped = if (scale >= 0) @as(u64, 0) else if (-scale >= 64) mantissa else mantissa & ((@as(u64, 1) << @intCast(u6, -scale)) - 1);
+        result |= @intCast(u32, kept) & float_format.Binary32.fraction_mask;
+        discarded = dropped != 0;
+    }
+    if (discarded) {
+        result |= 1;
+    }
+    return floatOutput32(control, result);
+}
+
 fn applyFraction32(value: u32, fractional_bits: usize) u32 {
     if (fractional_bits == 0 or value == 0) {
         return value;

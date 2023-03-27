@@ -462,6 +462,25 @@ pub const Core64Methods = struct {
         return true;
     }
 
+    pub fn runVectorFloatNarrowOdd(self: *Core64, word: u32) Core64Error!bool {
+        if ((word & 0xbfbffc00) != 0x2e216800) {
+            return false;
+        }
+
+        if ((word & 0x00800000) == 0) {
+            return error.UnallocatedEncoding;
+        }
+
+        const narrowed = narrowDoubleFloatVectorOdd(self.state.floatControl(), self.state.readVector(vectorRegFromWord(word >> 5)));
+        const result = if ((word & 0x40000000) != 0)
+            a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word)).low, .high = narrowed }
+        else
+            a64_state.VectorValue{ .low = narrowed, .high = 0 };
+        self.state.writeVector(vectorRegFromWord(word), result);
+        self.state.pc +%= 4;
+        return true;
+    }
+
     pub fn runVectorFloatAcrossMinMax(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbfbffc00;
         const max_number = masked == 0x2e30c800;
