@@ -91,6 +91,7 @@ fn roundParts(
     comptime fraction_mask: u64,
     comptime infinity_value: fn (bool) Result,
     comptime max_normal_value: fn (bool) Result,
+    comptime half_flush: bool,
 ) float_exception.FloatExceptionError!Result {
     if (value.significand == 0) {
         return @intCast(Result, if (value.negative) @as(u64, 1) << (exponent_bits + fraction_bits) else 0);
@@ -98,7 +99,7 @@ fn roundParts(
 
     var normal = normalizeParts(value, fraction_bits, 0);
 
-    if (control.fz() and normal.exponent < exponent_min) {
+    if ((if (half_flush) control.fz16() else control.fz()) and normal.exponent < exponent_min) {
         status.setUnderflow(true);
         return @intCast(Result, if (normal.negative) @as(u64, 1) << (exponent_bits + fraction_bits) else 0);
     }
@@ -158,6 +159,51 @@ fn roundParts(
     }
 
     return @intCast(Result, result);
+}
+
+pub fn splitFloat16(value: u16, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!FloatAnalysis {
+    _ = status;
+    const negative = (value & float_format.Binary16.sign_mask) != 0;
+    const exponent_raw = (value & float_format.Binary16.exponent_mask) >> float_format.Binary16.stored_fraction_bits;
+    const fraction = value & float_format.Binary16.fraction_mask;
+
+    if (exponent_raw == 0) {
+        if (fraction == 0 or control.fz16()) {
+            return FloatAnalysis{
+                .kind = .zero,
+                .negative = negative,
+                .parts = emptyParts(negative),
+            };
+        }
+
+        return FloatAnalysis{
+            .kind = .finite,
+            .negative = negative,
+            .parts = scaledParts(negative, float_format.Binary16.exponent_min - @intCast(i32, float_format.Binary16.stored_fraction_bits), fraction),
+        };
+    }
+
+    if (exponent_raw == (@as(u16, 1) << float_format.Binary16.exponent_bits) - 1 and !control.ahp()) {
+        if (fraction == 0) {
+            return FloatAnalysis{
+                .kind = .infinity,
+                .negative = negative,
+                .parts = scaledParts(negative, infinity_exponent_marker, 1),
+            };
+        }
+
+        return FloatAnalysis{
+            .kind = if ((fraction & float_format.Binary16.fraction_top_bit) != 0) .quiet_nan else .signaling_nan,
+            .negative = negative,
+            .parts = emptyParts(negative),
+        };
+    }
+
+    return FloatAnalysis{
+        .kind = .finite,
+        .negative = negative,
+        .parts = scaledParts(negative, @intCast(i32, exponent_raw) - @intCast(i32, float_format.Binary16.exponent_bias) - @intCast(i32, float_format.Binary16.stored_fraction_bits), fraction | float_format.Binary16.hidden_bit),
+    };
 }
 
 pub fn splitFloat32(value: u32, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!FloatAnalysis {
@@ -267,6 +313,7 @@ pub fn roundFloat32Parts(value: WideFloatParts, control: float_control.Control, 
         float_format.Binary32.fraction_mask,
         float_format.Binary32.infinity,
         float_format.Binary32.maxNormal,
+        false,
     );
 }
 
@@ -287,9 +334,31 @@ pub fn roundFloat64Parts(value: WideFloatParts, control: float_control.Control, 
         float_format.Binary64.fraction_mask,
         float_format.Binary64.infinity,
         float_format.Binary64.maxNormal,
+        false,
     );
 }
 
 pub fn roundFloat64(value: WideFloatParts, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     return roundFloat64Parts(value, control, control.rounding(), status);
+}
+
+pub fn roundFloat16Parts(value: WideFloatParts, control: float_control.Control, mode: float_rounding.RoundingMode, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    return roundParts(
+        value,
+        control,
+        mode,
+        status,
+        u16,
+        float_format.Binary16.exponent_bits,
+        float_format.Binary16.stored_fraction_bits,
+        float_format.Binary16.exponent_min,
+        float_format.Binary16.fraction_mask,
+        float_format.Binary16.infinity,
+        float_format.Binary16.maxNormal,
+        true,
+    );
+}
+
+pub fn roundFloat16(value: WideFloatParts, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    return roundFloat16Parts(value, control, control.rounding(), status);
 }

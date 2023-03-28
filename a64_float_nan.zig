@@ -130,8 +130,16 @@ pub fn isDenormal32(value: u32) bool {
     return isDenormal(float_format.Binary32, value);
 }
 
+pub fn isDenormal16(value: u16) bool {
+    return isDenormal(float_format.Binary16, value);
+}
+
 pub fn isDenormal64(value: u64) bool {
     return isDenormal(float_format.Binary64, value);
+}
+
+pub fn isNan16(value: u16) bool {
+    return isNan(float_format.Binary16, value);
 }
 
 pub fn isNan32(value: u32) bool {
@@ -144,6 +152,14 @@ pub fn isNan64(value: u64) bool {
 
 pub fn isQuietNan32(value: u32) bool {
     return isQuietNan(float_format.Binary32, value);
+}
+
+pub fn isQuietNan16(value: u16) bool {
+    return isQuietNan(float_format.Binary16, value);
+}
+
+pub fn isSignalingNan16(value: u16) bool {
+    return isSignalingNan(float_format.Binary16, value);
 }
 
 pub fn isSignalingNan32(value: u32) bool {
@@ -162,8 +178,16 @@ pub fn processNan32(control: a64_state.FloatControl, value: u32, status: *float_
     return processNan(float_format.Binary32, control, value, status);
 }
 
+pub fn processNan16(control: a64_state.FloatControl, value: u16, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    return processNan(float_format.Binary16, control, value, status);
+}
+
 pub fn processNan64(control: a64_state.FloatControl, value: u64, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     return processNan(float_format.Binary64, control, value, status);
+}
+
+pub fn processPairNan16(control: a64_state.FloatControl, left: u16, right: u16, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u16 {
+    return processPairNan(float_format.Binary16, control, left, right, status);
 }
 
 pub fn processPairNan32(control: a64_state.FloatControl, left: u32, right: u32, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u32 {
@@ -178,12 +202,20 @@ pub fn processTernaryNan32(control: a64_state.FloatControl, first: u32, second: 
     return processTernaryNan(float_format.Binary32, control, first, second, third, status);
 }
 
+pub fn processTernaryNan16(control: a64_state.FloatControl, first: u16, second: u16, third: u16, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u16 {
+    return processTernaryNan(float_format.Binary16, control, first, second, third, status);
+}
+
 pub fn processTernaryNan64(control: a64_state.FloatControl, first: u64, second: u64, third: u64, status: *float_status.FloatStatus) float_exception.FloatExceptionError!?u64 {
     return processTernaryNan(float_format.Binary64, control, first, second, third, status);
 }
 
 pub fn chooseBinaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, left: u32, right: u32) ?u32 {
     return choosePairNan(float_format.Binary32, control, mode, left, right);
+}
+
+pub fn chooseBinaryNan16(control: a64_state.FloatControl, mode: FloatNanMode64, left: u16, right: u16) ?u16 {
+    return choosePairNan(float_format.Binary16, control, mode, left, right);
 }
 
 pub fn chooseBinaryNan64(control: a64_state.FloatControl, mode: FloatNanMode64, left: u64, right: u64) ?u64 {
@@ -194,12 +226,20 @@ pub fn chooseTernaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64,
     return chooseTernaryNan(float_format.Binary32, control, mode, first, second, third);
 }
 
+pub fn chooseTernaryNan16(control: a64_state.FloatControl, mode: FloatNanMode64, first: u16, second: u16, third: u16) ?u16 {
+    return chooseTernaryNan(float_format.Binary16, control, mode, first, second, third);
+}
+
 pub fn chooseTernaryNan64(control: a64_state.FloatControl, mode: FloatNanMode64, first: u64, second: u64, third: u64) ?u64 {
     return chooseTernaryNan(float_format.Binary64, control, mode, first, second, third);
 }
 
 pub fn chooseUnaryNan32(control: a64_state.FloatControl, mode: FloatNanMode64, value: u32) ?u32 {
     return chooseUnaryNan(float_format.Binary32, control, mode, value);
+}
+
+pub fn chooseUnaryNan16(control: a64_state.FloatControl, mode: FloatNanMode64, value: u16) ?u16 {
+    return chooseUnaryNan(float_format.Binary16, control, mode, value);
 }
 
 pub fn chooseUnaryNan64(control: a64_state.FloatControl, mode: FloatNanMode64, value: u64) ?u64 {
