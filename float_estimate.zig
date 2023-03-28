@@ -155,6 +155,18 @@ pub fn reciprocalExponent32(value: u32, control: float_control.Control, status: 
     return sign | (output_exponent << @intCast(u5, float_format.Binary32.stored_fraction_bits));
 }
 
+pub fn reciprocalExponent16(value: u16, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const analysis = try float_parts.splitFloat16(value, control, status);
+    if (analysis.kind == .quiet_nan or analysis.kind == .signaling_nan) {
+        return try a64_float_nan.processNan16(control, value, status);
+    }
+
+    const sign = value & float_format.Binary16.sign_mask;
+    const exponent = (value & float_format.Binary16.exponent_mask) >> @intCast(u4, float_format.Binary16.stored_fraction_bits);
+    const output_exponent = if (exponent == 0) (@as(u16, 1) << @intCast(u4, float_format.Binary16.exponent_bits)) - 2 else (~exponent) & ((@as(u16, 1) << @intCast(u4, float_format.Binary16.exponent_bits)) - 1);
+    return sign | (output_exponent << @intCast(u4, float_format.Binary16.stored_fraction_bits));
+}
+
 pub fn reciprocalExponent64(value: u64, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     if ((value & ~float_format.Binary64.sign_mask) > float_format.Binary64.infinity(false)) {
         return try a64_float_nan.processNan64(control, value, status);
