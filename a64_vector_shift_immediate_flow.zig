@@ -200,11 +200,50 @@ pub const Core64Methods = struct {
 
     pub fn runScalarShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff80fc00;
-        if (masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
+        const signed_narrow = masked == 0x5f009400;
+        const signed_unsigned_narrow = masked == 0x7f008400;
+        const unsigned_narrow = masked == 0x7f009400;
+        const saturating_narrow = signed_narrow or signed_unsigned_narrow or unsigned_narrow;
+        if (!saturating_narrow and masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
             return false;
         }
 
         const immh = @intCast(u4, (word >> 19) & 0xf);
+        if (saturating_narrow) {
+            if (immh == 0 or (immh & 8) != 0) {
+                return error.UnallocatedEncoding;
+            }
+
+            const target_lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));
+            const source_lane = target_lane * 2;
+            const immediate = @intCast(u8, (word >> 16) & 0x7f);
+            const amount = source_lane - immediate;
+            const target_bytes = @intCast(usize, target_lane / 8);
+            const source = a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word >> 5)).low, .high = 0 };
+            var saturated = false;
+            const narrowed = if (signed_unsigned_narrow) blk: {
+                const narrowed_result = signedSaturatingNarrowUnsignedVectorLanes(source, target_bytes, amount, false);
+                saturated = narrowed_result.saturated;
+                break :blk narrowed_result.value;
+            } else if (unsigned_narrow) blk: {
+                const narrowed_result = unsignedSaturatingNarrowVectorLanes(source, target_bytes, amount, false);
+                saturated = narrowed_result.saturated;
+                break :blk narrowed_result.value;
+            } else blk: {
+                const narrowed_result = signedSaturatingNarrowSignedVectorLanes(source, target_bytes, amount, false);
+                saturated = narrowed_result.saturated;
+                break :blk narrowed_result.value;
+            };
+            if (saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = narrowed, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
+        }
+
         if ((immh & 8) == 0) {
             return error.ReservedInstruction;
         }
