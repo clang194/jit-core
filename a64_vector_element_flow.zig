@@ -313,7 +313,10 @@ pub const Core64Methods = struct {
 
     pub fn runScalarMultiplyHighByElement(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xff00f400;
-        if (masked != 0x5f00c000) {
+        const multiply_long = masked == 0x5f00b000;
+        const multiply_high = masked == 0x5f00c000;
+        const rounding_multiply_high = masked == 0x5f00d000;
+        if (!multiply_long and !multiply_high and !rounding_multiply_high) {
             return false;
         }
 
@@ -336,7 +339,23 @@ pub const Core64Methods = struct {
             ((word >> 16) & 0xf) | (((word >> 20) & 1) << 4);
         const source = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
         const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, bytes);
-        const result = signedSaturatedDoublingMultiplyHigh(@intCast(u8, bytes * 8), source, element);
+        const width = @intCast(u8, bytes * 8);
+        if (multiply_long) {
+            const saturated = signedSaturatingDoublingLongProductHalf(source, spreadVectorElement(element, width), width);
+            if (saturated.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), saturated.value);
+            self.state.pc +%= 4;
+            return true;
+        }
+        const result = if (rounding_multiply_high) blk: {
+            const parts = signedSaturatingDoublingProductParts64(source, element, width);
+            const value = (parts.high +% (parts.low >> @intCast(u6, width - 1))) & ones(width);
+            break :blk SaturatingIntegerResult{ .value = value, .saturated = parts.saturated };
+        } else signedSaturatedDoublingMultiplyHigh(width, source, element);
         if (result.saturated) {
             var status = float_status.FloatStatus.init(self.state.floatStatus());
             status.setSaturated(true);
