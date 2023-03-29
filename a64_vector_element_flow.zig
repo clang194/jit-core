@@ -33,9 +33,10 @@ pub const Core64Methods = struct {
         const masked = word & 0xbf00f400;
         const multiply_only = masked == 0x0f008000;
         const saturating_multiply_high = masked == 0x0f00c000;
+        const rounding_saturating_multiply_high = masked == 0x0f00d000;
         const accumulate = masked == 0x2f000000;
         const subtracting = masked == 0x2f004000;
-        if (!multiply_only and !saturating_multiply_high and !accumulate and !subtracting) {
+        if (!multiply_only and !saturating_multiply_high and !rounding_saturating_multiply_high and !accumulate and !subtracting) {
             return false;
         }
 
@@ -66,10 +67,14 @@ pub const Core64Methods = struct {
         var index: usize = 0;
         while (index < total / bytes) : (index += 1) {
             const left = vectorElement(source, index, bytes);
+            const width = @intCast(u8, bytes * 8);
             const product = if (saturating_multiply_high)
-                signedSaturatedDoublingMultiplyHigh(@intCast(u8, bytes * 8), left, element)
-            else
-                SaturatingIntegerResult{ .value = left *% element, .saturated = false };
+                signedSaturatedDoublingMultiplyHigh(width, left, element)
+            else if (rounding_saturating_multiply_high) blk: {
+                const parts = signedSaturatingDoublingProductParts64(left, element, width);
+                const value = (parts.high +% (parts.low >> @intCast(u6, width - 1))) & ones(width);
+                break :blk SaturatingIntegerResult{ .value = value, .saturated = parts.saturated };
+            } else SaturatingIntegerResult{ .value = left *% element, .saturated = false };
             const value = if (accumulate)
                 vectorElement(prior, index, bytes) +% product.value
             else if (subtracting)
@@ -92,8 +97,9 @@ pub const Core64Methods = struct {
     pub fn runVectorWideningMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf00f400;
         const signed = masked == 0x0f002000 or masked == 0x0f006000 or masked == 0x0f00a000;
+        const signed_saturating_multiply_long = masked == 0x0f00b000;
         const unsigned = masked == 0x2f002000 or masked == 0x2f006000 or masked == 0x2f00a000;
-        if (!signed and !unsigned) {
+        if (!signed and !signed_saturating_multiply_long and !unsigned) {
             return false;
         }
 
@@ -119,11 +125,22 @@ pub const Core64Methods = struct {
             ((word >> 16) & 0xf) | (((word >> 20) & 1) << 4);
         const source_half = if (upper) self.state.readVector(vectorRegFromWord(word >> 5)).high else self.state.readVector(vectorRegFromWord(word >> 5)).low;
         const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, source_bytes);
-        const right = if (signed) signExtendRuntime(element, @intCast(u6, source_bits)) else element;
+        const right = if (signed or signed_saturating_multiply_long) signExtendRuntime(element, @intCast(u6, source_bits)) else element;
         const source_mask = ones(source_bits);
         const prior = self.state.readVector(vectorRegFromWord(word));
         const accumulating = masked == 0x0f002000 or masked == 0x2f002000;
         const subtracting = masked == 0x0f006000 or masked == 0x2f006000;
+        if (signed_saturating_multiply_long) {
+            const saturated = signedSaturatingDoublingLongProductHalf(source_half, spreadVectorElement(element, source_bits), source_bits);
+            if (saturated.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), saturated.value);
+            self.state.pc +%= 4;
+            return true;
+        }
         var result = a64_state.VectorValue{ .low = 0, .high = 0 };
         var index: usize = 0;
         while (index < 8 / source_bytes) : (index += 1) {
