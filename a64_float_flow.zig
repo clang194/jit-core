@@ -218,14 +218,14 @@ pub const Core64Methods = struct {
             0 => 4,
             1 => 8,
             2 => if (upper) @as(usize, 8) else return error.UnallocatedEncoding,
-            else => return error.UnallocatedEncoding,
+            else => 2,
         };
 
         if (upper) {
             if (!wide or mode != 2) {
                 return error.UnallocatedEncoding;
             }
-        } else if (wide != (bytes == 8)) {
+        } else if (mode != 3 and wide != (bytes == 8)) {
             return error.UnallocatedEncoding;
         }
 
