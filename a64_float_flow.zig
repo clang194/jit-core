@@ -93,12 +93,15 @@ pub const Core64Methods = struct {
         }
 
         const mode = @intCast(u2, (word >> 22) & 3);
-        if (mode > 1) {
+        const half = mode == 3 and (masked == 0x1e204000 or masked == 0x1e20c000 or masked == 0x1e214000);
+        if (mode == 2 or (mode == 3 and !half)) {
             return error.UnallocatedEncoding;
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
-        const result = if (masked == 0x1e244000)
+        const result = if (half)
+            @as(u64, if (masked == 0x1e204000) @intCast(u16, source) else if (masked == 0x1e20c000) @intCast(u16, source) & 0x7fff else @intCast(u16, source) ^ 0x8000)
+        else if (masked == 0x1e244000)
             try integralFloat(self, mode == 1, source, .nearest, false)
         else if (masked == 0x1e24c000)
             try integralFloat(self, mode == 1, source, .positive, false)
