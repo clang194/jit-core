@@ -441,7 +441,10 @@ pub const Core64Methods = struct {
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        const result = widenSingleFloatVector(self.state.floatControl(), source, (word & 0x40000000) != 0);
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const result = widenFloatVector(control, &status, ((word >> 22) & 1) == 0, source, (word & 0x40000000) != 0) catch return error.MissingFallback;
+        self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;
@@ -452,11 +455,14 @@ pub const Core64Methods = struct {
             return false;
         }
 
-        const narrowed = narrowDoubleFloatVector(self.state.floatControl(), self.state.readVector(vectorRegFromWord(word >> 5)));
+        const control = self.state.floatControl();
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const narrowed = narrowFloatVector(control, &status, ((word >> 22) & 1) == 0, self.state.readVector(vectorRegFromWord(word >> 5))) catch return error.MissingFallback;
         const result = if ((word & 0x40000000) != 0)
             a64_state.VectorValue{ .low = self.state.readVector(vectorRegFromWord(word)).low, .high = narrowed }
         else
             a64_state.VectorValue{ .low = narrowed, .high = 0 };
+        self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
         return true;

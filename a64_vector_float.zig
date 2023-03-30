@@ -228,15 +228,33 @@ pub fn roundIntegralFloatVector(control: float_control.Control, status: *float_s
     return result;
 }
 
-pub fn widenSingleFloatVector(control: a64_state.FloatControl, source: a64_state.VectorValue, upper: bool) a64_state.VectorValue {
-    const half = if (upper) source.high else source.low;
+pub fn widenFloatVector(control: a64_state.FloatControl, status: *float_status.FloatStatus, half: bool, source: a64_state.VectorValue, upper: bool) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const part = if (upper) source.high else source.low;
+    if (half) {
+        var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+        var index: usize = 0;
+        while (index < 4) : (index += 1) {
+            const value = try a64_float_control.float16To32(control, @intCast(u16, vectorElement(a64_state.VectorValue{ .low = part, .high = 0 }, index, 2)), status);
+            setVectorElement(&result, index, 4, value);
+        }
+        return result;
+    }
     return a64_state.VectorValue{
-        .low = a64_float_control.float32To64(control, @intCast(u32, half)),
-        .high = a64_float_control.float32To64(control, @intCast(u32, half >> 32)),
+        .low = a64_float_control.float32To64(control, @intCast(u32, part)),
+        .high = a64_float_control.float32To64(control, @intCast(u32, part >> 32)),
     };
 }
 
-pub fn narrowDoubleFloatVector(control: a64_state.FloatControl, source: a64_state.VectorValue) u64 {
+pub fn narrowFloatVector(control: a64_state.FloatControl, status: *float_status.FloatStatus, half: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!u64 {
+    if (half) {
+        var result: u64 = 0;
+        var index: usize = 0;
+        while (index < 4) : (index += 1) {
+            const value = try a64_float_control.float32To16(control, @intCast(u32, vectorElement(source, index, 4)), status);
+            result |= @as(u64, value) << @intCast(u6, index * 16);
+        }
+        return result;
+    }
     return @as(u64, a64_float_control.float64To32(control, source.low)) | (@as(u64, a64_float_control.float64To32(control, source.high)) << 32);
 }
 
