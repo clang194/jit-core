@@ -133,16 +133,23 @@ pub const Core64Methods = struct {
         if (source_mode == 2 or target_mode == 2 or source_mode == target_mode) {
             return error.UnallocatedEncoding;
         }
-        if (source_mode == 3 or target_mode == 3) {
-            return false;
-        }
 
         const control = self.state.floatControl();
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
-        const value = if (source_mode == 0)
+        var status = float_status.FloatStatus.init(self.state.floatStatus());
+        const value = if (source_mode == 0 and target_mode == 1)
             float32To64(control, @intCast(u32, source.low))
+        else if (source_mode == 1 and target_mode == 0)
+            @as(u64, float64To32(control, source.low))
+        else if (source_mode == 3 and target_mode == 0)
+            @as(u64, float16To32(control, @intCast(u16, source.low), &status) catch return error.MissingFallback)
+        else if (source_mode == 3 and target_mode == 1)
+            float16To64(control, @intCast(u16, source.low), &status) catch return error.MissingFallback
+        else if (source_mode == 0 and target_mode == 3)
+            @as(u64, float32To16(control, @intCast(u32, source.low), &status) catch return error.MissingFallback)
         else
-            @as(u64, float64To32(control, source.low));
+            @as(u64, float64To16(control, source.low, &status) catch return error.MissingFallback);
+        self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = value, .high = 0 });
         self.state.pc +%= 4;
         return true;

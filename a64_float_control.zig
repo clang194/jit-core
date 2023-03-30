@@ -1,8 +1,12 @@
 const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
+const float_exception = @import("float_exception.zig");
 const float_format = @import("float_format.zig");
+const float_parts = @import("float_parts.zig");
+const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+usingnamespace @import("a64_float_nan.zig");
 
 pub fn floatInput32(control: a64_state.FloatControl, value: u32) u32 {
     if (control.fz() and isDenormal32(value)) {
@@ -94,6 +98,110 @@ pub fn float32To64(control: a64_state.FloatControl, value: u32) u64 {
 pub fn float64To32(control: a64_state.FloatControl, value: u64) u32 {
     const input = @bitCast(f64, floatInput64(control, value));
     return floatOutput32(control, @bitCast(u32, @floatCast(f32, input)));
+}
+
+fn convertedNan16To32(control: a64_state.FloatControl, value: u16, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+    if (control.dn()) {
+        return float_format.Binary32.defaultNan();
+    }
+    if (isSignalingNan16(value)) {
+        try float_exception.processFloatException(.invalid_operation, control, status);
+    }
+    const sign = if ((value & float_format.Binary16.sign_mask) != 0) float_format.Binary32.sign_mask else @as(u32, 0);
+    const payload = @as(u32, value & 0x01ff) << 13;
+    return sign | float_format.Binary32.exponent_mask | float_format.Binary32.fraction_top_bit | payload;
+}
+
+fn convertedNan16To64(control: a64_state.FloatControl, value: u16, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+    if (control.dn()) {
+        return float_format.Binary64.defaultNan();
+    }
+    if (isSignalingNan16(value)) {
+        try float_exception.processFloatException(.invalid_operation, control, status);
+    }
+    const sign = if ((value & float_format.Binary16.sign_mask) != 0) float_format.Binary64.sign_mask else @as(u64, 0);
+    const payload = @as(u64, value & 0x01ff) << 42;
+    return sign | float_format.Binary64.exponent_mask | float_format.Binary64.fraction_top_bit | payload;
+}
+
+fn convertedNan32To16(control: a64_state.FloatControl, value: u32, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const sign = if ((value & float_format.Binary32.sign_mask) != 0) float_format.Binary16.sign_mask else @as(u16, 0);
+    if (control.ahp()) {
+        if (isSignalingNan32(value)) {
+            try float_exception.processFloatException(.invalid_operation, control, status);
+        }
+        return sign;
+    }
+    if (control.dn()) {
+        return float_format.Binary16.defaultNan();
+    }
+    if (isSignalingNan32(value)) {
+        try float_exception.processFloatException(.invalid_operation, control, status);
+    }
+    return sign | float_format.Binary16.exponent_mask | float_format.Binary16.fraction_top_bit | @intCast(u16, (value >> 13) & 0x01ff);
+}
+
+fn convertedNan64To16(control: a64_state.FloatControl, value: u64, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const sign = if ((value & float_format.Binary64.sign_mask) != 0) float_format.Binary16.sign_mask else @as(u16, 0);
+    if (control.ahp()) {
+        if (isSignalingNan64(value)) {
+            try float_exception.processFloatException(.invalid_operation, control, status);
+        }
+        return sign;
+    }
+    if (control.dn()) {
+        return float_format.Binary16.defaultNan();
+    }
+    if (isSignalingNan64(value)) {
+        try float_exception.processFloatException(.invalid_operation, control, status);
+    }
+    return sign | float_format.Binary16.exponent_mask | float_format.Binary16.fraction_top_bit | @intCast(u16, (value >> 42) & 0x01ff);
+}
+
+pub fn float16To32(control: a64_state.FloatControl, value: u16, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
+    const analysis = try float_parts.splitFloat16(value, control, status);
+    return switch (analysis.kind) {
+        .zero => float_format.Binary32.zero(analysis.negative),
+        .infinity => float_format.Binary32.infinity(analysis.negative),
+        .quiet_nan, .signaling_nan => try convertedNan16To32(control, value, status),
+        .finite => try float_parts.roundFloat32(analysis.parts, control, status),
+    };
+}
+
+pub fn float16To64(control: a64_state.FloatControl, value: u16, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
+    const analysis = try float_parts.splitFloat16(value, control, status);
+    return switch (analysis.kind) {
+        .zero => float_format.Binary64.zero(analysis.negative),
+        .infinity => float_format.Binary64.infinity(analysis.negative),
+        .quiet_nan, .signaling_nan => try convertedNan16To64(control, value, status),
+        .finite => try float_parts.roundFloat64(analysis.parts, control, status),
+    };
+}
+
+pub fn float32To16(control: a64_state.FloatControl, value: u32, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const analysis = try float_parts.splitFloat32(value, control, status);
+    return switch (analysis.kind) {
+        .zero => float_format.Binary16.zero(analysis.negative),
+        .infinity => if (control.ahp()) blk: {
+            try float_exception.processFloatException(.invalid_operation, control, status);
+            break :blk float_format.Binary16.zero(analysis.negative) | 0x7fff;
+        } else float_format.Binary16.infinity(analysis.negative),
+        .quiet_nan, .signaling_nan => try convertedNan32To16(control, value, status),
+        .finite => try float_parts.roundFloat16(analysis.parts, control, status),
+    };
+}
+
+pub fn float64To16(control: a64_state.FloatControl, value: u64, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const analysis = try float_parts.splitFloat64(value, control, status);
+    return switch (analysis.kind) {
+        .zero => float_format.Binary16.zero(analysis.negative),
+        .infinity => if (control.ahp()) blk: {
+            try float_exception.processFloatException(.invalid_operation, control, status);
+            break :blk float_format.Binary16.zero(analysis.negative) | 0x7fff;
+        } else float_format.Binary16.infinity(analysis.negative),
+        .quiet_nan, .signaling_nan => try convertedNan64To16(control, value, status),
+        .finite => try float_parts.roundFloat16(analysis.parts, control, status),
+    };
 }
 
 pub fn float64To32Odd(control: a64_state.FloatControl, value: u64) u32 {
