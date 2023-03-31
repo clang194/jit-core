@@ -203,12 +203,35 @@ pub const Core64Methods = struct {
         const signed_narrow = masked == 0x5f009400;
         const signed_unsigned_narrow = masked == 0x7f008400;
         const unsigned_narrow = masked == 0x7f009400;
+        const signed_saturating_left = masked == 0x5f007400;
         const saturating_narrow = signed_narrow or signed_unsigned_narrow or unsigned_narrow;
-        if (!saturating_narrow and masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
+        if (!saturating_narrow and !signed_saturating_left and masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
             return false;
         }
 
         const immh = @intCast(u4, (word >> 19) & 0xf);
+        if (signed_saturating_left) {
+            if (immh == 0) {
+                return error.UnallocatedEncoding;
+            }
+
+            const lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));
+            const immediate = @intCast(u8, (word >> 16) & 0x7f);
+            const amount = immediate - lane;
+            const mask = ones(lane);
+            const source = self.state.readVector(vectorRegFromWord(word >> 5)).low & mask;
+            const shift = repeatedShiftAmountVector(lane, amount);
+            const shifted = variableSignedSaturatingShiftLeftVectorLanes(source, shift, lane);
+            if (shifted.saturated) {
+                var status = float_status.FloatStatus.init(self.state.floatStatus());
+                status.setSaturated(true);
+                self.state.writeFloatStatus(status.raw());
+            }
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = shifted.value & mask, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
+        }
+
         if (saturating_narrow) {
             if (immh == 0 or (immh & 8) != 0) {
                 return error.UnallocatedEncoding;
