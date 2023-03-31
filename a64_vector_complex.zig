@@ -40,6 +40,19 @@ fn complexMultiplyInputs(double: bool, left: a64_state.VectorValue, right: a64_s
     };
 }
 
+fn complexMultiplyIndexedInputs(double: bool, left: a64_state.VectorValue, right: a64_state.VectorValue, first: usize, second: usize, bytes: usize, pair_index: usize, rotation: u2, upper: bool) [2]u64 {
+    const left_first = vectorElement(left, first, bytes);
+    const left_second = vectorElement(left, second, bytes);
+    const right_first = vectorElement(right, pair_index * 2, bytes);
+    const right_second = vectorElement(right, pair_index * 2 + 1, bytes);
+    return switch (rotation) {
+        0 => if (upper) [2]u64{ left_first, right_second } else [2]u64{ left_first, right_first },
+        1 => if (upper) [2]u64{ left_second, right_first } else [2]u64{ left_second, negateFloat(double, right_second) },
+        2 => if (upper) [2]u64{ left_first, negateFloat(double, right_second) } else [2]u64{ left_first, negateFloat(double, right_first) },
+        else => if (upper) [2]u64{ left_second, negateFloat(double, right_first) } else [2]u64{ left_second, right_second },
+    };
+}
+
 pub fn multiplyAddComplexFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, addend: a64_state.VectorValue, left: a64_state.VectorValue, right: a64_state.VectorValue, rotation: u2) float_exception.FloatExceptionError!a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const pairs = if (double) @as(usize, 1) else if (full) @as(usize, 2) else @as(usize, 1);
@@ -50,6 +63,30 @@ pub fn multiplyAddComplexFloatVector(control: float_control.Control, status: *fl
         const second = first + 1;
         const low_inputs = complexMultiplyInputs(double, left, right, first, second, bytes, rotation, false);
         const high_inputs = complexMultiplyInputs(double, left, right, first, second, bytes, rotation, true);
+        const low_value = if (double)
+            try float_fused.mulAdd64(vectorElement(addend, first, bytes), low_inputs[0], low_inputs[1], control, status)
+        else
+            @as(u64, try float_fused.mulAdd32(@intCast(u32, vectorElement(addend, first, bytes)), @intCast(u32, low_inputs[0]), @intCast(u32, low_inputs[1]), control, status));
+        const high_value = if (double)
+            try float_fused.mulAdd64(vectorElement(addend, second, bytes), high_inputs[0], high_inputs[1], control, status)
+        else
+            @as(u64, try float_fused.mulAdd32(@intCast(u32, vectorElement(addend, second, bytes)), @intCast(u32, high_inputs[0]), @intCast(u32, high_inputs[1]), control, status));
+        setVectorElement(&result, first, bytes, low_value);
+        setVectorElement(&result, second, bytes, high_value);
+    }
+    return result;
+}
+
+pub fn multiplyAddComplexFloatVectorByElement(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, addend: a64_state.VectorValue, left: a64_state.VectorValue, right: a64_state.VectorValue, pair_index: usize, rotation: u2) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const pairs = if (double) @as(usize, 1) else if (full) @as(usize, 2) else @as(usize, 1);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < pairs) : (index += 1) {
+        const first = index * 2;
+        const second = first + 1;
+        const low_inputs = complexMultiplyIndexedInputs(double, left, right, first, second, bytes, pair_index, rotation, false);
+        const high_inputs = complexMultiplyIndexedInputs(double, left, right, first, second, bytes, pair_index, rotation, true);
         const low_value = if (double)
             try float_fused.mulAdd64(vectorElement(addend, first, bytes), low_inputs[0], low_inputs[1], control, status)
         else

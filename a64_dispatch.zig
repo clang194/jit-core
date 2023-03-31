@@ -783,6 +783,13 @@ pub const Core64Methods = struct {
             if (vector_complex_multiply_add) {
                 return;
             }
+            const vector_complex_multiply_add_element = self.runVectorComplexMultiplyAddByElement(word) catch |err| {
+                try self.raiseFault(err);
+                return;
+            };
+            if (vector_complex_multiply_add_element) {
+                return;
+            }
             const vector_dot_product = self.runVectorDotProduct(word) catch |err| {
                 try self.raiseFault(err);
                 return;
