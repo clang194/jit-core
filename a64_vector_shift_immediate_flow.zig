@@ -204,15 +204,16 @@ pub const Core64Methods = struct {
         const signed_unsigned_narrow = masked == 0x7f008400;
         const unsigned_narrow = masked == 0x7f009400;
         const signed_saturating_left = masked == 0x5f007400;
+        const unsigned_saturating_left = masked == 0x7f007400;
         const saturating_narrow = signed_narrow or signed_unsigned_narrow or unsigned_narrow;
-        if (!saturating_narrow and !signed_saturating_left and masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
+        if (!saturating_narrow and !signed_saturating_left and !unsigned_saturating_left and masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
             return false;
         }
 
         const immh = @intCast(u4, (word >> 19) & 0xf);
-        if (signed_saturating_left) {
+        if (signed_saturating_left or unsigned_saturating_left) {
             if (immh == 0) {
-                return error.UnallocatedEncoding;
+                return error.ReservedInstruction;
             }
 
             const lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));
@@ -221,7 +222,10 @@ pub const Core64Methods = struct {
             const mask = ones(lane);
             const source = self.state.readVector(vectorRegFromWord(word >> 5)).low & mask;
             const shift = repeatedShiftAmountVector(lane, amount);
-            const shifted = variableSignedSaturatingShiftLeftVectorLanes(source, shift, lane);
+            const shifted = if (signed_saturating_left)
+                variableSignedSaturatingShiftLeftVectorLanes(source, shift, lane)
+            else
+                variableUnsignedSaturatingShiftLeftVectorLanes(source, shift, lane);
             if (shifted.saturated) {
                 var status = float_status.FloatStatus.init(self.state.floatStatus());
                 status.setSaturated(true);
