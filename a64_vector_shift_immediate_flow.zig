@@ -31,7 +31,7 @@ usingnamespace @import("a64_memory_bits.zig");
 pub const Core64Methods = struct {
     pub fn runVectorShiftImmediate(self: *Core64, word: u32) Core64Error!bool {
         const masked = word & 0xbf80fc00;
-        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f007400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f009400 and masked != 0x0f009c00 and masked != 0x0f00a400 and masked != 0x0f00e400 and masked != 0x0f00fc00 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f007400 and masked != 0x2f009400 and masked != 0x2f009c00 and masked != 0x2f00a400 and masked != 0x2f00e400 and masked != 0x2f00fc00) {
+        if (masked != 0x0f000400 and masked != 0x0f001400 and masked != 0x0f002400 and masked != 0x0f003400 and masked != 0x0f005400 and masked != 0x0f007400 and masked != 0x0f008400 and masked != 0x0f008c00 and masked != 0x0f009400 and masked != 0x0f009c00 and masked != 0x0f00a400 and masked != 0x0f00e400 and masked != 0x0f00fc00 and masked != 0x2f000400 and masked != 0x2f001400 and masked != 0x2f002400 and masked != 0x2f003400 and masked != 0x2f004400 and masked != 0x2f005400 and masked != 0x2f006400 and masked != 0x2f007400 and masked != 0x2f009400 and masked != 0x2f009c00 and masked != 0x2f00a400 and masked != 0x2f00e400 and masked != 0x2f00fc00) {
             return false;
         }
 
@@ -140,6 +140,7 @@ pub const Core64Methods = struct {
         const rounded_right = masked == 0x2f002400 or masked == 0x2f003400;
         const insert_right = masked == 0x2f004400;
         const signed_saturating_left = masked == 0x0f007400;
+        const signed_unsigned_saturating_left = masked == 0x2f006400;
         const unsigned_saturating_left = masked == 0x2f007400;
         const right = signed_right or rounded_signed_right or rounded_right or insert_right or masked == 0x2f000400 or masked == 0x2f001400;
         const amount = if (right)
@@ -147,10 +148,16 @@ pub const Core64Methods = struct {
         else
             immediate - @intCast(u8, lane);
         const input = self.state.readVector(vectorRegFromWord(word >> 5));
-        if (signed_saturating_left) {
+        if (signed_saturating_left or signed_unsigned_saturating_left) {
             const shifts = repeatedShiftAmountVector(lane, amount);
-            const low = variableSignedSaturatingShiftLeftVectorLanes(input.low, shifts, lane);
-            const high = if (full) variableSignedSaturatingShiftLeftVectorLanes(input.high, shifts, lane) else SaturatingShiftResult{ .value = 0, .saturated = false };
+            const low = if (signed_saturating_left)
+                variableSignedSaturatingShiftLeftVectorLanes(input.low, shifts, lane)
+            else
+                variableSignedUnsignedSaturatingShiftLeftVectorLanes(input.low, shifts, lane);
+            const high = if (full) if (signed_saturating_left)
+                variableSignedSaturatingShiftLeftVectorLanes(input.high, shifts, lane)
+            else
+                variableSignedUnsignedSaturatingShiftLeftVectorLanes(input.high, shifts, lane) else SaturatingShiftResult{ .value = 0, .saturated = false };
             if (low.saturated or high.saturated) {
                 var status = float_status.FloatStatus.init(self.state.floatStatus());
                 status.setSaturated(true);
@@ -204,14 +211,15 @@ pub const Core64Methods = struct {
         const signed_unsigned_narrow = masked == 0x7f008400;
         const unsigned_narrow = masked == 0x7f009400;
         const signed_saturating_left = masked == 0x5f007400;
+        const signed_unsigned_saturating_left = masked == 0x7f006400;
         const unsigned_saturating_left = masked == 0x7f007400;
         const saturating_narrow = signed_narrow or signed_unsigned_narrow or unsigned_narrow;
-        if (!saturating_narrow and !signed_saturating_left and !unsigned_saturating_left and masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
+        if (!saturating_narrow and !signed_saturating_left and !signed_unsigned_saturating_left and !unsigned_saturating_left and masked != 0x5f000400 and masked != 0x5f001400 and masked != 0x5f002400 and masked != 0x5f003400 and masked != 0x5f005400 and masked != 0x7f000400 and masked != 0x7f001400 and masked != 0x7f002400 and masked != 0x7f003400 and masked != 0x7f004400 and masked != 0x7f005400) {
             return false;
         }
 
         const immh = @intCast(u4, (word >> 19) & 0xf);
-        if (signed_saturating_left or unsigned_saturating_left) {
+        if (signed_saturating_left or signed_unsigned_saturating_left or unsigned_saturating_left) {
             if (immh == 0) {
                 return error.ReservedInstruction;
             }
@@ -224,6 +232,8 @@ pub const Core64Methods = struct {
             const shift = repeatedShiftAmountVector(lane, amount);
             const shifted = if (signed_saturating_left)
                 variableSignedSaturatingShiftLeftVectorLanes(source, shift, lane)
+            else if (signed_unsigned_saturating_left)
+                variableSignedUnsignedSaturatingShiftLeftVectorLanes(source, shift, lane)
             else
                 variableUnsignedSaturatingShiftLeftVectorLanes(source, shift, lane);
             if (shifted.saturated) {
