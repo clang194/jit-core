@@ -42,7 +42,7 @@ pub const Core64Methods = struct {
 
         const size = @intCast(u2, (word >> 22) & 3);
         if (size == 0 or size == 3) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const full = (word & 0x40000000) != 0;
@@ -105,7 +105,7 @@ pub const Core64Methods = struct {
 
         const size = @intCast(u2, (word >> 22) & 3);
         if (size == 0 or size == 3) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const upper = (word & 0x40000000) != 0;
@@ -219,7 +219,7 @@ pub const Core64Methods = struct {
         const middle_index = @intCast(usize, (word >> 21) & 1);
         const high = @intCast(usize, (word >> 11) & 1);
         if (double and left_index != 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
         if (double and !full) {
             return error.ReservedInstruction;
@@ -281,7 +281,7 @@ pub const Core64Methods = struct {
         const middle_index = @intCast(usize, (word >> 21) & 1);
         const high = @intCast(usize, (word >> 11) & 1);
         if (double and left_index != 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const bytes = if (double) @as(usize, 8) else @as(usize, 4);
@@ -322,7 +322,7 @@ pub const Core64Methods = struct {
 
         const size = @intCast(u2, (word >> 22) & 3);
         if (size == 0 or size == 3) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const bytes = @as(usize, 1) << size;

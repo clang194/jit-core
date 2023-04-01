@@ -13,7 +13,7 @@ fn complexFloatShape(word: u32) Core64Error!struct { full: bool, double: bool } 
         return error.MissingFallback;
     }
     if (size == 0 or (size == 3 and !full)) {
-        return error.UnallocatedEncoding;
+        return error.ReservedInstruction;
     }
     return .{ .full = full, .double = size == 3 };
 }

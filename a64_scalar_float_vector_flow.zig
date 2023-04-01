@@ -191,7 +191,7 @@ pub const Core64Methods = struct {
         }
 
         if ((word & 0x00800000) == 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;

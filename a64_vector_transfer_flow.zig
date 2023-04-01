@@ -94,12 +94,12 @@ pub const Core64Methods = struct {
         const full = (word & 0x40000000) != 0;
         const imm5 = @intCast(u5, (word >> 16) & 0x1f);
         if (imm5 == 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const size = lowestSetBit5(imm5);
         if (size > 3) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
         if (size == 3 and !full) {
             return error.ReservedInstruction;
@@ -127,12 +127,12 @@ pub const Core64Methods = struct {
 
         const imm5 = @intCast(u5, (word >> 16) & 0x1f);
         if (imm5 == 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const size = lowestSetBit5(imm5);
         if (size > 3) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const bytes = @as(usize, 1) << size;
@@ -173,17 +173,23 @@ pub const Core64Methods = struct {
         const wide = (word & 0x40000000) != 0;
         const imm5 = @intCast(u5, (word >> 16) & 0x1f);
         if (imm5 == 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const size = lowestSetBit5(imm5);
         if (signed) {
-            if ((size == 2 and !wide) or size > 2) {
+            if (size == 2 and !wide) {
                 return error.UnallocatedEncoding;
             }
+            if (size > 2) {
+                return error.ReservedInstruction;
+            }
         } else {
-            if ((size < 3 and wide) or (size == 3 and !wide) or size > 3) {
+            if ((size < 3 and wide) or (size == 3 and !wide)) {
                 return error.UnallocatedEncoding;
+            }
+            if (size > 3) {
+                return error.ReservedInstruction;
             }
         }
 
@@ -221,12 +227,12 @@ pub const Core64Methods = struct {
 
         const imm5 = @intCast(u5, (word >> 16) & 0x1f);
         if (imm5 == 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const size = lowestSetBit5(imm5);
         if (size > 3) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const bytes = @as(usize, 1) << size;
@@ -246,12 +252,12 @@ pub const Core64Methods = struct {
 
         const imm5 = @intCast(u5, (word >> 16) & 0x1f);
         if (imm5 == 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const size = lowestSetBit5(imm5);
         if (size > 3) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const bytes = @as(usize, 1) << size;

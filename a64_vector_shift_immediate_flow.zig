@@ -238,7 +238,7 @@ pub const Core64Methods = struct {
 
         if (saturating_narrow) {
             if (immh == 0 or (immh & 8) != 0) {
-                return error.UnallocatedEncoding;
+                return error.ReservedInstruction;
             }
 
             const target_lane = @as(u8, 8) << @intCast(u3, highestSetBit(immh));

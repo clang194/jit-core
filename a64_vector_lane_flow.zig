@@ -35,7 +35,7 @@ pub const Core64Methods = struct {
         const full = (word & 0x40000000) != 0;
         const start = @intCast(usize, (word >> 11) & 0xf);
         if (!full and (start & 8) != 0) {
-            return error.UnallocatedEncoding;
+            return error.ReservedInstruction;
         }
 
         const total = if (full) @as(usize, 16) else @as(usize, 8);
