@@ -157,6 +157,17 @@ pub fn fusedMultiplyAddFloatVector(control: float_control.Control, status: *floa
     return result;
 }
 
+pub fn fusedMultiplyAddHalfFloatVector(control: float_control.Control, status: *float_status.FloatStatus, full: bool, addend: a64_state.VectorValue, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 8) else @as(usize, 4);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const value = try float_fused.mulAdd16(@intCast(u16, vectorElement(addend, index, 2)), @intCast(u16, vectorElement(left, index, 2)), @intCast(u16, vectorElement(right, index, 2)), control, status);
+        setVectorElement(&result, index, 2, value);
+    }
+    return result;
+}
+
 pub fn reciprocalEstimateFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);

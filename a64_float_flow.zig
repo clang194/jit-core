@@ -342,21 +342,24 @@ pub const Core64Methods = struct {
         const subtract = (word & 0x8000) != 0;
 
         const mode = (word >> 22) & 3;
-        if (mode > 1) {
+        if (mode == 2) {
             return error.UnallocatedEncoding;
         }
 
+        const half = mode == 3;
         const double = mode == 1;
-        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const bytes = if (half) @as(usize, 2) else if (double) @as(usize, 8) else @as(usize, 4);
         const addend = vectorElement(self.state.readVector(vectorRegFromWord(word >> 10)), 0, bytes);
         const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
         const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
-        const adjusted_addend = if (negated_addend) negateFloat(double, addend) else addend;
-        const adjusted_left = if (negated_addend != subtract) negateFloat(double, left) else left;
+        const adjusted_addend = if (negated_addend) if (half) addend ^ 0x8000 else negateFloat(double, addend) else addend;
+        const adjusted_left = if (negated_addend != subtract) if (half) left ^ 0x8000 else negateFloat(double, left) else left;
         const control = effectiveFloatControl(self.state.floatControl(), self.hooks.float_nan_mode);
         var status = float_status.FloatStatus.init(self.state.floatStatus());
         const result = if (double)
             float_fused.mulAdd64(adjusted_addend, adjusted_left, right, control, &status) catch return error.MissingFallback
+        else if (half)
+            @as(u64, float_fused.mulAdd16(@intCast(u16, adjusted_addend), @intCast(u16, adjusted_left), @intCast(u16, right), control, &status) catch return error.MissingFallback)
         else
             @as(u64, float_fused.mulAdd32(@intCast(u32, adjusted_addend), @intCast(u32, adjusted_left), @intCast(u32, right), control, &status) catch return error.MissingFallback);
         self.state.writeFloatStatus(status.raw());

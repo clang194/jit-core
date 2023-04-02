@@ -119,13 +119,29 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorFloatMulAdd(self: *Core64, word: u32) Core64Error!bool {
+        const half_masked = word & 0xbfe0fc00;
+        const half = half_masked == 0x0e400c00 or half_masked == 0x0ec00c00;
         const masked = word & 0xbfa0fc00;
         const subtracting = masked == 0x0ea0cc00;
-        if (masked != 0x0e20cc00 and !subtracting) {
+        if (!half and masked != 0x0e20cc00 and !subtracting) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
+        if (half) {
+            const addend = self.state.readVector(vectorRegFromWord(word));
+            const left = self.state.readVector(vectorRegFromWord(word >> 5));
+            const right = self.state.readVector(vectorRegFromWord(word >> 16));
+            const adjusted_left = if (half_masked == 0x0ec00c00) negateHalfFloatVector(full, left) else left;
+            const control = effectiveFloatControl(self.state.floatControl(), self.hooks.float_nan_mode);
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            const result = fusedMultiplyAddHalfFloatVector(control, &status, full, addend, adjusted_left, right) catch return error.MissingFallback;
+            self.state.writeFloatStatus(status.raw());
+            self.state.writeVector(vectorRegFromWord(word), result);
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const double = ((word >> 22) & 1) != 0;
         if (double and !full) {
             return error.ReservedInstruction;

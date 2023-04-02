@@ -267,6 +267,26 @@ pub const Core64Methods = struct {
     }
 
     pub fn runScalarFloatMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
+        const half_masked = word & 0xffc0f400;
+        if (half_masked == 0x5f001000 or half_masked == 0x5f005000) {
+            const left_index = @intCast(usize, (word >> 22) & 1);
+            const middle_index = @intCast(usize, (word >> 21) & 1);
+            const high = @intCast(usize, (word >> 11) & 1);
+            const lane_index = (high << 2) | (left_index << 1) | middle_index;
+            const element_reg = (word >> 16) & 0xf;
+            const source = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, 2);
+            const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, 2);
+            const control = effectiveFloatControl(self.state.floatControl(), self.hooks.float_nan_mode);
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            const addend = vectorElement(self.state.readVector(vectorRegFromWord(word)), 0, 2);
+            const left = if (half_masked == 0x5f005000) source ^ 0x8000 else source;
+            const result = @as(u64, float_fused.mulAdd16(@intCast(u16, addend), @intCast(u16, left), @intCast(u16, element), control, &status) catch return error.MissingFallback);
+            self.state.writeFloatStatus(status.raw());
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = result, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const masked = word & 0xff00f400;
         const multiply_only = masked == 0x5f009000;
         const extended_multiply = masked == 0x7f009000;
