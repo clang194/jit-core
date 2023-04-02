@@ -123,6 +123,51 @@ pub fn fusedParts(addend_input: float_parts.WideFloatParts, left_input: float_pa
     return packWide(result_negative, result_exponent - needed, result);
 }
 
+pub fn mulAdd16(addend: u16, left: u16, right: u16, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const addend_analysis = try float_parts.splitFloat16(addend, control, status);
+    const left_analysis = try float_parts.splitFloat16(left, control, status);
+    const right_analysis = try float_parts.splitFloat16(right, control, status);
+    const addend_infinity = addend_analysis.kind == .infinity;
+    const left_infinity = left_analysis.kind == .infinity;
+    const right_infinity = right_analysis.kind == .infinity;
+    const addend_zero = addend_analysis.kind == .zero;
+    const left_zero = left_analysis.kind == .zero;
+    const right_zero = right_analysis.kind == .zero;
+    const maybe_nan = try a64_float_nan.processTernaryNan16(control, addend, left, right, status);
+
+    if (addend_analysis.kind == .quiet_nan and ((left_infinity and right_zero) or (left_zero and right_infinity))) {
+        try float_exception.processFloatException(.invalid_operation, control, status);
+        return float_format.Binary16.defaultNan();
+    }
+    if (maybe_nan) |nan| {
+        return nan;
+    }
+
+    const product_negative = left_analysis.negative != right_analysis.negative;
+    const product_infinity = left_infinity or right_infinity;
+    const product_zero = left_zero or right_zero;
+
+    if ((left_infinity and right_zero) or (left_zero and right_infinity) or (addend_infinity and product_infinity and addend_analysis.negative != product_negative)) {
+        try float_exception.processFloatException(.invalid_operation, control, status);
+        return float_format.Binary16.defaultNan();
+    }
+    if ((addend_infinity and !addend_analysis.negative) or (product_infinity and !product_negative)) {
+        return float_format.Binary16.infinity(false);
+    }
+    if ((addend_infinity and addend_analysis.negative) or (product_infinity and product_negative)) {
+        return float_format.Binary16.infinity(true);
+    }
+    if (addend_zero and product_zero and addend_analysis.negative == product_negative) {
+        return float_format.Binary16.zero(addend_analysis.negative);
+    }
+
+    const result = fusedParts(addend_analysis.parts, left_analysis.parts, right_analysis.parts);
+    if (result.significand == 0) {
+        return float_format.Binary16.zero(control.rounding() == .negative);
+    }
+    return try float_parts.roundFloat16(result, control, status);
+}
+
 pub fn mulAdd32(addend: u32, left: u32, right: u32, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u32 {
     const addend_analysis = try float_parts.splitFloat32(addend, control, status);
     const left_analysis = try float_parts.splitFloat32(left, control, status);
