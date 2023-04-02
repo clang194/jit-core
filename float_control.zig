@@ -3,7 +3,7 @@ const float_rounding = @import("float_rounding.zig");
 
 pub const Mode = float_rounding.RoundingMode;
 pub const mask: u32 = 0x07ff9f00;
-pub const key_mask: u32 = 0x07c00000;
+pub const key_mask: u32 = 0x07c80000;
 
 pub const ControlError = error{
     OutOfRange,

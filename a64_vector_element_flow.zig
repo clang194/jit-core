@@ -204,6 +204,35 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorFloatMultiplyByElement(self: *Core64, word: u32) Core64Error!bool {
+        const half_masked = word & 0xbfc0f400;
+        if (half_masked == 0x0f001000 or half_masked == 0x0f005000) {
+            const full = (word & 0x40000000) != 0;
+            const left_index = @intCast(usize, (word >> 22) & 1);
+            const middle_index = @intCast(usize, (word >> 21) & 1);
+            const high = @intCast(usize, (word >> 11) & 1);
+            const lane_index = (high << 2) | (left_index << 1) | middle_index;
+            const element_reg = (word >> 16) & 0xf;
+            const element = vectorElement(self.state.readVector(vectorRegFromWord(element_reg)), lane_index, 2);
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            const prior = self.state.readVector(vectorRegFromWord(word));
+            const control = effectiveFloatControl(self.state.floatControl(), self.hooks.float_nan_mode);
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            const lanes = if (full) @as(usize, 8) else @as(usize, 4);
+            var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+            var index: usize = 0;
+            while (index < lanes) : (index += 1) {
+                const addend = vectorElement(prior, index, 2);
+                const left = vectorElement(source, index, 2);
+                const adjusted_left = if (half_masked == 0x0f005000) left ^ 0x8000 else left;
+                const value = float_fused.mulAdd16(@intCast(u16, addend), @intCast(u16, adjusted_left), @intCast(u16, element), control, &status) catch return error.MissingFallback;
+                setVectorElement(&result, index, 2, value);
+            }
+            self.state.writeFloatStatus(status.raw());
+            self.state.writeVector(vectorRegFromWord(word), result);
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const masked = word & 0xbf00f400;
         const multiply_only = masked == 0x0f009000;
         const extended_multiply = masked == 0x2f009000;

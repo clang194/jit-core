@@ -82,6 +82,55 @@ fn roundParts32(
     return result;
 }
 
+fn roundParts16(
+    value: u16,
+    analysis: float_parts.FloatAnalysis,
+    control: float_control.Control,
+    mode: float_rounding.RoundingMode,
+    exact: bool,
+    status: *float_status.FloatStatus,
+) float_exception.FloatExceptionError!u16 {
+    switch (analysis.kind) {
+        .quiet_nan, .signaling_nan => return try a64_float_nan.processNan16(control, value, status),
+        .infinity => return float_format.Binary16.infinity(analysis.negative),
+        .zero => return float_format.Binary16.zero(analysis.negative),
+        .finite => {},
+    }
+
+    const exponent = analysis.parts.exponent - float_parts.normalized_point;
+    if (exponent >= 0) {
+        return value;
+    }
+
+    var integer = signedMagnitude(analysis.negative, analysis.parts.significand);
+    const residue = float_residue.classifyRightShiftResidue64(integer, -exponent);
+    integer = moveInteger(integer, exponent);
+
+    if (shouldIncrease(mode, residue, integer)) {
+        integer +%= 1;
+    }
+
+    const result = if (integer == 0)
+        float_format.Binary16.zero(analysis.negative)
+    else
+        try float_parts.roundFloat16Parts(
+            float_parts.WideFloatParts{
+                .negative = bits.topBit64(integer),
+                .exponent = float_parts.normalized_point,
+                .significand = unsignedMagnitude(integer),
+            },
+            control,
+            .zero,
+            status,
+        );
+
+    if (residue != .zero and exact) {
+        try float_exception.processFloatException(.inexact, control, status);
+    }
+
+    return result;
+}
+
 fn roundParts64(
     value: u64,
     analysis: float_parts.FloatAnalysis,
@@ -129,6 +178,17 @@ fn roundParts64(
     }
 
     return result;
+}
+
+pub fn roundIntegral16(
+    value: u16,
+    control: float_control.Control,
+    mode: float_rounding.RoundingMode,
+    exact: bool,
+    status: *float_status.FloatStatus,
+) float_exception.FloatExceptionError!u16 {
+    const analysis = try float_parts.splitFloat16(value, control, status);
+    return roundParts16(value, analysis, control, mode, exact, status);
 }
 
 pub fn roundIntegral32(
