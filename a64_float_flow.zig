@@ -52,6 +52,7 @@ fn fixedFromFloat(
 
 fn integralFloat(
     self: *Core64,
+    half: bool,
     double: bool,
     value: u64,
     rounding: float_rounding.RoundingMode,
@@ -61,6 +62,8 @@ fn integralFloat(
     var status = float_status.FloatStatus.init(self.state.floatStatus());
     const converted = if (double)
         float_integer.roundIntegral64(value, control, rounding, exact, &status) catch return error.MissingFallback
+    else if (half)
+        @as(u64, float_integer.roundIntegral16(@intCast(u16, value), control, rounding, exact, &status) catch return error.MissingFallback)
     else
         @as(u64, float_integer.roundIntegral32(@intCast(u32, value), control, rounding, exact, &status) catch return error.MissingFallback);
     self.state.writeFloatStatus(status.raw());
@@ -93,28 +96,33 @@ pub const Core64Methods = struct {
         }
 
         const mode = @intCast(u2, (word >> 22) & 3);
-        const half = mode == 3 and (masked == 0x1e204000 or masked == 0x1e20c000 or masked == 0x1e214000);
+        const rounded = masked == 0x1e244000 or masked == 0x1e24c000 or masked == 0x1e254000 or masked == 0x1e25c000 or masked == 0x1e264000 or masked == 0x1e274000 or masked == 0x1e27c000;
+        const half = mode == 3 and (masked == 0x1e204000 or masked == 0x1e20c000 or masked == 0x1e214000 or rounded);
         if (mode == 2 or (mode == 3 and !half)) {
             return error.UnallocatedEncoding;
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5)).low;
-        const result = if (half)
-            @as(u64, if (masked == 0x1e204000) @intCast(u16, source) else if (masked == 0x1e20c000) @intCast(u16, source) & 0x7fff else @intCast(u16, source) ^ 0x8000)
+        const result = if (half and masked == 0x1e204000)
+            @as(u64, @intCast(u16, source))
+        else if (half and masked == 0x1e20c000)
+            @as(u64, @intCast(u16, source) & 0x7fff)
+        else if (half and masked == 0x1e214000)
+            @as(u64, @intCast(u16, source) ^ 0x8000)
         else if (masked == 0x1e244000)
-            try integralFloat(self, mode == 1, source, .nearest, false)
+            try integralFloat(self, half, mode == 1, source, .nearest, false)
         else if (masked == 0x1e24c000)
-            try integralFloat(self, mode == 1, source, .positive, false)
+            try integralFloat(self, half, mode == 1, source, .positive, false)
         else if (masked == 0x1e254000)
-            try integralFloat(self, mode == 1, source, .negative, false)
+            try integralFloat(self, half, mode == 1, source, .negative, false)
         else if (masked == 0x1e25c000)
-            try integralFloat(self, mode == 1, source, .zero, false)
+            try integralFloat(self, half, mode == 1, source, .zero, false)
         else if (masked == 0x1e264000)
-            try integralFloat(self, mode == 1, source, .nearest_away, false)
+            try integralFloat(self, half, mode == 1, source, .nearest_away, false)
         else if (masked == 0x1e274000)
-            try integralFloat(self, mode == 1, source, self.state.floatControl().rounding(), true)
+            try integralFloat(self, half, mode == 1, source, self.state.floatControl().rounding(), true)
         else if (masked == 0x1e27c000)
-            try integralFloat(self, mode == 1, source, self.state.floatControl().rounding(), false)
+            try integralFloat(self, half, mode == 1, source, self.state.floatControl().rounding(), false)
         else if (masked == 0x1e21c000)
             floatSqrt(self.state.floatControl(), self.hooks.float_nan_mode, mode == 1, source)
         else if (mode == 1)

@@ -411,6 +411,15 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorFloatRound(self: *Core64, word: u32) Core64Error!bool {
+        const half_masked = word & 0xbffffc00;
+        const half_nearest = half_masked == 0x0e798800;
+        const half_negative = half_masked == 0x0e799800;
+        const half_positive = half_masked == 0x0ef98800;
+        const half_zero = half_masked == 0x0ef99800;
+        const half_nearest_away = half_masked == 0x2e798800;
+        const half_exact = half_masked == 0x2e799800;
+        const half_current = half_masked == 0x2ef99800;
+        const half = half_nearest or half_negative or half_positive or half_zero or half_nearest_away or half_exact or half_current;
         const masked = word & 0xbfbffc00;
         const nearest = masked == 0x0e218800;
         const negative = masked == 0x0e219800;
@@ -419,7 +428,7 @@ pub const Core64Methods = struct {
         const nearest_away = masked == 0x2e218800;
         const exact = masked == 0x2e219800;
         const current = masked == 0x2ea19800;
-        if (!nearest and !negative and !positive and !zero and !nearest_away and !exact and !current) {
+        if (!half and !nearest and !negative and !positive and !zero and !nearest_away and !exact and !current) {
             return false;
         }
 
@@ -429,22 +438,22 @@ pub const Core64Methods = struct {
             return error.ReservedInstruction;
         }
 
-        const rounding = if (nearest)
+        const rounding = if (nearest or half_nearest)
             float_rounding.RoundingMode.nearest
-        else if (negative)
+        else if (negative or half_negative)
             float_rounding.RoundingMode.negative
-        else if (positive)
+        else if (positive or half_positive)
             float_rounding.RoundingMode.positive
-        else if (zero)
+        else if (zero or half_zero)
             float_rounding.RoundingMode.zero
-        else if (nearest_away)
+        else if (nearest_away or half_nearest_away)
             float_rounding.RoundingMode.nearest_away
         else
             self.state.floatControl().rounding();
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const control = self.state.floatControl();
         var status = float_status.FloatStatus.init(self.state.floatStatus());
-        const result = roundIntegralFloatVector(control, &status, double, full, rounding, exact, source) catch return error.MissingFallback;
+        const result = roundIntegralFloatVector(control, &status, half, double, full, rounding, exact or half_exact, source) catch return error.MissingFallback;
         self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
