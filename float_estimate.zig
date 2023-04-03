@@ -209,6 +209,37 @@ pub fn inverseRootEstimate32(value: u32, control: float_control.Control, status:
     }
 }
 
+pub fn inverseRootEstimate16(value: u16, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const analysis = try float_parts.splitFloat16(value, control, status);
+    switch (analysis.kind) {
+        .quiet_nan, .signaling_nan => return try a64_float_nan.processNan16(control, value, status),
+        .zero => {
+            try float_exception.processFloatException(.divide_by_zero, control, status);
+            return float_format.Binary16.infinity(analysis.negative);
+        },
+        .infinity => {
+            if (analysis.negative) {
+                try float_exception.processFloatException(.invalid_operation, control, status);
+                return float_format.Binary16.defaultNan();
+            }
+            return float_format.Binary16.zero(false);
+        },
+        .finite => {
+            if (analysis.negative) {
+                try float_exception.processFloatException(.invalid_operation, control, status);
+                return float_format.Binary16.defaultNan();
+            }
+            return estimateBits(
+                analysis.parts,
+                u16,
+                @intCast(u6, float_format.Binary16.stored_fraction_bits),
+                float_format.Binary16.exponent_bias,
+                float_format.Binary16.fraction_mask,
+            );
+        },
+    }
+}
+
 pub fn inverseRootEstimate64(value: u64, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     const analysis = try float_parts.splitFloat64(value, control, status);
     switch (analysis.kind) {
