@@ -241,6 +241,19 @@ pub fn reciprocalStepFloatVector(control: float_control.Control, status: *float_
     return result;
 }
 
+pub fn reciprocalStepHalfFloatVector(control: float_control.Control, status: *float_status.FloatStatus, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 8) else @as(usize, 4);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const left_value = @intCast(u16, vectorElement(left, index, 2));
+        const right_value = @intCast(u16, vectorElement(right, index, 2));
+        const step = try float_refine.reciprocalStep16(left_value, right_value, control, status);
+        setVectorElement(&result, index, 2, step);
+    }
+    return result;
+}
+
 pub fn roundIntegralFloatVector(control: float_control.Control, status: *float_status.FloatStatus, half: bool, double: bool, full: bool, mode: float_rounding.RoundingMode, exact: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
     const bytes = if (half) @as(usize, 2) else if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (half) if (full) @as(usize, 8) else @as(usize, 4) else if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);

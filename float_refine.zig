@@ -95,6 +95,34 @@ pub fn reciprocalStep32(left: u32, right: u32, control: float_control.Control, s
     return try float_parts.roundFloat32(result, control, status);
 }
 
+pub fn reciprocalStep16(left: u16, right: u16, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const adjusted_left = left ^ float_format.Binary16.sign_mask;
+    const left_analysis = try float_parts.splitFloat16(adjusted_left, control, status);
+    const right_analysis = try float_parts.splitFloat16(right, control, status);
+
+    const maybe_nan = try a64_float_nan.processPairNan16(control, adjusted_left, right, status);
+    if (maybe_nan) |nan| {
+        return nan;
+    }
+
+    const left_infinity = left_analysis.kind == .infinity;
+    const right_infinity = right_analysis.kind == .infinity;
+    const left_zero = left_analysis.kind == .zero;
+    const right_zero = right_analysis.kind == .zero;
+    if ((left_infinity and right_zero) or (left_zero and right_infinity)) {
+        return float_format.Binary16.finite(false, 0, 2);
+    }
+    if (left_infinity or right_infinity) {
+        return float_format.Binary16.infinity(left_analysis.negative != right_analysis.negative);
+    }
+
+    const result = float_fused.fusedParts(two_parts, left_analysis.parts, right_analysis.parts);
+    if (result.significand == 0) {
+        return float_format.Binary16.zero(control.rounding() == .negative);
+    }
+    return try float_parts.roundFloat16(result, control, status);
+}
+
 pub fn reciprocalStep64(left: u64, right: u64, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     const adjusted_left = left ^ float_format.Binary64.sign_mask;
     const left_analysis = try float_parts.splitFloat64(adjusted_left, control, status);

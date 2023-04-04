@@ -92,6 +92,32 @@ fn reciprocalBits32(analysis: float_parts.FloatAnalysis, control: float_control.
     return float_format.Binary32.zero(analysis.negative) | (stored_exponent << @intCast(u5, float_format.Binary32.stored_fraction_bits)) | (estimate & float_format.Binary32.fraction_mask);
 }
 
+fn reciprocalBits16(analysis: float_parts.FloatAnalysis, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    if (analysis.parts.exponent < float_format.Binary16.exponent_min - 2) {
+        try float_exception.processFloatException(.overflow, control, status);
+        try float_exception.processFloatException(.inexact, control, status);
+        return if (reciprocalOverflows(analysis.negative, control)) float_format.Binary16.infinity(analysis.negative) else float_format.Binary16.maxNormal(analysis.negative);
+    }
+    if (control.fz16() and analysis.parts.exponent >= -float_format.Binary16.exponent_min) {
+        status.setUnderflow(true);
+        return float_format.Binary16.zero(analysis.negative);
+    }
+
+    var estimate = @as(u16, reciprocalByte(bits.shiftRight64(analysis.parts.significand, float_parts.normalized_point - 8))) << @intCast(u4, float_format.Binary16.stored_fraction_bits - 8);
+    var result_exponent = -(analysis.parts.exponent + 1);
+    if (result_exponent == float_format.Binary16.exponent_min - 1) {
+        estimate |= float_format.Binary16.hidden_bit;
+        estimate >>= 1;
+    } else if (result_exponent == float_format.Binary16.exponent_min - 2) {
+        estimate |= float_format.Binary16.hidden_bit;
+        estimate >>= 2;
+        result_exponent += 1;
+    }
+
+    const stored_exponent = @intCast(u16, result_exponent + @intCast(i32, float_format.Binary16.exponent_bias));
+    return float_format.Binary16.zero(analysis.negative) | (stored_exponent << @intCast(u4, float_format.Binary16.stored_fraction_bits)) | (estimate & float_format.Binary16.fraction_mask);
+}
+
 fn reciprocalBits64(analysis: float_parts.FloatAnalysis, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u64 {
     if (analysis.parts.exponent < float_format.Binary64.exponent_min - 2) {
         try float_exception.processFloatException(.overflow, control, status);
@@ -128,6 +154,19 @@ pub fn reciprocalEstimate32(value: u32, control: float_control.Control, status: 
         },
         .infinity => return float_format.Binary32.zero(analysis.negative),
         .finite => return try reciprocalBits32(analysis, control, status),
+    }
+}
+
+pub fn reciprocalEstimate16(value: u16, control: float_control.Control, status: *float_status.FloatStatus) float_exception.FloatExceptionError!u16 {
+    const analysis = try float_parts.splitFloat16(value, control, status);
+    switch (analysis.kind) {
+        .quiet_nan, .signaling_nan => return try a64_float_nan.processNan16(control, value, status),
+        .zero => {
+            try float_exception.processFloatException(.divide_by_zero, control, status);
+            return float_format.Binary16.infinity(analysis.negative);
+        },
+        .infinity => return float_format.Binary16.zero(analysis.negative),
+        .finite => return try reciprocalBits16(analysis, control, status),
     }
 }
 
