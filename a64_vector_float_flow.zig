@@ -213,13 +213,14 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorReciprocalStep(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfa0fc00) != 0x0e20fc00) {
+        const half = (word & 0xbfe0fc00) == 0x0e403c00;
+        if (!half and (word & 0xbfa0fc00) != 0x0e20fc00) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const double = ((word >> 22) & 1) != 0;
-        if (double and !full) {
+        if (!half and double and !full) {
             return error.ReservedInstruction;
         }
 
@@ -227,7 +228,10 @@ pub const Core64Methods = struct {
         const right = self.state.readVector(vectorRegFromWord(word >> 16));
         const control = self.state.floatControl();
         var status = float_status.FloatStatus.init(self.state.floatStatus());
-        const result = reciprocalStepFloatVector(control, &status, double, full, left, right) catch return error.MissingFallback;
+        const result = if (half)
+            reciprocalStepHalfFloatVector(control, &status, full, left, right) catch return error.MissingFallback
+        else
+            reciprocalStepFloatVector(control, &status, double, full, left, right) catch return error.MissingFallback;
         self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;

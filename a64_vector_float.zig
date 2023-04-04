@@ -184,6 +184,18 @@ pub fn reciprocalEstimateFloatVector(control: float_control.Control, status: *fl
     return result;
 }
 
+pub fn reciprocalEstimateHalfFloatVector(control: float_control.Control, status: *float_status.FloatStatus, full: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 8) else @as(usize, 4);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const value = @intCast(u16, vectorElement(source, index, 2));
+        const estimate = try float_estimate.reciprocalEstimate16(value, control, status);
+        setVectorElement(&result, index, 2, estimate);
+    }
+    return result;
+}
+
 pub fn reciprocalEstimateUnsignedVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
     const lanes = if (full) @as(usize, 4) else @as(usize, 2);
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };
