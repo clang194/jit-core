@@ -195,6 +195,24 @@ pub fn reciprocalEstimateUnsignedVector(full: bool, source: a64_state.VectorValu
     return result;
 }
 
+pub fn inverseRootEstimateFloatVector(control: float_control.Control, status: *float_status.FloatStatus, half: bool, double: bool, full: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const bytes = if (half) @as(usize, 2) else if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (half) if (full) @as(usize, 8) else @as(usize, 4) else if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const value = vectorElement(source, index, bytes);
+        const estimate = if (double)
+            try float_estimate.inverseRootEstimate64(value, control, status)
+        else if (half)
+            @as(u64, try float_estimate.inverseRootEstimate16(@intCast(u16, value), control, status))
+        else
+            @as(u64, try float_estimate.inverseRootEstimate32(@intCast(u32, value), control, status));
+        setVectorElement(&result, index, bytes, estimate);
+    }
+    return result;
+}
+
 pub fn inverseRootEstimateUnsignedVector(full: bool, source: a64_state.VectorValue) a64_state.VectorValue {
     const lanes = if (full) @as(usize, 4) else @as(usize, 2);
     var result = a64_state.VectorValue{ .low = 0, .high = 0 };

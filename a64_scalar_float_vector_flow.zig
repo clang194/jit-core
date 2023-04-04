@@ -202,17 +202,20 @@ pub const Core64Methods = struct {
     }
 
     pub fn runScalarInverseRootEstimate(self: *Core64, word: u32) Core64Error!bool {
+        const half = (word & 0xfffffc00) == 0x7ef9d800;
         const masked = word & 0xffbffc00;
-        if (masked != 0x7e21d800 and masked != 0x7ea1d800) {
+        if (!half and masked != 0x7e21d800 and masked != 0x7ea1d800) {
             return false;
         }
 
         const double = (word & 0x00800000) != 0;
-        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const bytes = if (half) @as(usize, 2) else if (double) @as(usize, 8) else @as(usize, 4);
         const source = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
         const control = self.state.floatControl();
         var status = float_status.FloatStatus.init(self.state.floatStatus());
-        const result = if (double) blk: {
+        const result = if (half) blk: {
+            break :blk @as(u64, float_estimate.inverseRootEstimate16(@intCast(u16, source), control, &status) catch return error.MissingFallback);
+        } else if (double) blk: {
             break :blk float_estimate.inverseRootEstimate64(source, control, &status) catch return error.MissingFallback;
         } else blk: {
             break :blk @as(u64, float_estimate.inverseRootEstimate32(@intCast(u32, source), control, &status) catch return error.MissingFallback);

@@ -1,0 +1,9 @@
+JIT Core
+
+JIT Core is a work in progress dynamic recompilation core for ARM, Thumb, and AArch64 instruction streams.
+
+The current code contains the portable execution and instruction behavior layer for a 32-bit ARM and Thumb core and a 64-bit AArch64 core. It keeps register state, floating point state, vector state, status flags, program counters, and reservation state, and it dispatches supported instructions through Zig code.
+
+Memory, exceptions, system behavior, cycle accounting, cache operations, and fallback handling are supplied by the host program through callbacks. JIT Core does not own the surrounding machine state or operating environment.
+
+The project is still in active development.
