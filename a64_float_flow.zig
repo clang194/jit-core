@@ -32,6 +32,7 @@ usingnamespace @import("a64_memory_bits.zig");
 
 fn fixedFromFloat(
     self: *Core64,
+    half: bool,
     double: bool,
     value: u64,
     integer_bits: usize,
@@ -43,6 +44,8 @@ fn fixedFromFloat(
     var status = float_status.FloatStatus.init(self.state.floatStatus());
     const result = if (double)
         float_fixed.fixedFromFloat64(integer_bits, value, fractional_bits, unsigned_result, control, rounding, &status)
+    else if (half)
+        float_fixed.fixedFromFloat16(integer_bits, @intCast(u16, value), fractional_bits, unsigned_result, control, rounding, &status)
     else
         float_fixed.fixedFromFloat32(integer_bits, @intCast(u32, value), fractional_bits, unsigned_result, control, rounding, &status);
     const converted = result catch return error.MissingFallback;
@@ -273,7 +276,7 @@ pub const Core64Methods = struct {
         }
 
         const mode = @intCast(u2, (word >> 22) & 3);
-        if (mode == 2 or mode == 3) {
+        if (mode == 2) {
             return error.UnallocatedEncoding;
         }
 
@@ -282,10 +285,11 @@ pub const Core64Methods = struct {
         if (!wide and (scale & 0x20) == 0) {
             return error.UnallocatedEncoding;
         }
+        const half = mode == 3;
         const double = mode == 1;
         const fraction = @as(u8, 64) - scale;
-        const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (double) @as(usize, 8) else @as(usize, 4));
-        const result = try fixedFromFloat(self, double, input, if (wide) @as(usize, 64) else @as(usize, 32), fraction, masked == 0x1e190000, .zero);
+        const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (half) @as(usize, 2) else if (double) @as(usize, 8) else @as(usize, 4));
+        const result = try fixedFromFloat(self, half, double, input, if (wide) @as(usize, 64) else @as(usize, 32), fraction, masked == 0x1e190000, .zero);
         self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
@@ -298,12 +302,13 @@ pub const Core64Methods = struct {
         }
 
         const mode = @intCast(u2, (word >> 22) & 3);
-        if (mode > 1) {
+        if (mode == 2) {
             return error.UnallocatedEncoding;
         }
+        const half = mode == 3;
         const wide = (word & 0x80000000) != 0;
-        const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (mode == 1) @as(usize, 8) else @as(usize, 4));
-        const result = try fixedFromFloat(self, mode == 1, input, if (wide) @as(usize, 64) else @as(usize, 32), 0, masked == 0x1e210000 or masked == 0x1e250000 or masked == 0x1e290000 or masked == 0x1e310000 or masked == 0x1e390000, if (masked == 0x1e200000 or masked == 0x1e210000) .nearest else if (masked == 0x1e240000 or masked == 0x1e250000) .nearest_away else if (masked == 0x1e280000 or masked == 0x1e290000) .positive else if (masked == 0x1e300000 or masked == 0x1e310000) .negative else .zero);
+        const input = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, if (half) @as(usize, 2) else if (mode == 1) @as(usize, 8) else @as(usize, 4));
+        const result = try fixedFromFloat(self, half, mode == 1, input, if (wide) @as(usize, 64) else @as(usize, 32), 0, masked == 0x1e210000 or masked == 0x1e250000 or masked == 0x1e290000 or masked == 0x1e310000 or masked == 0x1e390000, if (masked == 0x1e200000 or masked == 0x1e210000) .nearest else if (masked == 0x1e240000 or masked == 0x1e250000) .nearest_away else if (masked == 0x1e280000 or masked == 0x1e290000) .positive else if (masked == 0x1e300000 or masked == 0x1e310000) .negative else .zero);
         self.writeSized(wide, regFromWord(word), result, false);
         self.state.pc +%= 4;
         return true;
