@@ -110,6 +110,19 @@ pub fn fixedFromFloat32(
     return fixedFromParts(integer_bits, analysis, fractional_bits, unsigned_result, control, mode, status);
 }
 
+pub fn fixedFromFloat16(
+    integer_bits: usize,
+    value: u16,
+    fractional_bits: usize,
+    unsigned_result: bool,
+    control: float_control.Control,
+    mode: float_rounding.RoundingMode,
+    status: *float_status.FloatStatus,
+) float_exception.FloatExceptionError!u64 {
+    const analysis = try float_parts.splitFloat16(value, control, status);
+    return fixedFromParts(integer_bits, analysis, fractional_bits, unsigned_result, control, mode, status);
+}
+
 pub fn fixedFromFloat64(
     integer_bits: usize,
     value: u64,
