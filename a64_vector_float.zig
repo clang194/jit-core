@@ -236,6 +236,23 @@ pub fn inverseRootEstimateUnsignedVector(full: bool, source: a64_state.VectorVal
     return result;
 }
 
+pub fn rootStepFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+    const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const left_value = vectorElement(left, index, bytes);
+        const right_value = vectorElement(right, index, bytes);
+        const step = if (double)
+            try float_refine.rootStep64(left_value, right_value, control, status)
+        else
+            @as(u64, try float_refine.rootStep32(@intCast(u32, left_value), @intCast(u32, right_value), control, status));
+        setVectorElement(&result, index, bytes, step);
+    }
+    return result;
+}
+
 pub fn reciprocalStepFloatVector(control: float_control.Control, status: *float_status.FloatStatus, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);
     const lanes = if (double) @as(usize, 2) else if (full) @as(usize, 4) else @as(usize, 2);
@@ -261,6 +278,19 @@ pub fn reciprocalStepHalfFloatVector(control: float_control.Control, status: *fl
         const left_value = @intCast(u16, vectorElement(left, index, 2));
         const right_value = @intCast(u16, vectorElement(right, index, 2));
         const step = try float_refine.reciprocalStep16(left_value, right_value, control, status);
+        setVectorElement(&result, index, 2, step);
+    }
+    return result;
+}
+
+pub fn rootStepHalfFloatVector(control: float_control.Control, status: *float_status.FloatStatus, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 8) else @as(usize, 4);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const left_value = @intCast(u16, vectorElement(left, index, 2));
+        const right_value = @intCast(u16, vectorElement(right, index, 2));
+        const step = try float_refine.rootStep16(left_value, right_value, control, status);
         setVectorElement(&result, index, 2, step);
     }
     return result;

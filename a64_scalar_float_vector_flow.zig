@@ -301,17 +301,20 @@ pub const Core64Methods = struct {
     }
 
     pub fn runScalarRootStep(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xffa0fc00) != 0x5ea0fc00) {
+        const half = (word & 0xffe0fc00) == 0x5ec03c00;
+        if (!half and (word & 0xffa0fc00) != 0x5ea0fc00) {
             return false;
         }
 
         const double = ((word >> 22) & 1) != 0;
-        const bytes = if (double) @as(usize, 8) else @as(usize, 4);
+        const bytes = if (half) @as(usize, 2) else if (double) @as(usize, 8) else @as(usize, 4);
         const left = vectorElement(self.state.readVector(vectorRegFromWord(word >> 5)), 0, bytes);
         const right = vectorElement(self.state.readVector(vectorRegFromWord(word >> 16)), 0, bytes);
         const control = self.state.floatControl();
         var status = float_status.FloatStatus.init(self.state.floatStatus());
-        const result = if (double)
+        const result = if (half)
+            @as(u64, float_refine.rootStep16(@intCast(u16, left), @intCast(u16, right), control, &status) catch return error.MissingFallback)
+        else if (double)
             float_refine.rootStep64(left, right, control, &status) catch return error.MissingFallback
         else
             @as(u64, float_refine.rootStep32(@intCast(u32, left), @intCast(u32, right), control, &status) catch return error.MissingFallback);
