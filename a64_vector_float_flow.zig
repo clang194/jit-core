@@ -279,20 +279,24 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorReciprocalEstimate(self: *Core64, word: u32) Core64Error!bool {
-        if ((word & 0xbfbffc00) != 0x2e21d800) {
+        const half = (word & 0xbffffc00) == 0x0ef9d800;
+        if (!half and (word & 0xbfbffc00) != 0x2e21d800) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
         const double = (word & 0x00400000) != 0;
-        if (double and !full) {
+        if (!half and double and !full) {
             return error.ReservedInstruction;
         }
 
         const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const control = self.state.floatControl();
         var status = float_status.FloatStatus.init(self.state.floatStatus());
-        const result = reciprocalEstimateFloatVector(control, &status, double, full, source) catch return error.MissingFallback;
+        const result = if (half)
+            reciprocalEstimateHalfFloatVector(control, &status, full, source) catch return error.MissingFallback
+        else
+            reciprocalEstimateFloatVector(control, &status, double, full, source) catch return error.MissingFallback;
         self.state.writeFloatStatus(status.raw());
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
