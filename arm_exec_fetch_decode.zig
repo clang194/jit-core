@@ -123,6 +123,22 @@ pub fn isBitfieldClear(word: u32) bool {
     return (word & 0x0fe0007f) == 0x07c0001f and armCondition(word) != null;
 }
 
+pub fn isBitfieldInsert(word: u32) bool {
+    return (word & 0x0fe00070) == 0x07c00010 and armCondition(word) != null;
+}
+
+pub fn isUnsignedBitfieldExtract(word: u32) bool {
+    return (word & 0x0fe00070) == 0x07e00050 and armCondition(word) != null;
+}
+
+pub fn isSignedBitfieldExtract(word: u32) bool {
+    return (word & 0x0fe00070) == 0x07a00050 and armCondition(word) != null;
+}
+
+pub fn isMoveTop(word: u32) bool {
+    return (word & 0x0ff00000) == 0x03400000 and armCondition(word) != null;
+}
+
 pub fn isSignedSaturatingWord(word: u32) bool {
     const op = word & 0x0ff00ff0;
     return (op == 0x01000050 or

@@ -260,6 +260,47 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         }) catch error.NoSpaceLeft;
     }
 
+    if (arm_exec.isBitfieldInsert(word)) {
+        const msb = @intCast(u5, (word >> 16) & 0x1f);
+        const lsb = @intCast(u5, (word >> 7) & 0x1f);
+        const width = if (msb >= lsb) @as(u32, msb) - @as(u32, lsb) + 1 else @as(u32, 0);
+        const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+        const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+        return std.fmt.bufPrint(buf, "bfi{} {}, {}, #{}, #{}", .{
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(source),
+            lsb,
+            width,
+        }) catch error.NoSpaceLeft;
+    }
+
+    if (arm_exec.isUnsignedBitfieldExtract(word) or arm_exec.isSignedBitfieldExtract(word)) {
+        const name = if (arm_exec.isSignedBitfieldExtract(word)) "sbfx" else "ubfx";
+        const width = ((word >> 16) & 0x1f) + 1;
+        const lsb = (word >> 7) & 0x1f;
+        const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+        const source = @intToEnum(arm_state.ArmReg, @intCast(u8, word & 0xf));
+        return std.fmt.bufPrint(buf, "{}{} {}, {}, #{}, #{}", .{
+            name,
+            condName(cond),
+            arm_state.regName(dest),
+            arm_state.regName(source),
+            lsb,
+            width,
+        }) catch error.NoSpaceLeft;
+    }
+
+    if (arm_exec.isMoveTop(word)) {
+        const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+        const imm16 = (((word >> 16) & 0xf) << 12) | (word & 0xfff);
+        return std.fmt.bufPrint(buf, "movt{} {}, #{}", .{
+            condName(cond),
+            arm_state.regName(dest),
+            imm16,
+        }) catch error.NoSpaceLeft;
+    }
+
     if ((word & 0x0fff0ff0) == 0x06bf0f30) {
         return formatArmUnaryReg(buf, "rev", word, cond);
     }

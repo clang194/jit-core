@@ -134,8 +134,63 @@ pub fn runBitfieldClear(word: u32, state: *arm_state.MachineState, pc: u32) ArmS
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
         const width = @as(u32, msb) - @as(u32, lsb) + 1;
-        const ones = if (width >= 32) ~@as(u32, 0) else (@as(u32, 1) << @intCast(u5, width)) - 1;
+        const ones = lowMask32(@intCast(u6, width));
         state.write(dest, state.read(dest) & ~(ones << lsb));
+    }
+    state.write(.pc, pc + 4);
+}
+
+pub fn runBitfieldInsert(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const msb = @intCast(u5, (word >> 16) & 0x1f);
+    const dest = armReg(word >> 12);
+    const lsb = @intCast(u5, (word >> 7) & 0x1f);
+    const source = armReg(word);
+    if (dest == .pc or msb < lsb) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const width = @as(u32, msb) - @as(u32, lsb) + 1;
+        const mask = lowMask32(@intCast(u6, width)) << lsb;
+        const kept = state.read(dest) & ~mask;
+        const inserted = (state.read(source) << lsb) & mask;
+        state.write(dest, kept | inserted);
+    }
+    state.write(.pc, pc + 4);
+}
+
+pub fn runBitfieldExtract(word: u32, state: *arm_state.MachineState, pc: u32, signed: bool) ArmStepError!void {
+    const width_minus_one = @intCast(u5, (word >> 16) & 0x1f);
+    const dest = armReg(word >> 12);
+    const lsb = @intCast(u5, (word >> 7) & 0x1f);
+    const source = armReg(word);
+    const msb = @as(u6, lsb) + @as(u6, width_minus_one);
+    if (dest == .pc or source == .pc or msb >= 32) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const width = @as(u6, width_minus_one) + 1;
+        const extracted = (state.read(source) >> lsb) & lowMask32(width);
+        const sign = (@as(u32, 1) << @intCast(u5, width - 1));
+        const result = if (signed and (extracted & sign) != 0)
+            extracted | ~lowMask32(width)
+        else
+            extracted;
+        state.write(dest, result);
+    }
+    state.write(.pc, pc + 4);
+}
+
+pub fn runMoveTop(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    if (dest == .pc) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const imm16 = (((word >> 16) & 0xf) << 12) | (word & 0xfff);
+        state.write(dest, (state.read(dest) & 0x0000ffff) | (imm16 << 16));
     }
     state.write(.pc, pc + 4);
 }

@@ -61,6 +61,16 @@ pub fn countLeadingZeros32(value: u32) u32 {
     return count;
 }
 
+pub fn lowMask32(count: u6) u32 {
+    if (count == 0) {
+        return 0;
+    }
+    if (count >= 32) {
+        return ~@as(u32, 0);
+    }
+    return (@as(u32, 1) << @intCast(u5, count)) - 1;
+}
+
 pub fn logicalLeft(value: u32, amount: u8, carry_in: bool) ShiftResult {
     if (amount == 0) {
         return ShiftResult{ .word = value, .carry = carry_in };
