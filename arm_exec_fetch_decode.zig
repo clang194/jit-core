@@ -7,6 +7,7 @@ usingnamespace @import("arm_exec_float_decode.zig");
 usingnamespace @import("arm_exec_float_run.zig");
 usingnamespace @import("arm_exec_multiply_run.zig");
 usingnamespace @import("arm_exec_float_math.zig");
+usingnamespace @import("arm_exec_divide_run.zig");
 usingnamespace @import("arm_exec_status_branch.zig");
 usingnamespace @import("arm_exec_data_transfer.zig");
 usingnamespace @import("arm_exec_saturate_scalar.zig");
@@ -107,6 +108,19 @@ pub fn isStatusWriteRegister(word: u32) bool {
 
 pub fn isCountLeadingZeros(word: u32) bool {
     return (word & 0x0fff0ff0) == 0x016f0f10 and armCondition(word) != null;
+}
+
+pub fn isArmDivide(word: u32) bool {
+    const op = word & 0x0ff0f0f0;
+    return (op == 0x0710f010 or op == 0x0730f010) and armCondition(word) != null;
+}
+
+pub fn isBitReverse(word: u32) bool {
+    return (word & 0x0fff0ff0) == 0x06ff0f30 and armCondition(word) != null;
+}
+
+pub fn isBitfieldClear(word: u32) bool {
+    return (word & 0x0fe0007f) == 0x07c0001f and armCondition(word) != null;
 }
 
 pub fn isSignedSaturatingWord(word: u32) bool {

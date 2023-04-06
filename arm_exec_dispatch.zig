@@ -7,6 +7,7 @@ usingnamespace @import("arm_exec_float_decode.zig");
 usingnamespace @import("arm_exec_float_run.zig");
 usingnamespace @import("arm_exec_multiply_run.zig");
 usingnamespace @import("arm_exec_float_math.zig");
+usingnamespace @import("arm_exec_divide_run.zig");
 usingnamespace @import("arm_exec_status_branch.zig");
 usingnamespace @import("arm_exec_data_transfer.zig");
 usingnamespace @import("arm_exec_saturate_scalar.zig");
@@ -71,6 +72,9 @@ fn usesRetiredArmCondition(word: u32) bool {
         isStatusWriteImmediate(folded) or
         isStatusWriteRegister(folded) or
         isCountLeadingZeros(folded) or
+        isArmDivide(folded) or
+        isBitReverse(folded) or
+        isBitfieldClear(folded) or
         isSignedSaturatingWord(folded) or
         isScalarSaturatingMove(folded) or
         isHalfSaturatingMove(folded) or
@@ -345,6 +349,18 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isCountLeadingZeros(word)) {
         return runCountLeadingZeros(word, state, pc);
+    }
+
+    if (isArmDivide(word)) {
+        return runArmDivide(word, state, pc);
+    }
+
+    if (isBitReverse(word)) {
+        return runBitReverse(word, state, pc);
+    }
+
+    if (isBitfieldClear(word)) {
+        return runBitfieldClear(word, state, pc);
     }
 
     if (isSignedSaturatingWord(word)) {

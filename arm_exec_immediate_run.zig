@@ -111,3 +111,31 @@ pub fn runRevSignedHalf(word: u32, state: *arm_state.MachineState, pc: u32) ArmS
     state.write(.pc, pc + 4);
 }
 
+pub fn runBitReverse(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    const source = armReg(word);
+    if (dest == .pc or source == .pc) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        state.write(dest, reverseBitsWord(state.read(source)));
+    }
+    state.write(.pc, pc + 4);
+}
+
+pub fn runBitfieldClear(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const msb = @intCast(u5, (word >> 16) & 0x1f);
+    const dest = armReg(word >> 12);
+    const lsb = @intCast(u5, (word >> 7) & 0x1f);
+    if (dest == .pc or msb < lsb) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const width = @as(u32, msb) - @as(u32, lsb) + 1;
+        const ones = if (width >= 32) ~@as(u32, 0) else (@as(u32, 1) << @intCast(u5, width)) - 1;
+        state.write(dest, state.read(dest) & ~(ones << lsb));
+    }
+    state.write(.pc, pc + 4);
+}

@@ -7,6 +7,7 @@ usingnamespace @import("arm_text_float_format.zig");
 usingnamespace @import("arm_text_coprocessor_format.zig");
 usingnamespace @import("arm_text_block_format.zig");
 usingnamespace @import("arm_text_misc_format.zig");
+usingnamespace @import("arm_text_divide_format.zig");
 usingnamespace @import("arm_text_parallel_format.zig");
 usingnamespace @import("arm_text_multiply_format.zig");
 usingnamespace @import("arm_text_transfer_format.zig");
@@ -238,6 +239,27 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return formatStatusWriteRegister(buf, word, cond);
     }
 
+    if (arm_exec.isArmDivide(word)) {
+        return formatArmDivide(buf, word, cond);
+    }
+
+    if (arm_exec.isBitReverse(word)) {
+        return formatArmUnaryReg(buf, "rbit", word, cond);
+    }
+
+    if (arm_exec.isBitfieldClear(word)) {
+        const msb = @intCast(u5, (word >> 16) & 0x1f);
+        const lsb = @intCast(u5, (word >> 7) & 0x1f);
+        const width = if (msb >= lsb) @as(u32, msb) - @as(u32, lsb) + 1 else @as(u32, 0);
+        const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+        return std.fmt.bufPrint(buf, "bfc{} {}, #{}, #{}", .{
+            condName(cond),
+            arm_state.regName(dest),
+            lsb,
+            width,
+        }) catch error.NoSpaceLeft;
+    }
+
     if ((word & 0x0fff0ff0) == 0x06bf0f30) {
         return formatArmUnaryReg(buf, "rev", word, cond);
     }
@@ -360,4 +382,3 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
 
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
 }
-

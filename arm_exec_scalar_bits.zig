@@ -135,6 +135,17 @@ pub fn byteReverseHalfwords(value: u32) u32 {
     return bits.swapLaneBytes32(value);
 }
 
+pub fn reverseBitsWord(value: u32) u32 {
+    var remaining = value;
+    var output: u32 = 0;
+    var index: u6 = 0;
+    while (index < 32) : (index += 1) {
+        output = (output << 1) | (remaining & 1);
+        remaining >>= 1;
+    }
+    return output;
+}
+
 pub fn signExtendByte(value: u32) u32 {
     const narrowed = value & 0xff;
     if ((narrowed & 0x80) != 0) {
