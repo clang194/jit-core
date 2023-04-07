@@ -12,6 +12,7 @@ pub const isUndefinedInstruction = fetch_decode.isUndefinedInstruction;
 pub const isBreakpoint = fetch_decode.isBreakpoint;
 pub const isBranchImmediate = fetch_decode.isBranchImmediate;
 pub const isBranchExchange = fetch_decode.isBranchExchange;
+pub const isArmBarrier = fetch_decode.isArmBarrier;
 pub const isMultiply = fetch_decode.isMultiply;
 pub const isLoadWord = fetch_decode.isLoadWord;
 pub const isLoadByte = fetch_decode.isLoadByte;

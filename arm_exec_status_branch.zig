@@ -210,6 +210,9 @@ pub fn multiplyOp(word: u32) ?MultiplyOp {
     if ((word & 0x0fe000f0) == 0x00200090) {
         return .multiply_add;
     }
+    if ((word & 0x0ff000f0) == 0x00600090) {
+        return .multiply_subtract;
+    }
     if ((word & 0x0fe000f0) == 0x00800090) {
         return .unsigned_long;
     }

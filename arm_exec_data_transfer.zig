@@ -74,7 +74,7 @@ pub fn runMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepEr
         return error.Unpredictable;
     }
     switch (op) {
-        .multiply_add => {
+        .multiply_add, .multiply_subtract => {
             if (low == .pc) {
                 return error.Unpredictable;
             }
@@ -107,6 +107,11 @@ pub fn runMultiply(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepEr
             if (set_flags) {
                 writeMultiplyFlags(state, result);
             }
+        },
+        .multiply_subtract => {
+            const addend = readArmOperand(state, low, pc);
+            const result = addend -% (state.read(left) *% state.read(right));
+            state.write(high, result);
         },
         .unsigned_long => {
             const result = @as(u64, state.read(left)) * @as(u64, state.read(right));
@@ -200,12 +205,10 @@ pub fn runLoadMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_sta
     const span = @as(u32, count) * 4;
     const start = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) base +% 4 else base -% span
-    else
-        if (bits.getBit32(word, 23)) base else base -% span +% 4;
+    else if (bits.getBit32(word, 23)) base else base -% span +% 4;
     const writeback = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) base +% span else base -% span
-    else
-        if (bits.getBit32(word, 23)) base +% span else start -% 4;
+    else if (bits.getBit32(word, 23)) base +% span else start -% 4;
 
     var address = start;
     var index: u5 = 0;
@@ -245,12 +248,10 @@ pub fn runStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_st
     const span = @as(u32, count) * 4;
     const start = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) base +% 4 else base -% span
-    else
-        if (bits.getBit32(word, 23)) base else base -% span +% 4;
+    else if (bits.getBit32(word, 23)) base else base -% span +% 4;
     const writeback = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) base +% span else base -% span
-    else
-        if (bits.getBit32(word, 23)) base +% span else start -% 4;
+    else if (bits.getBit32(word, 23)) base +% span else start -% 4;
 
     var address = start;
     var index: u5 = 0;
@@ -270,4 +271,3 @@ pub fn runStoreMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_st
     }
     state.write(.pc, pc + 4);
 }
-

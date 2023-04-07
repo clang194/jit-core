@@ -7,6 +7,7 @@ usingnamespace @import("arm_exec_float_decode.zig");
 usingnamespace @import("arm_exec_float_run.zig");
 usingnamespace @import("arm_exec_multiply_run.zig");
 usingnamespace @import("arm_exec_float_math.zig");
+usingnamespace @import("arm_exec_system_run.zig");
 usingnamespace @import("arm_exec_divide_run.zig");
 usingnamespace @import("arm_exec_status_branch.zig");
 usingnamespace @import("arm_exec_data_transfer.zig");
@@ -69,6 +70,11 @@ pub fn isBranchLinkExchangeImmediate(word: u32) bool {
 
 pub fn isClearExclusive(word: u32) bool {
     return word == 0xf57ff01f;
+}
+
+pub fn isArmBarrier(word: u32) bool {
+    const masked = word & 0xfffffff0;
+    return masked == 0xf57ff040 or masked == 0xf57ff050 or masked == 0xf57ff060;
 }
 
 pub fn isLoadExclusive(word: u32) bool {

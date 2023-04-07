@@ -75,6 +75,9 @@ pub fn multiplyText(word: u32) ?MultiplyText {
     if ((word & 0x0fe000f0) == 0x00200090) {
         return MultiplyText{ .name = "mla", .long = false, .addend = true, .flags = true };
     }
+    if ((word & 0x0ff000f0) == 0x00600090) {
+        return MultiplyText{ .name = "mls", .long = false, .addend = true, .flags = false };
+    }
     if ((word & 0x0fe000f0) == 0x00800090) {
         return MultiplyText{ .name = "umull", .long = true, .addend = false, .flags = true };
     }
@@ -92,4 +95,3 @@ pub fn multiplyText(word: u32) ?MultiplyText {
     }
     return null;
 }
-

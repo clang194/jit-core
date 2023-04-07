@@ -255,6 +255,7 @@ pub const ExtendOp = enum(u4) {
 pub const MultiplyOp = enum(u4) {
     multiply,
     multiply_add,
+    multiply_subtract,
     unsigned_long,
     unsigned_long_add,
     unsigned_accumulate,
@@ -278,4 +279,3 @@ pub const DualMultiplyOp = enum(u3) {
     pair_add,
     pair_sub,
 };
-

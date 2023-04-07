@@ -7,6 +7,7 @@ usingnamespace @import("arm_exec_float_decode.zig");
 usingnamespace @import("arm_exec_float_run.zig");
 usingnamespace @import("arm_exec_multiply_run.zig");
 usingnamespace @import("arm_exec_float_math.zig");
+usingnamespace @import("arm_exec_system_run.zig");
 usingnamespace @import("arm_exec_divide_run.zig");
 usingnamespace @import("arm_exec_status_branch.zig");
 usingnamespace @import("arm_exec_data_transfer.zig");
@@ -319,6 +320,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
         state.exclusive = false;
         state.write(.pc, pc + 4);
         return;
+    }
+
+    if (isArmBarrier(word)) {
+        return runArmBarrier(word, state, hooks, pc);
     }
 
     if (isLoadExclusive(word)) {

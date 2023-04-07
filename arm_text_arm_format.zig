@@ -8,6 +8,7 @@ usingnamespace @import("arm_text_coprocessor_format.zig");
 usingnamespace @import("arm_text_block_format.zig");
 usingnamespace @import("arm_text_misc_format.zig");
 usingnamespace @import("arm_text_divide_format.zig");
+usingnamespace @import("arm_text_system_format.zig");
 usingnamespace @import("arm_text_parallel_format.zig");
 usingnamespace @import("arm_text_multiply_format.zig");
 usingnamespace @import("arm_text_transfer_format.zig");
@@ -221,6 +222,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     if ((word & 0xfffffdff) == 0xf1010000) {
         const name = if ((word & 0x00000200) != 0) "be" else "le";
         return std.fmt.bufPrint(buf, "setend {}", .{name}) catch error.NoSpaceLeft;
+    }
+
+    if (arm_exec.isArmBarrier(word)) {
+        return formatArmBarrier(buf, word);
     }
 
     if (try formatCoprocessor(buf, word)) |text| {
