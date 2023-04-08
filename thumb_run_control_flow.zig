@@ -11,6 +11,18 @@ pub fn runThumbControlFlow(word: u16, state: *arm_state.MachineState, hooks: arm
         return true;
     }
 
+    if (isThumbNoOp(word)) {
+        return true;
+    }
+
+    if (isThumbBreakpoint(word)) {
+        if (hooks.exception) |callback| {
+            callback(state.read(.pc), .breakpoint, state, hooks.context);
+            return true;
+        }
+        return error.UnknownInstruction;
+    }
+
     if ((word & 0xff00) == 0xdf00) {
         if (hooks.supervisor) |callback| {
             state.write(.pc, state.read(.pc) + 2);

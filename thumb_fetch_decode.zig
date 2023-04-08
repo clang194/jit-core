@@ -66,6 +66,14 @@ pub fn isStop(word: u16) bool {
     return (word & 0xff00) == 0xde00;
 }
 
+pub fn isThumbBreakpoint(word: u16) bool {
+    return (word & 0xff00) == 0xbe00;
+}
+
+pub fn isThumbNoOp(word: u16) bool {
+    return word == 0xbf00;
+}
+
 pub fn branchTarget(word: u16, pc: u32) ?u32 {
     if ((word & 0xf800) != 0xe000) {
         return null;
@@ -95,4 +103,3 @@ pub fn branchLinkExchangeTarget(word: u32, pc: u32) RunError!?u32 {
     }
     return @bitCast(u32, @intCast(i32, alignDown4(pc + 4)) + thumb32Offset(word));
 }
-

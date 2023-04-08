@@ -300,6 +300,12 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
         const name = if ((word & 8) != 0) "be" else "le";
         return std.fmt.bufPrint(buf, "setend {}", .{name}) catch error.NoSpaceLeft;
     }
+    if ((word & 0xff00) == 0xbe00) {
+        return std.fmt.bufPrint(buf, "bkpt #{}", .{word & 0xff}) catch error.NoSpaceLeft;
+    }
+    if (word == 0xbf00) {
+        return std.fmt.bufPrint(buf, "nop", .{}) catch error.NoSpaceLeft;
+    }
     if ((word & 0xffc0) == 0xb200) {
         return formatThumbUnaryReg(buf, "sxth", word);
     }
@@ -355,4 +361,3 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     }
     return std.fmt.bufPrint(buf, "unknown #{x}", .{word}) catch error.NoSpaceLeft;
 }
-
