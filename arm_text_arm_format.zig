@@ -10,6 +10,7 @@ usingnamespace @import("arm_text_misc_format.zig");
 usingnamespace @import("arm_text_divide_format.zig");
 usingnamespace @import("arm_text_crc_format.zig");
 usingnamespace @import("arm_text_system_format.zig");
+usingnamespace @import("arm_text_hint_format.zig");
 usingnamespace @import("arm_text_parallel_format.zig");
 usingnamespace @import("arm_text_multiply_format.zig");
 usingnamespace @import("arm_text_transfer_format.zig");
@@ -201,7 +202,7 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
     }
 
     if ((word & 0xfd70f000) == 0xf550f000) {
-        return std.fmt.bufPrint(buf, "pld #{x}", .{word}) catch error.NoSpaceLeft;
+        return formatArmPreload(buf, word);
     }
 
     if ((word & 0x0fffffff) == 0x0320f004) {

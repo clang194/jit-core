@@ -315,6 +315,7 @@ pub const FaultKind = enum {
 
 pub const SystemHint = enum {
     preload_data,
+    preload_data_write,
     send_event,
     wait_interrupt,
     wait_event,

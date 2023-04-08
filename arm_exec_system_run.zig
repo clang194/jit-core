@@ -19,7 +19,7 @@ pub fn runArmHint(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
 fn armHintKind(word: u32) arm_state.SystemHint {
     if ((word & 0xfd70f000) == 0xf550f000) {
-        return .preload_data;
+        return if ((word & 0x00400000) != 0) .preload_data else .preload_data_write;
     }
     if ((word & 0x0fffffff) == 0x0320f004) {
         return .send_event;
