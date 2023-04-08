@@ -121,6 +121,18 @@ pub fn isArmDivide(word: u32) bool {
     return (op == 0x0710f010 or op == 0x0730f010) and armCondition(word) != null;
 }
 
+pub fn isArmCrc(word: u32) bool {
+    return isArmCrcPlain(word) or isArmCrcAlt(word);
+}
+
+pub fn isArmCrcPlain(word: u32) bool {
+    return (word & 0x0f900ff0) == 0x01000040 and armCondition(word) != null;
+}
+
+pub fn isArmCrcAlt(word: u32) bool {
+    return (word & 0x0f900ff0) == 0x01000240 and armCondition(word) != null;
+}
+
 pub fn isBitReverse(word: u32) bool {
     return (word & 0x0fff0ff0) == 0x06ff0f30 and armCondition(word) != null;
 }

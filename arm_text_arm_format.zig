@@ -8,6 +8,7 @@ usingnamespace @import("arm_text_coprocessor_format.zig");
 usingnamespace @import("arm_text_block_format.zig");
 usingnamespace @import("arm_text_misc_format.zig");
 usingnamespace @import("arm_text_divide_format.zig");
+usingnamespace @import("arm_text_crc_format.zig");
 usingnamespace @import("arm_text_system_format.zig");
 usingnamespace @import("arm_text_parallel_format.zig");
 usingnamespace @import("arm_text_multiply_format.zig");
@@ -246,6 +247,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
 
     if (arm_exec.isArmDivide(word)) {
         return formatArmDivide(buf, word, cond);
+    }
+
+    if (arm_exec.isArmCrc(word)) {
+        return formatArmCrc(buf, word, arm_exec.isArmCrcAlt(word));
     }
 
     if (arm_exec.isBitReverse(word)) {

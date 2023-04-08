@@ -9,6 +9,7 @@ usingnamespace @import("arm_exec_multiply_run.zig");
 usingnamespace @import("arm_exec_float_math.zig");
 usingnamespace @import("arm_exec_system_run.zig");
 usingnamespace @import("arm_exec_divide_run.zig");
+usingnamespace @import("arm_exec_crc_run.zig");
 usingnamespace @import("arm_exec_status_branch.zig");
 usingnamespace @import("arm_exec_data_transfer.zig");
 usingnamespace @import("arm_exec_saturate_scalar.zig");
@@ -74,6 +75,7 @@ fn usesRetiredArmCondition(word: u32) bool {
         isStatusWriteRegister(folded) or
         isCountLeadingZeros(folded) or
         isArmDivide(folded) or
+        isArmCrc(folded) or
         isBitReverse(folded) or
         isBitfieldClear(folded) or
         isBitfieldInsert(folded) or
@@ -299,8 +301,7 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     }
 
     if (isHintNoOp(word)) {
-        state.write(.pc, pc + 4);
-        return;
+        return runArmHint(word, state, hooks, pc);
     }
 
     if (isArmNoOp(word)) {
@@ -362,6 +363,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isArmDivide(word)) {
         return runArmDivide(word, state, pc);
+    }
+
+    if (isArmCrc(word)) {
+        return runArmCrc(word, state, pc);
     }
 
     if (isBitReverse(word)) {

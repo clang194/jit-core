@@ -313,6 +313,14 @@ pub const FaultKind = enum {
     breakpoint,
 };
 
+pub const SystemHint = enum {
+    preload_data,
+    send_event,
+    wait_interrupt,
+    wait_event,
+    yield_hint,
+};
+
 pub const HostHooks = struct {
     pub const CycleHooks = struct {
         add: ?fn (usize, ?*anyopaque) void,
@@ -332,6 +340,7 @@ pub const HostHooks = struct {
     trap: ?fn (u32) bool,
     supervisor: ?fn (u32, *MachineState) void,
     exception: ?fn (u32, FaultKind, *MachineState, ?*anyopaque) void,
+    system_hint: ?fn (u32, SystemHint, *MachineState, ?*anyopaque) void,
     instruction_barrier: ?fn (?*anyopaque) void,
     coprocessors: [16]?CoprocessorHooks,
     cycles: CycleHooks,
@@ -345,6 +354,7 @@ pub const HostHooks = struct {
             .trap = null,
             .supervisor = null,
             .exception = null,
+            .system_hint = null,
             .instruction_barrier = null,
             .coprocessors = [_]?CoprocessorHooks{null} ** 16,
             .cycles = CycleHooks.empty(),
