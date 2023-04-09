@@ -39,6 +39,7 @@ pub const isBitfieldInsert = fetch_decode.isBitfieldInsert;
 pub const isUnsignedBitfieldExtract = fetch_decode.isUnsignedBitfieldExtract;
 pub const isSignedBitfieldExtract = fetch_decode.isSignedBitfieldExtract;
 pub const isMoveTop = fetch_decode.isMoveTop;
+pub const isMoveLow = fetch_decode.isMoveLow;
 pub const expandArmImmediate = fetch_decode.expandArmImmediate;
 pub const runArmWord = dispatch.runArmWord;
 pub const runArmWithHooks = dispatch.runArmWithHooks;

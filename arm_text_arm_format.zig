@@ -316,6 +316,16 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         }) catch error.NoSpaceLeft;
     }
 
+    if (arm_exec.isMoveLow(word)) {
+        const dest = @intToEnum(arm_state.ArmReg, @intCast(u8, (word >> 12) & 0xf));
+        const imm16 = (((word >> 16) & 0xf) << 12) | (word & 0xfff);
+        return std.fmt.bufPrint(buf, "movw{} {}, #{}", .{
+            condName(cond),
+            arm_state.regName(dest),
+            imm16,
+        }) catch error.NoSpaceLeft;
+    }
+
     if ((word & 0x0fff0ff0) == 0x06bf0f30) {
         return formatArmUnaryReg(buf, "rev", word, cond);
     }

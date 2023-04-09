@@ -194,3 +194,16 @@ pub fn runMoveTop(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepErr
     }
     state.write(.pc, pc + 4);
 }
+
+pub fn runMoveLow(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+    const dest = armReg(word >> 12);
+    if (dest == .pc) {
+        return error.Unpredictable;
+    }
+    const code = armCondition(word).?;
+    if (state.conditionHolds(code)) {
+        const imm16 = (((word >> 16) & 0xf) << 12) | (word & 0xfff);
+        state.write(dest, imm16);
+    }
+    state.write(.pc, pc + 4);
+}

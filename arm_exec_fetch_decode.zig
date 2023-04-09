@@ -157,6 +157,10 @@ pub fn isMoveTop(word: u32) bool {
     return (word & 0x0ff00000) == 0x03400000 and armCondition(word) != null;
 }
 
+pub fn isMoveLow(word: u32) bool {
+    return (word & 0x0ff00000) == 0x03000000 and armCondition(word) != null;
+}
+
 pub fn isSignedSaturatingWord(word: u32) bool {
     const op = word & 0x0ff00ff0;
     return (op == 0x01000050 or

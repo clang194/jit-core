@@ -82,6 +82,7 @@ fn usesRetiredArmCondition(word: u32) bool {
         isUnsignedBitfieldExtract(folded) or
         isSignedBitfieldExtract(folded) or
         isMoveTop(folded) or
+        isMoveLow(folded) or
         isSignedSaturatingWord(folded) or
         isScalarSaturatingMove(folded) or
         isHalfSaturatingMove(folded) or
@@ -391,6 +392,10 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
 
     if (isMoveTop(word)) {
         return runMoveTop(word, state, pc);
+    }
+
+    if (isMoveLow(word)) {
+        return runMoveLow(word, state, pc);
     }
 
     if (isSignedSaturatingWord(word)) {
