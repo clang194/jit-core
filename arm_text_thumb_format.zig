@@ -300,6 +300,16 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
         const name = if ((word & 8) != 0) "be" else "le";
         return std.fmt.bufPrint(buf, "setend {}", .{name}) catch error.NoSpaceLeft;
     }
+    if ((word & 0xf500) == 0xb100) {
+        const op = if ((word & 0x0800) != 0) "cbnz" else "cbz";
+        const source = arm_state.lowReg(word);
+        const offset = (@as(u32, (word >> 9) & 1) << 6) | (@as(u32, (word >> 3) & 0x1f) << 1);
+        return std.fmt.bufPrint(buf, "{} {}, #{}", .{
+            op,
+            arm_state.regName(source),
+            offset,
+        }) catch error.NoSpaceLeft;
+    }
     if ((word & 0xff00) == 0xbe00) {
         return std.fmt.bufPrint(buf, "bkpt #{}", .{word & 0xff}) catch error.NoSpaceLeft;
     }

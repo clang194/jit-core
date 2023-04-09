@@ -85,6 +85,16 @@ pub fn traceThumbMiscFlow(word: u16, pc: u32, tape: *trace.Tape) RunError!bool {
         return true;
     }
 
+    if (isCompareZeroBranch(word)) {
+        const source_reg = try tape.literalReg(arm_state.lowReg(word));
+        const source = try tape.loadReg(source_reg);
+        const zero = try tape.equalZero(source);
+        const taken = try tape.literalWord(compareZeroBranchTarget(word, pc));
+        const skipped = try tape.literalWord(pc + 2);
+        _ = try tape.branchIf(zero, if ((word & 0x0800) == 0) taken else skipped, if ((word & 0x0800) == 0) skipped else taken);
+        return true;
+    }
+
     if ((word & 0xf800) == 0xe000) {
         const target = try tape.literalWord(branchTarget(word, pc).?);
         _ = try tape.jump(target);

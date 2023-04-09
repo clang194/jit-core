@@ -43,5 +43,15 @@ pub fn runThumbControlFlow(word: u16, state: *arm_state.MachineState, hooks: arm
         }
         return error.UnknownInstruction;
     }
+
+    if (isCompareZeroBranch(word)) {
+        const source = arm_state.lowReg(word);
+        const nonzero = (word & 0x0800) != 0;
+        const read = state.read(source);
+        const taken = if (nonzero) read != 0 else read == 0;
+        state.write(.pc, if (taken) compareZeroBranchTarget(word, state.read(.pc)) else state.read(.pc) + 2);
+        return true;
+    }
+
     return false;
 }

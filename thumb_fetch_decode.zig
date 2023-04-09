@@ -85,6 +85,16 @@ pub fn thumbSystemHint(word: u16) ?arm_state.SystemHint {
     };
 }
 
+pub fn isCompareZeroBranch(word: u16) bool {
+    return (word & 0xf500) == 0xb100;
+}
+
+pub fn compareZeroBranchTarget(word: u16, pc: u32) u32 {
+    const high = @as(u32, (word >> 9) & 1) << 6;
+    const low = @as(u32, (word >> 3) & 0x1f) << 1;
+    return pc + 4 + high + low;
+}
+
 pub fn branchTarget(word: u16, pc: u32) ?u32 {
     if ((word & 0xf800) != 0xe000) {
         return null;
