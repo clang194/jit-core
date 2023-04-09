@@ -12,6 +12,7 @@ pub const readThumbWord = fetch_decode.readThumbWord;
 pub const isStop = fetch_decode.isStop;
 pub const isThumbBreakpoint = fetch_decode.isThumbBreakpoint;
 pub const isThumbNoOp = fetch_decode.isThumbNoOp;
+pub const thumbSystemHint = fetch_decode.thumbSystemHint;
 pub const branchTarget = fetch_decode.branchTarget;
 pub const branchLinkTarget = fetch_decode.branchLinkTarget;
 pub const branchLinkExchangeTarget = fetch_decode.branchLinkExchangeTarget;

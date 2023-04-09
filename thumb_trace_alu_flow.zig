@@ -15,6 +15,10 @@ pub fn traceThumbAluFlow(word: u16, pc: u32, tape: *trace.Tape) RunError!bool {
         return true;
     }
 
+    if (thumbSystemHint(word) != null) {
+        return true;
+    }
+
     if ((word & 0xff00) == 0xdf00) {
         _ = try tape.callSupervisor(@intCast(u32, word & 0xff));
         return true;

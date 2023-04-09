@@ -15,6 +15,14 @@ pub fn runThumbControlFlow(word: u16, state: *arm_state.MachineState, hooks: arm
         return true;
     }
 
+    if (thumbSystemHint(word)) |kind| {
+        if (hooks.system_hint) |callback| {
+            callback(word, kind, state, hooks.context);
+        }
+        state.write(.pc, state.read(.pc) + 2);
+        return true;
+    }
+
     if (isThumbBreakpoint(word)) {
         if (hooks.exception) |callback| {
             callback(state.read(.pc), .breakpoint, state, hooks.context);

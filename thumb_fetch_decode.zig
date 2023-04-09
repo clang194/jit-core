@@ -74,6 +74,15 @@ pub fn isThumbNoOp(word: u16) bool {
     return word == 0xbf00;
 }
 
+pub fn thumbSystemHint(word: u16) ?arm_state.SystemHint {
+    return switch (word) {
+        0xbf40 => .send_event,
+        0xbf20 => .wait_event,
+        0xbf30 => .wait_interrupt,
+        else => null,
+    };
+}
+
 pub fn branchTarget(word: u16, pc: u32) ?u32 {
     if ((word & 0xf800) != 0xe000) {
         return null;
