@@ -24,6 +24,9 @@ fn armHintKind(word: u32) arm_state.SystemHint {
     if ((word & 0x0fffffff) == 0x0320f004) {
         return .send_event;
     }
+    if ((word & 0x0fffffff) == 0x0320f005) {
+        return .send_event_local;
+    }
     if ((word & 0x0fffffff) == 0x0320f002) {
         return .wait_event;
     }

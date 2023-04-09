@@ -77,8 +77,10 @@ pub fn isThumbNoOp(word: u16) bool {
 pub fn thumbSystemHint(word: u16) ?arm_state.SystemHint {
     return switch (word) {
         0xbf40 => .send_event,
+        0xbf50 => .send_event_local,
         0xbf20 => .wait_event,
         0xbf30 => .wait_interrupt,
+        0xbf10 => .yield_hint,
         else => null,
     };
 }

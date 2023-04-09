@@ -23,6 +23,7 @@ usingnamespace @import("arm_exec_scalar_bits.zig");
 pub fn isHintNoOp(word: u32) bool {
     return (word & 0xfd70f000) == 0xf550f000 or
         (word & 0x0fffffff) == 0x0320f004 or
+        (word & 0x0fffffff) == 0x0320f005 or
         (word & 0x0fffffff) == 0x0320f002 or
         (word & 0x0fffffff) == 0x0320f003 or
         (word & 0x0fffffff) == 0x0320f001;
@@ -172,4 +173,3 @@ pub fn isFloatStatusRead(word: u32) bool {
 pub fn isVfpCondition(word: u32) bool {
     return (word >> 28) != 0xf;
 }
-

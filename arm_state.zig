@@ -317,6 +317,7 @@ pub const SystemHint = enum {
     preload_data,
     preload_data_write,
     send_event,
+    send_event_local,
     wait_interrupt,
     wait_event,
     yield_hint,

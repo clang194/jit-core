@@ -209,6 +209,10 @@ pub fn formatArm(buf: []u8, word: u32) TextError![]u8 {
         return std.fmt.bufPrint(buf, "sev", .{}) catch error.NoSpaceLeft;
     }
 
+    if ((word & 0x0fffffff) == 0x0320f005) {
+        return std.fmt.bufPrint(buf, "sevl", .{}) catch error.NoSpaceLeft;
+    }
+
     if ((word & 0x0fffffff) == 0x0320f002) {
         return std.fmt.bufPrint(buf, "wfe", .{}) catch error.NoSpaceLeft;
     }

@@ -309,11 +309,17 @@ pub fn formatThumb16(buf: []u8, word: u16) TextError![]u8 {
     if (word == 0xbf40) {
         return std.fmt.bufPrint(buf, "sev", .{}) catch error.NoSpaceLeft;
     }
+    if (word == 0xbf50) {
+        return std.fmt.bufPrint(buf, "sevl", .{}) catch error.NoSpaceLeft;
+    }
     if (word == 0xbf20) {
         return std.fmt.bufPrint(buf, "wfe", .{}) catch error.NoSpaceLeft;
     }
     if (word == 0xbf30) {
         return std.fmt.bufPrint(buf, "wfi", .{}) catch error.NoSpaceLeft;
+    }
+    if (word == 0xbf10) {
+        return std.fmt.bufPrint(buf, "yield", .{}) catch error.NoSpaceLeft;
     }
     if ((word & 0xffc0) == 0xb200) {
         return formatThumbUnaryReg(buf, "sxth", word);
