@@ -44,6 +44,51 @@ pub const ConditionCode = enum(u4) {
     nv = 0xf,
 };
 
+pub const IfThenState = struct {
+    value: u8,
+
+    pub fn init(value: u8) IfThenState {
+        return IfThenState{ .value = value };
+    }
+
+    pub fn raw(self: IfThenState) u8 {
+        return self.value;
+    }
+
+    pub fn condition(self: IfThenState) ?ConditionCode {
+        return conditionFromNibble(@intCast(u4, self.value >> 4));
+    }
+
+    pub fn setCondition(self: *IfThenState, code: ConditionCode) void {
+        self.value = (self.value & 0x0f) | (@as(u8, @enumToInt(code)) << 4);
+    }
+
+    pub fn mask(self: IfThenState) u8 {
+        return self.value & 0x0f;
+    }
+
+    pub fn setMask(self: *IfThenState, value: u8) void {
+        self.value = (self.value & 0xf0) | (value & 0x0f);
+    }
+
+    pub fn active(self: IfThenState) bool {
+        return self.mask() != 0;
+    }
+
+    pub fn last(self: IfThenState) bool {
+        return self.mask() == 0x8;
+    }
+
+    pub fn advance(self: IfThenState) IfThenState {
+        var next = self;
+        next.setMask(next.mask() << 1);
+        if (next.mask() == 0) {
+            return IfThenState.init(0);
+        }
+        return next;
+    }
+};
+
 pub const FloatRoundMode = float_rounding.RoundingMode;
 
 pub const float_status_mask: u32 = 0xfff79f9f;
@@ -441,6 +486,22 @@ pub const MachineState = struct {
 
     pub fn writeGreaterEqualLanes(self: *MachineState, value: u32) void {
         self.cpsr = (self.cpsr & ~@as(u32, 0x000f0000)) | ((value & 0xf) << 16);
+    }
+
+    pub fn readIfThenState(self: *const MachineState) IfThenState {
+        const high = @intCast(u8, (self.cpsr >> 8) & 0xfc);
+        const low = @intCast(u8, (self.cpsr >> 25) & 0x03);
+        return IfThenState.init(high | low);
+    }
+
+    pub fn writeIfThenState(self: *MachineState, value: IfThenState) void {
+        const raw = value.raw();
+        const with_high = bits.modifyBits32(self.cpsr, @as(u32, raw >> 2), 10, 15);
+        self.cpsr = bits.modifyBits32(with_high, @as(u32, raw & 0x03), 25, 26);
+    }
+
+    pub fn advanceIfThenState(self: *MachineState) void {
+        self.writeIfThenState(self.readIfThenState().advance());
     }
 
     pub fn conditionHolds(self: *const MachineState, code: ConditionCode) bool {
