@@ -30,6 +30,7 @@ pub const Core64Methods = struct {
     pub fn runVectorFloatNegate(self: *Core64, word: u32) Core64Error!bool {
         const half = (word & 0xbffffc00) == 0x2ef8f800;
         const half_absolute = (word & 0xbffffc00) == 0x0ef8f800;
+        const half_equal_zero = (word & 0xbffffc00) == 0x0ef8d800;
         const wide = (word & 0xbf3ffc00) == 0x2e20f800;
         const absolute = (word & 0xbfbffc00) == 0x0ea0f800;
         const equal_zero = (word & 0xbfbffc00) == 0x0ea0d800;
@@ -38,17 +39,27 @@ pub const Core64Methods = struct {
         const less_zero = (word & 0xbfbffc00) == 0x0ea0e800;
         const less_equal_zero = (word & 0xbfbffc00) == 0x2ea0d800;
         const compare_zero = equal_zero or greater_zero or greater_equal_zero or less_zero or less_equal_zero;
-        if (!half and !half_absolute and !wide and !absolute and !compare_zero) {
+        if (!half and !half_absolute and !half_equal_zero and !wide and !absolute and !compare_zero) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
+        const source = self.state.readVector(vectorRegFromWord(word >> 5));
+        if (half_equal_zero) {
+            const control = self.state.floatControl();
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            const result = equalHalfFloatZeroVector(control, &status, full, source) catch return error.MissingFallback;
+            self.state.writeFloatStatus(status.raw());
+            self.state.writeVector(vectorRegFromWord(word), result);
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const double = ((word >> 22) & 1) != 0;
         if ((wide or absolute or compare_zero) and double and !full) {
             return error.ReservedInstruction;
         }
 
-        const source = self.state.readVector(vectorRegFromWord(word >> 5));
         const result = if (half) negateHalfFloatVector(full, source) else if (half_absolute) absoluteHalfFloatVector(full, source) else if (compare_zero) compareFloatZeroVector(self.state.floatControl(), double, full, source, if (equal_zero) .equal else if (greater_zero) .greater else if (greater_equal_zero) .greater_equal else if (less_zero) .less else .less_equal) else if (absolute) absoluteFloatVector(double, full, source) else negateFloatVector(double, full, source);
         self.state.writeVector(vectorRegFromWord(word), result);
         self.state.pc +%= 4;
@@ -56,20 +67,30 @@ pub const Core64Methods = struct {
     }
 
     pub fn runVectorFloatBinary(self: *Core64, word: u32) Core64Error!bool {
+        const half_equal = (word & 0xbfe0fc00) == 0x0e402400;
         const masked = word & 0xbfa0fc00;
-        if (masked != 0x0e20c400 and masked != 0x0e20d400 and masked != 0x0e20dc00 and masked != 0x0e20e400 and masked != 0x0e20f400 and masked != 0x0ea0c400 and masked != 0x0ea0d400 and masked != 0x0ea0f400 and masked != 0x2e20c400 and masked != 0x2e20d400 and masked != 0x2e20dc00 and masked != 0x2e20e400 and masked != 0x2e20ec00 and masked != 0x2e20f400 and masked != 0x2e20fc00 and masked != 0x2ea0c400 and masked != 0x2ea0d400 and masked != 0x2ea0e400 and masked != 0x2ea0ec00 and masked != 0x2ea0f400) {
+        if (!half_equal and masked != 0x0e20c400 and masked != 0x0e20d400 and masked != 0x0e20dc00 and masked != 0x0e20e400 and masked != 0x0e20f400 and masked != 0x0ea0c400 and masked != 0x0ea0d400 and masked != 0x0ea0f400 and masked != 0x2e20c400 and masked != 0x2e20d400 and masked != 0x2e20dc00 and masked != 0x2e20e400 and masked != 0x2e20ec00 and masked != 0x2e20f400 and masked != 0x2e20fc00 and masked != 0x2ea0c400 and masked != 0x2ea0d400 and masked != 0x2ea0e400 and masked != 0x2ea0ec00 and masked != 0x2ea0f400) {
             return false;
         }
 
         const full = (word & 0x40000000) != 0;
+        const left = self.state.readVector(vectorRegFromWord(word >> 5));
+        const right = self.state.readVector(vectorRegFromWord(word >> 16));
+        const control = self.state.floatControl();
+        if (half_equal) {
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            const result = equalHalfFloatVector(control, &status, full, left, right) catch return error.MissingFallback;
+            self.state.writeFloatStatus(status.raw());
+            self.state.writeVector(vectorRegFromWord(word), result);
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const double = ((word >> 22) & 1) != 0;
         if (double and !full) {
             return error.ReservedInstruction;
         }
 
-        const left = self.state.readVector(vectorRegFromWord(word >> 5));
-        const right = self.state.readVector(vectorRegFromWord(word >> 16));
-        const control = self.state.floatControl();
         const nan_mode = self.hooks.float_nan_mode;
         const result = if (masked == 0x0e20d400)
             addFloatVector(control, nan_mode, double, full, left, right)

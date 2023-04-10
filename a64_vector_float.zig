@@ -8,6 +8,7 @@ const float_exception = @import("float_exception.zig");
 const float_fixed = @import("float_fixed.zig");
 const float_fused = @import("float_fused.zig");
 const float_integer = @import("float_integer.zig");
+const float_parts = @import("float_parts.zig");
 const float_refine = @import("float_refine.zig");
 const float_rounding = @import("float_rounding.zig");
 const float_status = @import("float_status.zig");
@@ -435,6 +436,40 @@ pub fn absoluteDifferenceFloatVector(control: a64_state.FloatControl, mode: Floa
 
 pub fn equalFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) a64_state.VectorValue {
     return compareFloatVector(control, double, full, left, right, .equal);
+}
+
+fn sameFloatAnalysis(left: float_parts.FloatAnalysis, right: float_parts.FloatAnalysis) bool {
+    if (left.kind == .zero and right.kind == .zero) {
+        return true;
+    }
+    return left.kind == right.kind and left.negative == right.negative and left.parts.exponent == right.parts.exponent and left.parts.significand == right.parts.significand;
+}
+
+pub fn equalHalfFloat(control: a64_state.FloatControl, status: *float_status.FloatStatus, left: u16, right: u16) float_exception.FloatExceptionError!bool {
+    const left_analysis = try float_parts.splitFloat16(left, control, status);
+    const right_analysis = try float_parts.splitFloat16(right, control, status);
+    if (left_analysis.kind == .quiet_nan or left_analysis.kind == .signaling_nan or right_analysis.kind == .quiet_nan or right_analysis.kind == .signaling_nan) {
+        if (left_analysis.kind == .signaling_nan or right_analysis.kind == .signaling_nan) {
+            try float_exception.processFloatException(.invalid_operation, control, status);
+        }
+        return false;
+    }
+    return sameFloatAnalysis(left_analysis, right_analysis);
+}
+
+pub fn equalHalfFloatVector(control: a64_state.FloatControl, status: *float_status.FloatStatus, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    const lanes = if (full) @as(usize, 8) else @as(usize, 4);
+    var result = a64_state.VectorValue{ .low = 0, .high = 0 };
+    var index: usize = 0;
+    while (index < lanes) : (index += 1) {
+        const matched = try equalHalfFloat(control, status, @intCast(u16, vectorElement(left, index, 2)), @intCast(u16, vectorElement(right, index, 2)));
+        setVectorElement(&result, index, 2, if (matched) @as(u64, 0xffff) else 0);
+    }
+    return result;
+}
+
+pub fn equalHalfFloatZeroVector(control: a64_state.FloatControl, status: *float_status.FloatStatus, full: bool, source: a64_state.VectorValue) float_exception.FloatExceptionError!a64_state.VectorValue {
+    return equalHalfFloatVector(control, status, full, source, a64_state.VectorValue{ .low = 0, .high = 0 });
 }
 
 pub fn compareFloatVector(control: a64_state.FloatControl, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue, comparison: FloatComparison) a64_state.VectorValue {

@@ -80,14 +80,26 @@ pub const Core64Methods = struct {
     }
 
     pub fn runScalarFloatCompareZero(self: *Core64, word: u32) Core64Error!bool {
+        const half_equal = (word & 0xfffffc00) == 0x5ef8d800;
         const masked = word & 0xffbffc00;
         const greater = masked == 0x5ea0c800;
         const equal = masked == 0x5ea0d800;
         const less = masked == 0x5ea0e800;
         const greater_equal = masked == 0x7ea0c800;
         const less_equal = masked == 0x7ea0d800;
-        if (!greater and !equal and !less and !greater_equal and !less_equal) {
+        if (!half_equal and !greater and !equal and !less and !greater_equal and !less_equal) {
             return false;
+        }
+
+        if (half_equal) {
+            const source = self.state.readVector(vectorRegFromWord(word >> 5));
+            const control = self.state.floatControl();
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            const matched = equalHalfFloat(control, &status, @intCast(u16, vectorElement(source, 0, 2)), 0) catch return error.MissingFallback;
+            self.state.writeFloatStatus(status.raw());
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = if (matched) @as(u64, 0xffff) else 0, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
         }
 
         const double = ((word >> 22) & 1) != 0;
@@ -100,9 +112,22 @@ pub const Core64Methods = struct {
     }
 
     pub fn runScalarFloatCompareRegister(self: *Core64, word: u32) Core64Error!bool {
+        const half_equal = (word & 0xffe0fc00) == 0x5e402400;
         const masked = word & 0xffa0fc00;
-        if (masked != 0x5e20e400 and masked != 0x7e20e400 and masked != 0x7e20ec00 and masked != 0x7ea0e400 and masked != 0x7ea0ec00) {
+        if (!half_equal and masked != 0x5e20e400 and masked != 0x7e20e400 and masked != 0x7e20ec00 and masked != 0x7ea0e400 and masked != 0x7ea0ec00) {
             return false;
+        }
+
+        if (half_equal) {
+            const left = self.state.readVector(vectorRegFromWord(word >> 5));
+            const right = self.state.readVector(vectorRegFromWord(word >> 16));
+            const control = self.state.floatControl();
+            var status = float_status.FloatStatus.init(self.state.floatStatus());
+            const matched = equalHalfFloat(control, &status, @intCast(u16, vectorElement(left, 0, 2)), @intCast(u16, vectorElement(right, 0, 2))) catch return error.MissingFallback;
+            self.state.writeFloatStatus(status.raw());
+            self.state.writeVector(vectorRegFromWord(word), a64_state.VectorValue{ .low = if (matched) @as(u64, 0xffff) else 0, .high = 0 });
+            self.state.pc +%= 4;
+            return true;
         }
 
         const double = ((word >> 22) & 1) != 0;
