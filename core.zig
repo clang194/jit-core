@@ -100,7 +100,7 @@ pub const Core = struct {
             };
 
             if (fetched.size == 2 and thumb_exec.isStop(@intCast(u16, fetched.word & 0xffff))) {
-                try self.interpretOne(pc);
+                try self.raiseFault(pc, .undefined_instruction, error.UnknownInstruction);
                 used += 1;
                 self.addCycles(1);
                 continue;
@@ -116,6 +116,18 @@ pub const Core = struct {
             }
 
             thumb_exec.runThumbPacketWithHooks(fetched, &self.state, self.hooks) catch |err| switch (err) {
+                error.UndefinedInstruction => {
+                    try self.raiseFault(pc, .undefined_instruction, error.UnknownInstruction);
+                    used += 1;
+                    self.addCycles(1);
+                    continue;
+                },
+                error.Unpredictable => {
+                    try self.raiseFault(pc, .unpredictable_instruction, error.Unpredictable);
+                    used += 1;
+                    self.addCycles(1);
+                    continue;
+                },
                 error.UnknownInstruction => {
                     try self.interpretOne(pc);
                     used += 1;
@@ -164,15 +176,22 @@ pub const Core = struct {
     }
 
     pub fn saveImage(self: *const Core) CoreImage {
-        return CoreImage{ .state = self.state };
+        var image = CoreImage{ .state = self.state };
+        image.state.exclusive = false;
+        image.state.exclusive_address = 0;
+        return image;
     }
 
     pub fn saveInto(self: *const Core, image: *CoreImage) void {
         image.state = self.state;
+        image.state.exclusive = false;
+        image.state.exclusive_address = 0;
     }
 
     pub fn loadImage(self: *Core, image: *const CoreImage) void {
         self.state = image.state;
+        self.state.exclusive = false;
+        self.state.exclusive_address = 0;
         self.halt = false;
     }
 

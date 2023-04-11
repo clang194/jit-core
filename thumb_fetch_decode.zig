@@ -9,6 +9,7 @@ usingnamespace @import("thumb_memory_flow.zig");
 
 pub const RunError = error{
     UnknownInstruction,
+    UndefinedInstruction,
     Unpredictable,
     Full,
     MissingRead,

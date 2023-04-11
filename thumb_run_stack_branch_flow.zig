@@ -78,7 +78,9 @@ pub fn runThumbStackBranchFlow(word: u16, state: *arm_state.MachineState, hooks:
     }
 
     if ((word & 0xfff7) == 0xb650) {
-        state.setBigEndian((word & 8) != 0);
+        if (!hooks.keep_little_endian) {
+            state.setBigEndian((word & 8) != 0);
+        }
         return true;
     }
 

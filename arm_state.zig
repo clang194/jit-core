@@ -393,6 +393,7 @@ pub const HostHooks = struct {
     cycles: CycleHooks,
     resolve_unpredictable_cases: bool,
     hook_hints: bool,
+    keep_little_endian: bool,
 
     pub fn empty() HostHooks {
         return HostHooks{
@@ -408,6 +409,7 @@ pub const HostHooks = struct {
             .cycles = CycleHooks.empty(),
             .resolve_unpredictable_cases = false,
             .hook_hints = false,
+            .keep_little_endian = false,
         };
     }
 };

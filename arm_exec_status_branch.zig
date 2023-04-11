@@ -33,12 +33,12 @@ pub fn runStatusRead(word: u32, state: *arm_state.MachineState, pc: u32) ArmStep
     state.write(.pc, pc + 4);
 }
 
-pub fn runStatusWriteImmediate(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+pub fn runStatusWriteImmediate(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     const field = statusWriteField(word);
     if (field == 0) {
         return error.Unpredictable;
     }
-    const mask = statusWriteMask(field);
+    const mask = endianSafeStatusMask(statusWriteMask(field), hooks);
 
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
@@ -49,7 +49,7 @@ pub fn runStatusWriteImmediate(word: u32, state: *arm_state.MachineState, pc: u3
     state.write(.pc, pc + 4);
 }
 
-pub fn runStatusWriteRegister(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
+pub fn runStatusWriteRegister(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
     const source = armReg(word);
     if (source == .pc) {
         return error.Unpredictable;
@@ -59,13 +59,17 @@ pub fn runStatusWriteRegister(word: u32, state: *arm_state.MachineState, pc: u32
     if (field == 0) {
         return error.Unpredictable;
     }
-    const mask = statusWriteMask(field);
+    const mask = endianSafeStatusMask(statusWriteMask(field), hooks);
 
     const code = armCondition(word).?;
     if (state.conditionHolds(code)) {
         state.cpsr = mergeStatus(state.cpsr, state.read(source), mask);
     }
     state.write(.pc, pc + 4);
+}
+
+fn endianSafeStatusMask(mask: u32, hooks: arm_state.HostHooks) u32 {
+    return if (hooks.keep_little_endian) mask & ~@as(u32, 0x00000200) else mask;
 }
 
 pub fn runCountLeadingZeros(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {

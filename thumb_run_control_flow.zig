@@ -8,7 +8,11 @@ usingnamespace @import("thumb_memory_flow.zig");
 
 pub fn runThumbControlFlow(word: u16, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!bool {
     if (isStop(word)) {
-        return true;
+        if (hooks.exception) |callback| {
+            callback(state.read(.pc), .undefined_instruction, state, hooks.context);
+            return true;
+        }
+        return error.UndefinedInstruction;
     }
 
     if (isThumbNoOp(word)) {

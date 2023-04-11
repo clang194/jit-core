@@ -341,7 +341,9 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     }
 
     if (isEndianSelect(word)) {
-        state.setBigEndian((word & 0x00000200) != 0);
+        if (!hooks.keep_little_endian) {
+            state.setBigEndian((word & 0x00000200) != 0);
+        }
         state.write(.pc, pc + 4);
         return;
     }
@@ -351,11 +353,11 @@ pub fn runArmWord(word: u32, state: *arm_state.MachineState, hooks: arm_state.Ho
     }
 
     if (isStatusWriteImmediate(word)) {
-        return runStatusWriteImmediate(word, state, pc);
+        return runStatusWriteImmediate(word, state, hooks, pc);
     }
 
     if (isStatusWriteRegister(word)) {
-        return runStatusWriteRegister(word, state, pc);
+        return runStatusWriteRegister(word, state, hooks, pc);
     }
 
     if (isCountLeadingZeros(word)) {
