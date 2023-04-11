@@ -106,6 +106,7 @@ pub const HostHooks64 = struct {
     float_nan_mode: FloatNanMode64,
     cycles: CycleHooks,
     counter_value: ?fn (?*anyopaque) u64,
+    hook_hints: bool,
     context: ?*anyopaque,
 
     pub fn empty() HostHooks64 {
@@ -127,6 +128,7 @@ pub const HostHooks64 = struct {
             .float_nan_mode = .accurate,
             .cycles = CycleHooks.empty(),
             .counter_value = null,
+            .hook_hints = false,
             .context = null,
         };
     }

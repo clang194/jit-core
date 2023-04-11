@@ -392,6 +392,7 @@ pub const HostHooks = struct {
     coprocessors: [16]?CoprocessorHooks,
     cycles: CycleHooks,
     resolve_unpredictable_cases: bool,
+    hook_hints: bool,
 
     pub fn empty() HostHooks {
         return HostHooks{
@@ -406,6 +407,7 @@ pub const HostHooks = struct {
             .coprocessors = [_]?CoprocessorHooks{null} ** 16,
             .cycles = CycleHooks.empty(),
             .resolve_unpredictable_cases = false,
+            .hook_hints = false,
         };
     }
 };

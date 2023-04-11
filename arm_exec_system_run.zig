@@ -11,8 +11,10 @@ pub fn runArmBarrier(word: u32, state: *arm_state.MachineState, hooks: arm_state
 }
 
 pub fn runArmHint(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
-    if (hooks.system_hint) |callback| {
-        callback(word, armHintKind(word), state, hooks.context);
+    if (hooks.hook_hints) {
+        if (hooks.system_hint) |callback| {
+            callback(word, armHintKind(word), state, hooks.context);
+        }
     }
     state.write(.pc, pc + 4);
 }

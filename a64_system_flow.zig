@@ -343,8 +343,10 @@ pub const Core64Methods = struct {
             },
         };
         self.state.pc +%= 4;
-        if (self.hooks.exception) |callback| {
-            callback(self.state.pc, kind, self.hooks.context);
+        if (self.hooks.hook_hints) {
+            if (self.hooks.exception) |callback| {
+                callback(self.state.pc, kind, self.hooks.context);
+            }
         }
         return true;
     }
