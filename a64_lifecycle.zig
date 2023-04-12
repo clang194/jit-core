@@ -65,6 +65,17 @@ pub const Core64Methods = struct {
         return used;
     }
 
+    pub fn step(self: *Core64) Core64Error!void {
+        if (self.active) {
+            return error.Busy;
+        }
+        self.active = true;
+        defer self.active = false;
+
+        self.halt = true;
+        try self.runOne();
+        self.addCycles(1);
+    }
 
     pub fn clearTranslatedState(self: *Core64) void {
         if (self.active) {
@@ -175,5 +186,4 @@ pub const Core64Methods = struct {
     pub fn writeStatus(self: *Core64, value: u32) void {
         self.state.writeNzcv(value);
     }
-
 };

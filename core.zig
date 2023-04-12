@@ -70,79 +70,63 @@ pub const Core = struct {
         self.halt = false;
         var used: usize = 0;
         while (self.hasCycles(budget, used) and !self.halt) {
-            if (!self.state.thumb()) {
-                const pc = self.state.read(.pc);
-                arm_exec.runArmWithHooks(&self.state, self.hooks) catch |err| switch (err) {
-                    error.Unpredictable => {
-                        try self.raiseFault(pc, .unpredictable_instruction, error.Unpredictable);
-                        used += 1;
-                        self.addCycles(1);
-                        continue;
-                    },
-                    error.UnknownInstruction => return error.UnknownInstruction,
-                    error.MissingRead => return error.MissingRead,
-                    error.MissingWrite => return error.MissingWrite,
-                };
-                used += 1;
-                self.addCycles(1);
-                continue;
-            }
-
-            const pc = self.state.read(.pc);
-            const fetched = thumb_exec.readThumbWord(self.hooks, pc) catch |err| switch (err) {
-                error.UnknownInstruction => {
-                    try self.interpretOne(pc);
-                    used += 1;
-                    self.addCycles(1);
-                    continue;
-                },
-                else => return err,
-            };
-
-            if (fetched.size == 2 and thumb_exec.isStop(@intCast(u16, fetched.word & 0xffff))) {
-                try self.raiseFault(pc, .undefined_instruction, error.UnknownInstruction);
-                used += 1;
-                self.addCycles(1);
-                continue;
-            }
-
-            if (fetched.size == 2) {
-                if (thumb_exec.branchTarget(@intCast(u16, fetched.word & 0xffff), pc)) |target| {
-                    self.state.write(.pc, target);
-                    used += 1;
-                    self.addCycles(1);
-                    continue;
-                }
-            }
-
-            thumb_exec.runThumbPacketWithHooks(fetched, &self.state, self.hooks) catch |err| switch (err) {
-                error.UndefinedInstruction => {
-                    try self.raiseFault(pc, .undefined_instruction, error.UnknownInstruction);
-                    used += 1;
-                    self.addCycles(1);
-                    continue;
-                },
-                error.Unpredictable => {
-                    try self.raiseFault(pc, .unpredictable_instruction, error.Unpredictable);
-                    used += 1;
-                    self.addCycles(1);
-                    continue;
-                },
-                error.UnknownInstruction => {
-                    try self.interpretOne(pc);
-                    used += 1;
-                    self.addCycles(1);
-                    continue;
-                },
-                else => return err,
-            };
-            if (self.state.read(.pc) == pc) {
-                self.state.write(.pc, pc + fetched.size);
-            }
+            try self.runOne();
             used += 1;
             self.addCycles(1);
         }
         return used;
+    }
+
+    pub fn step(self: *Core) CoreError!void {
+        if (self.active) {
+            return error.Busy;
+        }
+        self.active = true;
+        defer self.active = false;
+
+        self.halt = true;
+        try self.runOne();
+        self.addCycles(1);
+    }
+
+    fn runOne(self: *Core) CoreError!void {
+        if (!self.state.thumb()) {
+            const pc = self.state.read(.pc);
+            arm_exec.runArmWithHooks(&self.state, self.hooks) catch |err| switch (err) {
+                error.Unpredictable => return self.raiseFault(pc, .unpredictable_instruction, error.Unpredictable),
+                error.UnknownInstruction => return error.UnknownInstruction,
+                error.MissingRead => return error.MissingRead,
+                error.MissingWrite => return error.MissingWrite,
+            };
+            return;
+        }
+
+        const pc = self.state.read(.pc);
+        const fetched = thumb_exec.readThumbWord(self.hooks, pc) catch |err| switch (err) {
+            error.UnknownInstruction => return self.interpretOne(pc),
+            else => return err,
+        };
+
+        if (fetched.size == 2 and thumb_exec.isStop(@intCast(u16, fetched.word & 0xffff))) {
+            return self.raiseFault(pc, .undefined_instruction, error.UnknownInstruction);
+        }
+
+        if (fetched.size == 2) {
+            if (thumb_exec.branchTarget(@intCast(u16, fetched.word & 0xffff), pc)) |target| {
+                self.state.write(.pc, target);
+                return;
+            }
+        }
+
+        thumb_exec.runThumbPacketWithHooks(fetched, &self.state, self.hooks) catch |err| switch (err) {
+            error.UndefinedInstruction => return self.raiseFault(pc, .undefined_instruction, error.UnknownInstruction),
+            error.Unpredictable => return self.raiseFault(pc, .unpredictable_instruction, error.Unpredictable),
+            error.UnknownInstruction => return self.interpretOne(pc),
+            else => return err,
+        };
+        if (self.state.read(.pc) == pc) {
+            self.state.write(.pc, pc + fetched.size);
+        }
     }
 
     fn raiseFault(self: *Core, pc: u32, kind: arm_state.FaultKind, fallback: CoreError) CoreError!void {
