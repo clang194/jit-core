@@ -56,6 +56,8 @@ pub const MemoryHooks64 = struct {
     write128: ?fn (u64, a64_state.VectorValue, ?*anyopaque) void,
     readOnly: ?fn (u64, ?*anyopaque) bool,
     direct: ?fn (u64, usize, ?*anyopaque) ?[*]u8,
+    direct_misaligned_bits: u16,
+    direct_boundary_only: bool,
 
     pub fn empty() MemoryHooks64 {
         return MemoryHooks64{
@@ -72,6 +74,8 @@ pub const MemoryHooks64 = struct {
             .write128 = null,
             .readOnly = null,
             .direct = null,
+            .direct_misaligned_bits = 0,
+            .direct_boundary_only = false,
         };
     }
 };

@@ -164,8 +164,31 @@ pub const Core64Methods = struct {
     }
 
     pub fn directPointer(self: *Core64, address: u64, bytes: usize) ?[*]u8 {
+        if (self.bypassDirectForMisalignment(address, bytes)) {
+            return null;
+        }
         const callback = self.hooks.memory.direct orelse return null;
         return callback(address, bytes, self.hooks.context);
+    }
+
+    fn bypassDirectForMisalignment(self: *Core64, address: u64, bytes: usize) bool {
+        const bit_size = @intCast(u16, bytes * 8);
+        if (bit_size == 8 or (self.hooks.memory.direct_misaligned_bits & bit_size) == 0) {
+            return false;
+        }
+
+        const align_mask = @as(u64, bytes - 1);
+        if ((address & align_mask) == 0) {
+            return false;
+        }
+
+        if (!self.hooks.memory.direct_boundary_only) {
+            return true;
+        }
+
+        const page_mask = @as(u64, 4095);
+        const page_align_mask = page_mask & ~align_mask;
+        return (address & page_align_mask) == page_align_mask;
     }
 
     pub fn readDirect(self: *Core64, address: u64, bytes: usize) ?u64 {
