@@ -258,6 +258,10 @@ pub fn firstSetLow8(value: u8) u4 {
     return 8;
 }
 
+pub fn maskFromSetBit64(value: u64, bit: u6) u64 {
+    return if (((value >> bit) & 1) != 0) ~@as(u64, 0) else 0;
+}
+
 pub fn signExtend32(value: u32, comptime width: u5) i32 {
     const high = @as(u32, 1) << (width - 1);
     const mask = (@as(u32, 1) << width) - 1;

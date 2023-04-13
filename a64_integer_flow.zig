@@ -248,7 +248,7 @@ pub const Core64Methods = struct {
         const dest = regFromWord(word);
         const result = switch (opcode) {
             0 => blk: {
-                const fill = if (((source >> last) & 1) != 0) ~@as(u64, 0) else @as(u64, 0);
+                const fill = bits.maskFromSetBit64(source, last);
                 break :blk (fill & ~masks.limit) | (rotated & masks.write & masks.limit);
             },
             1 => blk: {
@@ -349,6 +349,4 @@ pub const Core64Methods = struct {
         self.state.pc +%= 4;
         return true;
     }
-
-
 };
