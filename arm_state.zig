@@ -256,6 +256,7 @@ pub const MemoryHooks = struct {
     write32: ?fn (u32, u32) void,
     write64: ?fn (u32, u64) void,
     readOnly: ?fn (u32) bool,
+    direct_base: ?[*]u8,
     direct_pages: ?*PageMap,
     direct_full_address: bool,
 
@@ -271,12 +272,19 @@ pub const MemoryHooks = struct {
             .write32 = null,
             .write64 = null,
             .readOnly = null,
+            .direct_base = null,
             .direct_pages = null,
             .direct_full_address = false,
         };
     }
 
     fn directPage(self: MemoryHooks, address: u32, comptime width: usize) ?DirectPage {
+        if (@as(u64, address) + @as(u64, width) > 0x100000000) {
+            return null;
+        }
+        if (self.direct_base) |base| {
+            return DirectPage{ .bytes = base, .offset = @intCast(usize, address) };
+        }
         const page_offset = @intCast(usize, address & (page_size - 1));
         if (!self.direct_full_address and page_offset + width > page_size) {
             return null;
