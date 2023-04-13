@@ -246,6 +246,18 @@ pub fn countLow16(value: u16) u8 {
     return count;
 }
 
+pub fn firstSetLow8(value: u8) u4 {
+    var remaining = value;
+    var index: u4 = 0;
+    while (index < 8) : (index += 1) {
+        if ((remaining & 1) != 0) {
+            return index;
+        }
+        remaining >>= 1;
+    }
+    return 8;
+}
+
 pub fn signExtend32(value: u32, comptime width: u5) i32 {
     const high = @as(u32, 1) << (width - 1);
     const mask = (@as(u32, 1) << width) - 1;

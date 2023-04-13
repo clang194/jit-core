@@ -194,6 +194,9 @@ pub fn runLoadMultiple(word: u32, state: *arm_state.MachineState, hooks: arm_sta
     if (base_reg == .pc or count == 0) {
         return error.Unpredictable;
     }
+    if (bits.getBit32(word, 21) and (list & (@as(u16, 1) << @intCast(u4, @enumToInt(base_reg)))) != 0) {
+        return error.Unpredictable;
+    }
 
     const code = armCondition(word).?;
     if (!state.conditionHolds(code)) {

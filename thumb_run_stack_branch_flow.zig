@@ -91,6 +91,12 @@ pub fn runThumbStackBranchFlow(word: u16, state: *arm_state.MachineState, hooks:
     if ((word & 0xf800) == 0xc000) {
         const base = arm_state.lowReg(word >> 8);
         const mask = @intCast(u8, word & 0xff);
+        if (mask == 0) {
+            return error.Unpredictable;
+        }
+        if ((mask & (@as(u8, 1) << @intCast(u3, @enumToInt(base)))) != 0 and @intCast(u4, @enumToInt(base)) != bits.firstSetLow8(mask)) {
+            return error.Unpredictable;
+        }
         var address = state.read(base);
         var index: u8 = 0;
         while (index < 8) : (index += 1) {
@@ -106,6 +112,9 @@ pub fn runThumbStackBranchFlow(word: u16, state: *arm_state.MachineState, hooks:
     if ((word & 0xf800) == 0xc800) {
         const base = arm_state.lowReg(word >> 8);
         const mask = @intCast(u8, word & 0xff);
+        if (mask == 0) {
+            return error.Unpredictable;
+        }
         var address = state.read(base);
         var index: u8 = 0;
         while (index < 8) : (index += 1) {

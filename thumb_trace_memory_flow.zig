@@ -293,6 +293,13 @@ pub fn traceThumbMemoryFlow(word: u16, pc: u32, tape: *trace.Tape) RunError!bool
         const base_reg = try tape.literalReg(arm_state.lowReg(word >> 8));
         var address = try tape.loadReg(base_reg);
         const mask = @intCast(u8, word & 0xff);
+        if (mask == 0) {
+            return error.Unpredictable;
+        }
+        const base = arm_state.lowReg(word >> 8);
+        if ((mask & (@as(u8, 1) << @intCast(u3, @enumToInt(base)))) != 0 and @intCast(u4, @enumToInt(base)) != bits.firstSetLow8(mask)) {
+            return error.Unpredictable;
+        }
         var index: u8 = 0;
         while (index < 8) : (index += 1) {
             if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
@@ -311,6 +318,9 @@ pub fn traceThumbMemoryFlow(word: u16, pc: u32, tape: *trace.Tape) RunError!bool
         const base_reg = try tape.literalReg(base);
         var address = try tape.loadReg(base_reg);
         const mask = @intCast(u8, word & 0xff);
+        if (mask == 0) {
+            return error.Unpredictable;
+        }
         var index: u8 = 0;
         while (index < 8) : (index += 1) {
             if ((mask & (@as(u8, 1) << @intCast(u3, index))) != 0) {
