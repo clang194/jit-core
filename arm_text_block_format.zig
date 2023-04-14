@@ -1,4 +1,6 @@
 const std = @import("std");
+const text_types = @import("arm_text_types.zig");
+const TextError = text_types.TextError;
 const bits = @import("bits.zig");
 const arm_exec = @import("arm_exec.zig");
 const arm_state = @import("arm_state.zig");
@@ -27,8 +29,7 @@ pub fn formatArmLoadMultiple(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     var used: usize = 0;
     const op = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) "ldmib" else "ldmdb"
-    else
-        if (bits.getBit32(word, 23)) "ldm" else "ldmda";
+    else if (bits.getBit32(word, 23)) "ldm" else "ldmda";
     try appendText(buf, &used, op);
     try appendText(buf, &used, condName(cond));
     try appendText(buf, &used, " ");
@@ -46,8 +47,7 @@ pub fn formatArmStoreMultiple(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     var used: usize = 0;
     const op = if (bits.getBit32(word, 24))
         if (bits.getBit32(word, 23)) "stmib" else "stmdb"
-    else
-        if (bits.getBit32(word, 23)) "stm" else "stmda";
+    else if (bits.getBit32(word, 23)) "stm" else "stmda";
     try appendText(buf, &used, op);
     try appendText(buf, &used, condName(cond));
     try appendText(buf, &used, " ");
@@ -74,4 +74,3 @@ pub fn isSyncArmFormat(word: u32) bool {
         (word & 0x0ff00ff0) == 0x01000090 or
         (word & 0x0ff00ff0) == 0x01400090;
 }
-

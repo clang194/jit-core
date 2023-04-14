@@ -1,4 +1,6 @@
 const std = @import("std");
+const text_types = @import("arm_text_types.zig");
+const TextError = text_types.TextError;
 const bits = @import("bits.zig");
 const arm_exec = @import("arm_exec.zig");
 const arm_state = @import("arm_state.zig");
@@ -224,4 +226,3 @@ pub fn nextReg(reg: arm_state.ArmReg) arm_state.ArmReg {
     }
     return @intToEnum(arm_state.ArmReg, @intCast(u8, next));
 }
-

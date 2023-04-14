@@ -1,6 +1,11 @@
 const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 const trace = @import("trace.zig");
+const thumb_decode = @import("thumb_fetch_decode.zig");
+const RunError = thumb_decode.RunError;
+const thumb_reverse = @import("thumb_masks_reverse.zig");
+const byteReverseHalf = thumb_reverse.byteReverseHalf;
+const byteReverseWord = thumb_reverse.byteReverseWord;
 usingnamespace @import("thumb_fetch_decode.zig");
 usingnamespace @import("thumb_shift_math.zig");
 usingnamespace @import("thumb_masks_reverse.zig");

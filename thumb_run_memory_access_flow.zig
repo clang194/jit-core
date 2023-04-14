@@ -1,6 +1,17 @@
 const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 const trace = @import("trace.zig");
+const thumb_decode = @import("thumb_fetch_decode.zig");
+const RunError = thumb_decode.RunError;
+const thumb_memory = @import("thumb_memory_flow.zig");
+const alignDown4 = thumb_memory.alignDown4;
+const readMemory16 = thumb_memory.readMemory16;
+const readMemory32 = thumb_memory.readMemory32;
+const writeMemory16 = thumb_memory.writeMemory16;
+const writeMemory32 = thumb_memory.writeMemory32;
+const thumb_reverse = @import("thumb_masks_reverse.zig");
+const signExtendByte = thumb_reverse.signExtendByte;
+const signExtendHalf = thumb_reverse.signExtendHalf;
 usingnamespace @import("thumb_fetch_decode.zig");
 usingnamespace @import("thumb_shift_math.zig");
 usingnamespace @import("thumb_masks_reverse.zig");

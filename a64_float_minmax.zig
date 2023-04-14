@@ -2,6 +2,20 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const a64_control = @import("a64_float_control.zig");
+const effectiveFloatControl = a64_control.effectiveFloatControl;
+const finishFloat32 = a64_control.finishFloat32;
+const finishFloat64 = a64_control.finishFloat64;
+const floatInput32 = a64_control.floatInput32;
+const floatInput64 = a64_control.floatInput64;
+const useAccurateNan = a64_control.useAccurateNan;
+const a64_nan = @import("a64_float_nan.zig");
+const chooseBinaryNan32 = a64_nan.chooseBinaryNan32;
+const chooseBinaryNan64 = a64_nan.chooseBinaryNan64;
+const isNan32 = a64_nan.isNan32;
+const isNan64 = a64_nan.isNan64;
+const isSignalingNan32 = a64_nan.isSignalingNan32;
+const isSignalingNan64 = a64_nan.isSignalingNan64;
 
 pub fn floatMax(base_control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, left: u64, right: u64) u64 {
     const control = effectiveFloatControl(base_control, mode);
@@ -259,4 +273,3 @@ pub fn compareFloat(control: a64_state.FloatControl, double: bool, left: u64, ri
     }
     return 0x20000000;
 }
-

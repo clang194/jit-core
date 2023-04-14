@@ -151,6 +151,13 @@ pub fn rotateRight32(value: u32, amount: u5) u32 {
     return (value >> amount) | (value << @intCast(u5, 32 - @as(u6, amount)));
 }
 
+pub fn rotateRight64(value: u64, amount: u6) u64 {
+    if (amount == 0) {
+        return value;
+    }
+    return (value >> amount) | (value << @intCast(u6, 64 - @as(u7, amount)));
+}
+
 pub fn signedShiftLeft32(value: u32, amount: i32) u32 {
     return shiftLeft32(value, amount);
 }

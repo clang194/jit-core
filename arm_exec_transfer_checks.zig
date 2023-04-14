@@ -1,5 +1,15 @@
 const arm_state = @import("arm_state.zig");
 const bits = @import("bits.zig");
+const arm_types = @import("arm_exec_types.zig");
+const ArmStepError = arm_types.ArmStepError;
+const DataOp = arm_types.DataOp;
+const ShiftMode = arm_types.ShiftMode;
+const arm_registers = @import("arm_exec_register_memory.zig");
+const armReg = arm_registers.armReg;
+const nextArmReg = arm_registers.nextArmReg;
+const readArmOperand = arm_registers.readArmOperand;
+const arm_alu = @import("arm_exec_alu_helpers.zig");
+const shiftByImmediate = arm_alu.shiftByImmediate;
 usingnamespace @import("arm_exec_types.zig");
 usingnamespace @import("arm_exec_fetch_decode.zig");
 usingnamespace @import("arm_exec_dispatch.zig");
@@ -172,4 +182,3 @@ pub fn transferHalfOffset(word: u32, state: *const arm_state.MachineState, pc: u
     }
     return readArmOperand(state, armReg(word), pc);
 }
-

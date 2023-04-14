@@ -1,4 +1,6 @@
 const std = @import("std");
+const text_types = @import("arm_text_types.zig");
+const TextError = text_types.TextError;
 usingnamespace @import("arm_text_types.zig");
 
 pub fn formatArmBarrier(buf: []u8, word: u32) TextError![]u8 {

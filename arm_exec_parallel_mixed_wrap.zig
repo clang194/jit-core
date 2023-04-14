@@ -1,4 +1,19 @@
 const arm_state = @import("arm_state.zig");
+const arm_types = @import("arm_exec_types.zig");
+const ArmStepError = arm_types.ArmStepError;
+const AddResult = arm_types.AddResult;
+const CoprocessorOp = arm_types.CoprocessorOp;
+const DataOp = arm_types.DataOp;
+const DualMultiplyOp = arm_types.DualMultiplyOp;
+const ExtendOp = arm_types.ExtendOp;
+const FloatBinaryOp = arm_types.FloatBinaryOp;
+const FloatUnaryOp = arm_types.FloatUnaryOp;
+const FloatVectorPlan = arm_types.FloatVectorPlan;
+const HalfMultiplyOp = arm_types.HalfMultiplyOp;
+const MultiplyOp = arm_types.MultiplyOp;
+const SaturatingWordResult = arm_types.SaturatingWordResult;
+const ShiftMode = arm_types.ShiftMode;
+const ShiftResult = arm_types.ShiftResult;
 const bits = @import("bits.zig");
 usingnamespace @import("arm_exec_types.zig");
 usingnamespace @import("arm_exec_fetch_decode.zig");
@@ -110,4 +125,3 @@ pub fn runSignedWrappingMixedHalves(word: u32, state: *arm_state.MachineState, p
     state.writeGreaterEqualLanes(ge);
     state.write(.pc, pc + 4);
 }
-

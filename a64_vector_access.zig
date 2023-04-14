@@ -2,6 +2,10 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const a64_immediate = @import("a64_immediate_vectors.zig");
+const signExtendRuntime = a64_immediate.signExtendRuntime;
+const a64_masks = @import("a64_logic_masks.zig");
+const ones = a64_masks.ones;
 usingnamespace @import("a64_immediate_vectors.zig");
 
 pub fn vectorByte(value: a64_state.VectorValue, index: usize) u8 {

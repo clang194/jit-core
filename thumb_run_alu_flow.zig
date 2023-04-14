@@ -1,12 +1,27 @@
 const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 const trace = @import("trace.zig");
+const thumb_decode = @import("thumb_fetch_decode.zig");
+const RunError = thumb_decode.RunError;
+const thumb_memory = @import("thumb_memory_flow.zig");
+const loadWritePc = thumb_memory.loadWritePc;
+const readOperand = thumb_memory.readOperand;
+const thumbPcWrite = thumb_memory.thumbPcWrite;
+const updateNz = thumb_memory.updateNz;
+const thumb_shift = @import("thumb_shift_math.zig");
+const addWithCarry = thumb_shift.addWithCarry;
+const arithmeticRight = thumb_shift.arithmeticRight;
+const logicalLeft = thumb_shift.logicalLeft;
+const logicalRight = thumb_shift.logicalRight;
+const rotateRight = thumb_shift.rotateRight;
+const subWithCarry = thumb_shift.subWithCarry;
 usingnamespace @import("thumb_fetch_decode.zig");
 usingnamespace @import("thumb_shift_math.zig");
 usingnamespace @import("thumb_masks_reverse.zig");
 usingnamespace @import("thumb_memory_flow.zig");
 
 pub fn runThumbAluFlow(word: u16, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!bool {
+    _ = hooks;
     if ((word & 0xf800) == 0x0000) {
         const amount = @intCast(u8, (word >> 6) & 0x1f);
         const source = arm_state.lowReg(word >> 3);

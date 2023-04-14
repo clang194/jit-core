@@ -42,7 +42,7 @@ pub fn decodeBitPattern(n: bool, imms: u6, immr: u6, reject_full: bool) ?BitPatt
     const r = @as(u64, immr) & levels;
     const d = (s -% r) & levels;
     const size = @as(u6, 1) << @intCast(u3, len);
-    const write = rotateRight64(replicate64(ones(@intCast(u8, s + 1)), size), @intCast(u6, r));
+    const write = bits.rotateRight64(replicate64(ones(@intCast(u8, s + 1)), size), @intCast(u6, r));
     const limit = replicate64(ones(@intCast(u8, d + 1)), size);
     return BitPattern{
         .write = write,
@@ -76,4 +76,3 @@ pub fn replicate64(value: u64, element_size: u6) u64 {
     }
     return result;
 }
-

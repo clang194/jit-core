@@ -1,6 +1,17 @@
 const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 const trace = @import("trace.zig");
+const thumb_decode = @import("thumb_fetch_decode.zig");
+const RunError = thumb_decode.RunError;
+const ThumbWord = thumb_decode.ThumbWord;
+const branchLinkExchangeTarget = thumb_decode.branchLinkExchangeTarget;
+const branchLinkTarget = thumb_decode.branchLinkTarget;
+const thumb_trace_alu = @import("thumb_trace_alu_flow.zig");
+const traceThumbAluFlow = thumb_trace_alu.traceThumbAluFlow;
+const thumb_trace_memory = @import("thumb_trace_memory_flow.zig");
+const traceThumbMemoryFlow = thumb_trace_memory.traceThumbMemoryFlow;
+const thumb_trace_misc = @import("thumb_trace_misc_flow.zig");
+const traceThumbMiscFlow = thumb_trace_misc.traceThumbMiscFlow;
 usingnamespace @import("thumb_fetch_decode.zig");
 usingnamespace @import("thumb_shift_math.zig");
 usingnamespace @import("thumb_masks_reverse.zig");

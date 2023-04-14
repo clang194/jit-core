@@ -1,4 +1,6 @@
 const std = @import("std");
+const text_types = @import("arm_text_types.zig");
+const TextError = text_types.TextError;
 const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 usingnamespace @import("arm_text_types.zig");

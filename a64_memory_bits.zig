@@ -41,7 +41,7 @@ pub fn shift64(value: u64, shift: u2, amount: u6) u64 {
         0 => return value << amount,
         1 => return value >> amount,
         2 => return @bitCast(u64, @bitCast(i64, value) >> amount),
-        else => return rotateRight64(value, amount),
+        else => return bits.rotateRight64(value, amount),
     }
 }
 

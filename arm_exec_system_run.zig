@@ -1,4 +1,19 @@
 const arm_state = @import("arm_state.zig");
+const arm_types = @import("arm_exec_types.zig");
+const ArmStepError = arm_types.ArmStepError;
+const AddResult = arm_types.AddResult;
+const CoprocessorOp = arm_types.CoprocessorOp;
+const DataOp = arm_types.DataOp;
+const DualMultiplyOp = arm_types.DualMultiplyOp;
+const ExtendOp = arm_types.ExtendOp;
+const FloatBinaryOp = arm_types.FloatBinaryOp;
+const FloatUnaryOp = arm_types.FloatUnaryOp;
+const FloatVectorPlan = arm_types.FloatVectorPlan;
+const HalfMultiplyOp = arm_types.HalfMultiplyOp;
+const MultiplyOp = arm_types.MultiplyOp;
+const SaturatingWordResult = arm_types.SaturatingWordResult;
+const ShiftMode = arm_types.ShiftMode;
+const ShiftResult = arm_types.ShiftResult;
 usingnamespace @import("arm_exec_types.zig");
 
 pub fn runArmBarrier(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {

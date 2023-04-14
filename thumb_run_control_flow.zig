@@ -1,6 +1,14 @@
 const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 const trace = @import("trace.zig");
+const thumb_decode = @import("thumb_fetch_decode.zig");
+const RunError = thumb_decode.RunError;
+const compareZeroBranchTarget = thumb_decode.compareZeroBranchTarget;
+const isCompareZeroBranch = thumb_decode.isCompareZeroBranch;
+const isStop = thumb_decode.isStop;
+const isThumbBreakpoint = thumb_decode.isThumbBreakpoint;
+const isThumbNoOp = thumb_decode.isThumbNoOp;
+const thumbSystemHint = thumb_decode.thumbSystemHint;
 usingnamespace @import("thumb_fetch_decode.zig");
 usingnamespace @import("thumb_shift_math.zig");
 usingnamespace @import("thumb_masks_reverse.zig");

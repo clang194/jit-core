@@ -1,7 +1,15 @@
 const std = @import("std");
+const text_types = @import("arm_text_types.zig");
+const TextError = text_types.TextError;
 const bits = @import("bits.zig");
 const arm_exec = @import("arm_exec.zig");
 const arm_state = @import("arm_state.zig");
+const text_common = @import("arm_text_common_format.zig");
+const condName = text_common.condName;
+const text_coprocessor = @import("arm_text_coprocessor_format.zig");
+const armReg = text_coprocessor.armReg;
+const text_transfer = @import("arm_text_transfer_format.zig");
+const nextReg = text_transfer.nextReg;
 usingnamespace @import("arm_text_types.zig");
 usingnamespace @import("arm_text_arm_format.zig");
 usingnamespace @import("arm_text_float_format.zig");
@@ -143,4 +151,3 @@ pub fn formatMiscArm(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         arm_state.regName(target),
     }) catch error.NoSpaceLeft;
 }
-

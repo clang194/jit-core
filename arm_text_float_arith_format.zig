@@ -1,4 +1,6 @@
 const std = @import("std");
+const text_types = @import("arm_text_types.zig");
+const TextError = text_types.TextError;
 const bits = @import("bits.zig");
 const arm_exec = @import("arm_exec.zig");
 const arm_state = @import("arm_state.zig");
@@ -14,7 +16,6 @@ usingnamespace @import("arm_text_data_format.zig");
 usingnamespace @import("arm_text_thumb_format.zig");
 usingnamespace @import("arm_text_thumb32_format.zig");
 usingnamespace @import("arm_text_common_format.zig");
-
 
 pub fn formatFloatAdd(buf: []u8, word: u32, cond: u4) TextError![]u8 {
     if (bits.getBit32(word, 8)) {
@@ -206,4 +207,3 @@ pub fn formatFloatMoveReg(buf: []u8, word: u32, cond: u4) TextError![]u8 {
         floatWordTextIndex(word, bits.getBit32(word, 5)),
     }) catch error.NoSpaceLeft;
 }
-

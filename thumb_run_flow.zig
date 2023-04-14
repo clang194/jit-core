@@ -1,6 +1,19 @@
 const bits = @import("bits.zig");
 const arm_state = @import("arm_state.zig");
 const trace = @import("trace.zig");
+const thumb_decode = @import("thumb_fetch_decode.zig");
+const RunError = thumb_decode.RunError;
+const ThumbWord = thumb_decode.ThumbWord;
+const branchLinkExchangeTarget = thumb_decode.branchLinkExchangeTarget;
+const branchLinkTarget = thumb_decode.branchLinkTarget;
+const thumb_alu = @import("thumb_run_alu_flow.zig");
+const runThumbAluFlow = thumb_alu.runThumbAluFlow;
+const thumb_control = @import("thumb_run_control_flow.zig");
+const runThumbControlFlow = thumb_control.runThumbControlFlow;
+const thumb_memory_access = @import("thumb_run_memory_access_flow.zig");
+const runThumbMemoryAccessFlow = thumb_memory_access.runThumbMemoryAccessFlow;
+const thumb_stack_branch = @import("thumb_run_stack_branch_flow.zig");
+const runThumbStackBranchFlow = thumb_stack_branch.runThumbStackBranchFlow;
 usingnamespace @import("thumb_fetch_decode.zig");
 usingnamespace @import("thumb_shift_math.zig");
 usingnamespace @import("thumb_masks_reverse.zig");
@@ -41,7 +54,6 @@ pub fn runThumb32WithHooks(word: u32, state: *arm_state.MachineState, hooks: arm
     }
     return error.UnknownInstruction;
 }
-
 
 pub fn runThumbWithHooks(word: u16, state: *arm_state.MachineState, hooks: arm_state.HostHooks) RunError!void {
     if (try runThumbControlFlow(word, state, hooks)) {
