@@ -39,9 +39,19 @@ usingnamespace @import("arm_exec_parallel_wrap.zig");
 usingnamespace @import("arm_exec_memory_run.zig");
 usingnamespace @import("arm_exec_transfer_checks.zig");
 usingnamespace @import("arm_exec_alu_helpers.zig");
+const arm_alu_helpers = @import("arm_exec_alu_helpers.zig");
+const raiseQFlag = arm_alu_helpers.raiseQFlag;
 usingnamespace @import("arm_exec_immediate_run.zig");
 usingnamespace @import("arm_exec_register_memory.zig");
 usingnamespace @import("arm_exec_scalar_bits.zig");
+const arm_scalar_bits = @import("arm_exec_scalar_bits.zig");
+const addWithCarry = arm_scalar_bits.addWithCarry;
+const readLong = arm_scalar_bits.readLong;
+const selectedHalf = arm_scalar_bits.selectedHalf;
+const signedLowWord = arm_scalar_bits.signedLowWord;
+const signedProduct = arm_scalar_bits.signedProduct;
+const subWithCarry = arm_scalar_bits.subWithCarry;
+const writeLongResult = arm_scalar_bits.writeLongResult;
 
 pub fn isSignedTopMultiply(word: u32) bool {
     return (word & 0x0ff0f0d0) == 0x0750f010 or

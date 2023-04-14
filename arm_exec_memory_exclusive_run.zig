@@ -4,6 +4,7 @@ const armCondition = arm_coprocessor.armCondition;
 const runExternalArmHandler = arm_coprocessor.runExternalArmHandler;
 const arm_registers = @import("arm_exec_register_memory.zig");
 const armReg = arm_registers.armReg;
+const exclusiveHolds = arm_registers.exclusiveHolds;
 const loadWritePc = arm_registers.loadWritePc;
 const nextArmReg = arm_registers.nextArmReg;
 const readArmOperand = arm_registers.readArmOperand;

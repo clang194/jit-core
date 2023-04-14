@@ -39,6 +39,8 @@ usingnamespace @import("arm_exec_parallel_halve.zig");
 usingnamespace @import("arm_exec_memory_run.zig");
 usingnamespace @import("arm_exec_transfer_checks.zig");
 usingnamespace @import("arm_exec_alu_helpers.zig");
+const arm_alu_helpers = @import("arm_exec_alu_helpers.zig");
+const shiftByImmediate = arm_alu_helpers.shiftByImmediate;
 usingnamespace @import("arm_exec_immediate_run.zig");
 usingnamespace @import("arm_exec_register_memory.zig");
 usingnamespace @import("arm_exec_scalar_bits.zig");

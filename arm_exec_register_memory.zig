@@ -34,6 +34,9 @@ usingnamespace @import("arm_exec_transfer_checks.zig");
 usingnamespace @import("arm_exec_alu_helpers.zig");
 usingnamespace @import("arm_exec_immediate_run.zig");
 usingnamespace @import("arm_exec_scalar_bits.zig");
+const arm_scalar_bits = @import("arm_exec_scalar_bits.zig");
+const byteReverseHalf = arm_scalar_bits.byteReverseHalf;
+const byteReverseWord = arm_scalar_bits.byteReverseWord;
 
 pub fn armReg(value: u32) arm_state.ArmReg {
     return @intToEnum(arm_state.ArmReg, @intCast(u8, value & 0xf));
