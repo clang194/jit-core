@@ -242,6 +242,40 @@ pub const Core64Methods = struct {
             return error.ReservedInstruction;
         }
 
+        if (opcode == 0 and last == if (wide) @as(u6, 63) else @as(u6, 31)) {
+            const source = self.readSized(wide, regFromWord(word >> 5), false);
+            const result = if (wide)
+                bits.signedShiftRight64(source, @intCast(i32, rotate))
+            else
+                @as(u64, bits.signedShiftRight32(@intCast(u32, source), @intCast(i32, rotate)));
+            self.writeSized(wide, regFromWord(word), result, false);
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        if (opcode == 0 and rotate == 0 and wide and last == 31) {
+            const source = self.readSized(true, regFromWord(word >> 5), false);
+            self.writeSized(true, regFromWord(word), @bitCast(u64, bits.signExtend64(source & 0xffffffff, 32)), false);
+            self.state.pc +%= 4;
+            return true;
+        }
+
+        if (opcode == 0 and rotate == 0 and (last == 7 or last == 15)) {
+            const source = self.readSized(wide, regFromWord(word >> 5), false);
+            const result = if (last == 7)
+                if (wide)
+                    @bitCast(u64, bits.signExtend64(source & 0xff, 8))
+                else
+                    @as(u64, @bitCast(u32, bits.signExtend32(@intCast(u32, source & 0xff), 8)))
+            else if (wide)
+                @bitCast(u64, bits.signExtend64(source & 0xffff, 16))
+            else
+                @as(u64, @bitCast(u32, bits.signExtend32(@intCast(u32, source & 0xffff), 16)));
+            self.writeSized(wide, regFromWord(word), result, false);
+            self.state.pc +%= 4;
+            return true;
+        }
+
         const masks = decodeBitPattern(n, last, rotate, false) orelse return error.ReservedInstruction;
         const source = self.readSized(wide, regFromWord(word >> 5), false);
         const rotated = rotateRightSized(wide, source, rotate);
