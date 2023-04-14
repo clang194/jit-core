@@ -2,6 +2,12 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const a64_logic = @import("a64_logic_masks.zig");
+const ones = a64_logic.ones;
+const a64_vectors = @import("a64_immediate_vectors.zig");
+const signExtendRuntime = a64_vectors.signExtendRuntime;
+const a64_vector_access = @import("a64_vector_access.zig");
+const setVectorElement = a64_vector_access.setVectorElement;
 
 pub const SaturatingShiftResult = struct {
     value: u64,
