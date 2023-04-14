@@ -1,4 +1,7 @@
 const arm_state = @import("arm_state.zig");
+const arm_coprocessor = @import("arm_exec_coprocessor.zig");
+const armCondition = arm_coprocessor.armCondition;
+const runExternalArmHandler = arm_coprocessor.runExternalArmHandler;
 const arm_types = @import("arm_exec_types.zig");
 const ArmStepError = arm_types.ArmStepError;
 const AddResult = arm_types.AddResult;

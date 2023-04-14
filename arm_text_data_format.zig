@@ -1,4 +1,6 @@
 const std = @import("std");
+const text_common = @import("arm_text_common_format.zig");
+const condName = text_common.condName;
 const text_types = @import("arm_text_types.zig");
 const TextError = text_types.TextError;
 const bits = @import("bits.zig");

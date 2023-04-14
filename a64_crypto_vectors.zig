@@ -2,6 +2,12 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const a64_tables = @import("a64_crypto_tables.zig");
+const aesForwardBox = a64_tables.aesForwardBox;
+const aesReverseBox = a64_tables.aesReverseBox;
+const sm4ForwardBox = a64_tables.sm4ForwardBox;
+const a64_masks = @import("a64_logic_masks.zig");
+const ones = a64_masks.ones;
 usingnamespace @import("a64_crypto_tables.zig");
 
 pub fn aesDouble(value: u8) u8 {
