@@ -5,6 +5,21 @@ const float_format = @import("float_format.zig");
 const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const a64_control = @import("a64_float_control.zig");
+const finishFloat32 = a64_control.finishFloat32;
+const finishFloat64 = a64_control.finishFloat64;
+const floatInput32 = a64_control.floatInput32;
+const floatInput64 = a64_control.floatInput64;
+const effectiveFloatControl = a64_control.effectiveFloatControl;
+const a64_nan = @import("a64_float_nan.zig");
+const chooseBinaryNan32 = a64_nan.chooseBinaryNan32;
+const chooseBinaryNan64 = a64_nan.chooseBinaryNan64;
+const chooseTernaryNan32 = a64_nan.chooseTernaryNan32;
+const chooseTernaryNan64 = a64_nan.chooseTernaryNan64;
+const chooseUnaryNan32 = a64_nan.chooseUnaryNan32;
+const chooseUnaryNan64 = a64_nan.chooseUnaryNan64;
+const isQuietNan32 = a64_nan.isQuietNan32;
+const isQuietNan64 = a64_nan.isQuietNan64;
 
 fn isZero32(value: u32) bool {
     return (value & ~float_format.Binary32.sign_mask) == 0;

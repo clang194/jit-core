@@ -2,6 +2,11 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const a64_logic = @import("a64_logic_masks.zig");
+const ones = a64_logic.ones;
+const replicate64 = a64_logic.replicate64;
+const a64_memory = @import("a64_memory_bits.zig");
+const rotateRight32 = a64_memory.rotateRight32;
 
 pub fn expandVectorImmediate(op: bool, cmode: u4, imm8: u8) u64 {
     const value = @as(u64, imm8);

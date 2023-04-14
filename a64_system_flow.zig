@@ -9,21 +9,56 @@ const FloatNanMode64 = main.FloatNanMode64;
 const HostHooks64 = main.HostHooks64;
 usingnamespace @import("a64_math_flags.zig");
 usingnamespace @import("a64_logic_masks.zig");
-usingnamespace @import("a64_immediate_vectors.zig");
-usingnamespace @import("a64_divide_crc.zig");
+const a64_vectors = @import("a64_immediate_vectors.zig");
+const rotateRightSized = a64_vectors.rotateRightSized;
+const a64_divide = @import("a64_divide_crc.zig");
+const crc32 = a64_divide.crc32;
+const crc32c = a64_divide.crc32c;
+const signedDivideSized = a64_divide.signedDivideSized;
+const unsignedDivideSized = a64_divide.unsignedDivideSized;
 usingnamespace @import("a64_crypto_tables.zig");
 usingnamespace @import("a64_float_control.zig");
 usingnamespace @import("a64_float_arithmetic.zig");
 usingnamespace @import("a64_float_minmax.zig");
 usingnamespace @import("a64_float_nan.zig");
 usingnamespace @import("a64_vector_access.zig");
-usingnamespace @import("a64_crypto_vectors.zig");
+const a64_crypto = @import("a64_crypto_vectors.zig");
+const sha1ScheduleFirst = a64_crypto.sha1ScheduleFirst;
+const sha1ScheduleNext = a64_crypto.sha1ScheduleNext;
+const sha512RoundFirst = a64_crypto.sha512RoundFirst;
+const sha512RoundSecond = a64_crypto.sha512RoundSecond;
+const sha512ScheduleFirst = a64_crypto.sha512ScheduleFirst;
+const sha512ScheduleNext = a64_crypto.sha512ScheduleNext;
+const sm3PrepareWordsFirst = a64_crypto.sm3PrepareWordsFirst;
+const sm3PrepareWordsSecond = a64_crypto.sm3PrepareWordsSecond;
+const sm3MixOneA = a64_crypto.sm3MixOneA;
+const sm3MixOneB = a64_crypto.sm3MixOneB;
+const sm3MixTwoA = a64_crypto.sm3MixTwoA;
+const sm3MixTwoB = a64_crypto.sm3MixTwoB;
+const sm3SelectWord = a64_crypto.sm3SelectWord;
+const sha1RoundChoose = a64_crypto.sha1RoundChoose;
+const sha1RoundMajority = a64_crypto.sha1RoundMajority;
+const sha1RoundParity = a64_crypto.sha1RoundParity;
+const sha256RoundFirst = a64_crypto.sha256RoundFirst;
+const sha256RoundSecond = a64_crypto.sha256RoundSecond;
+const sha256ScheduleFirst = a64_crypto.sha256ScheduleFirst;
+const sha256ScheduleNext = a64_crypto.sha256ScheduleNext;
+const sm4EncryptRound = a64_crypto.sm4EncryptRound;
+const sm4KeyRound = a64_crypto.sm4KeyRound;
+const xorRotatedDoublewordVector = a64_crypto.xorRotatedDoublewordVector;
+const xorRotateRightVector = a64_crypto.xorRotateRightVector;
 usingnamespace @import("a64_vector_integer.zig");
 usingnamespace @import("a64_vector_float.zig");
 usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
-usingnamespace @import("a64_count_bits.zig");
-usingnamespace @import("a64_memory_bits.zig");
+const a64_count = @import("a64_count_bits.zig");
+const countLeadingZeroes32 = a64_count.countLeadingZeroes32;
+const countLeadingZeroes64 = a64_count.countLeadingZeroes64;
+const countLeadingSignBits32 = a64_count.countLeadingSignBits32;
+const countLeadingSignBits64 = a64_count.countLeadingSignBits64;
+const a64_memory = @import("a64_memory_bits.zig");
+const regFromWord = a64_memory.regFromWord;
+const vectorRegFromWord = a64_memory.vectorRegFromWord;
 
 pub const Core64Methods = struct {
     pub fn runVectorAnd(self: *Core64, word: u32) bool {
@@ -337,7 +372,7 @@ pub const Core64Methods = struct {
             3 => FaultKind64.wait_for_interrupt,
             4 => FaultKind64.send_event,
             5 => FaultKind64.send_event_local,
-            else => blk: {
+            else => {
                 self.state.pc +%= 4;
                 return true;
             },
@@ -439,7 +474,11 @@ pub const Core64Methods = struct {
         switch (masked) {
             0xd51b4400 => self.state.writeFloatControl(value),
             0xd51b4420 => self.state.writeFloatStatus(value),
-            0xd51bd040 => if (self.hooks.thread_value) |cell| cell.* = self.readSized(true, regFromWord(word), false),
+            0xd51bd040 => {
+                if (self.hooks.thread_value) |cell| {
+                    cell.* = self.readSized(true, regFromWord(word), false);
+                }
+            },
             else => return false,
         }
         self.state.pc +%= 4;

@@ -1,4 +1,6 @@
 const std = @import("std");
+const text_data = @import("arm_text_data_format.zig");
+const shiftName = text_data.shiftName;
 const text_types = @import("arm_text_types.zig");
 const TextError = text_types.TextError;
 const bits = @import("bits.zig");

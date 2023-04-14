@@ -2,6 +2,10 @@ const a64_state = @import("a64_state.zig");
 const bits = @import("bits.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
+const a64_logic = @import("a64_logic_masks.zig");
+const ones = a64_logic.ones;
+const a64_vectors = @import("a64_immediate_vectors.zig");
+const signExtendRuntime = a64_vectors.signExtendRuntime;
 
 pub fn equalVectorLanes(left: u64, right: u64, lane: u8) u64 {
     if (lane == 64) {

@@ -7,7 +7,8 @@ const FaultKind64 = main.FaultKind64;
 const CacheAction64 = main.CacheAction64;
 const FloatNanMode64 = main.FloatNanMode64;
 const HostHooks64 = main.HostHooks64;
-usingnamespace @import("a64_math_flags.zig");
+const a64_flags = @import("a64_math_flags.zig");
+const MathResult = a64_flags.MathResult;
 usingnamespace @import("a64_logic_masks.zig");
 usingnamespace @import("a64_immediate_vectors.zig");
 usingnamespace @import("a64_divide_crc.zig");
@@ -23,7 +24,9 @@ usingnamespace @import("a64_vector_float.zig");
 usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
-usingnamespace @import("a64_memory_bits.zig");
+const a64_memory = @import("a64_memory_bits.zig");
+const readLittle64 = a64_memory.readLittle64;
+const writeLittle64 = a64_memory.writeLittle64;
 
 pub const Core64Methods = struct {
     pub fn extendedReg(self: *const Core64, wide: bool, reg: a64_state.GeneralReg, option: u3, amount: u3) u64 {

@@ -25,7 +25,6 @@ usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
 usingnamespace @import("a64_memory_bits.zig");
 
-
 pub const Core64Methods = struct {
     usingnamespace @import("a64_memory_scalar_flow.zig").Core64Methods;
     usingnamespace @import("a64_memory_pair_flow.zig").Core64Methods;

@@ -23,7 +23,8 @@ usingnamespace @import("a64_vector_float.zig");
 usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
-usingnamespace @import("a64_memory_bits.zig");
+const a64_memory = @import("a64_memory_bits.zig");
+const regFromWord = a64_memory.regFromWord;
 
 pub const Core64Methods = struct {
     pub fn runPcRelative(self: *Core64, word: u32) bool {

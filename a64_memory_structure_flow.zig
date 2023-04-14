@@ -16,14 +16,18 @@ usingnamespace @import("a64_float_control.zig");
 usingnamespace @import("a64_float_arithmetic.zig");
 usingnamespace @import("a64_float_minmax.zig");
 usingnamespace @import("a64_float_nan.zig");
-usingnamespace @import("a64_vector_access.zig");
+const a64_vector_access = @import("a64_vector_access.zig");
+const setVectorElement = a64_vector_access.setVectorElement;
+const vectorElement = a64_vector_access.vectorElement;
 usingnamespace @import("a64_crypto_vectors.zig");
 usingnamespace @import("a64_vector_integer.zig");
 usingnamespace @import("a64_vector_float.zig");
 usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
-usingnamespace @import("a64_memory_bits.zig");
+const a64_memory = @import("a64_memory_bits.zig");
+const regFromWord = a64_memory.regFromWord;
+const vectorRegFromWord = a64_memory.vectorRegFromWord;
 
 pub const Core64Methods = struct {
     pub fn runVectorStructureTransfer(self: *Core64, word: u32) Core64Error!bool {

@@ -84,4 +84,3 @@ pub fn addWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
 pub fn subWithCarry(left: u32, right: u32, carry_in: bool) AddResult {
     return addWithCarry(left, ~right, carry_in);
 }
-

@@ -5,9 +5,13 @@ const float_fused = @import("float_fused.zig");
 const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
-usingnamespace @import("a64_float_arithmetic.zig");
-usingnamespace @import("a64_float_minmax.zig");
-usingnamespace @import("a64_vector_access.zig");
+const a64_float_arithmetic = @import("a64_float_arithmetic.zig");
+const floatAdd = a64_float_arithmetic.floatAdd;
+const a64_float_minmax = @import("a64_float_minmax.zig");
+const negateFloat = a64_float_minmax.negateFloat;
+const a64_vector_access = @import("a64_vector_access.zig");
+const setVectorElement = a64_vector_access.setVectorElement;
+const vectorElement = a64_vector_access.vectorElement;
 
 pub fn addComplexFloatVector(control: a64_state.FloatControl, mode: FloatNanMode64, double: bool, full: bool, left: a64_state.VectorValue, right: a64_state.VectorValue, rotated: bool) a64_state.VectorValue {
     const bytes = if (double) @as(usize, 8) else @as(usize, 4);

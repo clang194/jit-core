@@ -6,7 +6,14 @@ const float_parts = @import("float_parts.zig");
 const float_status = @import("float_status.zig");
 const main = @import("a64_core.zig");
 const FloatNanMode64 = main.FloatNanMode64;
-usingnamespace @import("a64_float_nan.zig");
+const a64_nan = @import("a64_float_nan.zig");
+const isDenormal32 = a64_nan.isDenormal32;
+const isDenormal64 = a64_nan.isDenormal64;
+const isNan32 = a64_nan.isNan32;
+const isNan64 = a64_nan.isNan64;
+const isSignalingNan16 = a64_nan.isSignalingNan16;
+const isSignalingNan32 = a64_nan.isSignalingNan32;
+const isSignalingNan64 = a64_nan.isSignalingNan64;
 
 pub fn floatInput32(control: a64_state.FloatControl, value: u32) u32 {
     if (control.fz() and isDenormal32(value)) {

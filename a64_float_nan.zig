@@ -35,6 +35,10 @@ fn quietNan(comptime Format: type, value: anytype) @TypeOf(value) {
     return value | Format.fraction_top_bit;
 }
 
+fn useAccurateNan(mode: FloatNanMode64) bool {
+    return mode == .accurate;
+}
+
 fn processNan(comptime Format: type, control: a64_state.FloatControl, value: anytype, status: *float_status.FloatStatus) float_exception.FloatExceptionError!@TypeOf(value) {
     var result = value;
     if (isSignalingNan(Format, value)) {

@@ -19,4 +19,3 @@ pub const TextError = error{
     UnknownInstruction,
     NoSpaceLeft,
 };
-

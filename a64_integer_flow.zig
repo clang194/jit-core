@@ -8,7 +8,10 @@ const CacheAction64 = main.CacheAction64;
 const FloatNanMode64 = main.FloatNanMode64;
 const HostHooks64 = main.HostHooks64;
 usingnamespace @import("a64_math_flags.zig");
-usingnamespace @import("a64_logic_masks.zig");
+const a64_logic = @import("a64_logic_masks.zig");
+const logicalOp = a64_logic.logicalOp;
+const decodeBitPattern = a64_logic.decodeBitPattern;
+const decodeLogicalMask = a64_logic.decodeLogicalMask;
 usingnamespace @import("a64_immediate_vectors.zig");
 usingnamespace @import("a64_divide_crc.zig");
 usingnamespace @import("a64_crypto_tables.zig");
@@ -23,7 +26,21 @@ usingnamespace @import("a64_vector_float.zig");
 usingnamespace @import("a64_vector_compare.zig");
 usingnamespace @import("a64_vector_shift.zig");
 usingnamespace @import("a64_count_bits.zig");
-usingnamespace @import("a64_memory_bits.zig");
+const a64_memory = @import("a64_memory_bits.zig");
+const regFromWord = a64_memory.regFromWord;
+const shift32 = a64_memory.shift32;
+const shift64 = a64_memory.shift64;
+const a64_flags = @import("a64_math_flags.zig");
+const mathAdd = a64_flags.mathAdd;
+const mathSub = a64_flags.mathSub;
+const a64_vectors = @import("a64_immediate_vectors.zig");
+const extractRegisterBits = a64_vectors.extractRegisterBits;
+const rotateRightSized = a64_vectors.rotateRightSized;
+const reverseHalfBytes = a64_vectors.reverseHalfBytes;
+const reverseBytes32 = a64_vectors.reverseBytes32;
+const reverseBytes64 = a64_vectors.reverseBytes64;
+const reverseBits32 = a64_vectors.reverseBits32;
+const reverseBits64 = a64_vectors.reverseBits64;
 
 pub const Core64Methods = struct {
     pub fn runLogicalImmediate(self: *Core64, word: u32) Core64Error!bool {

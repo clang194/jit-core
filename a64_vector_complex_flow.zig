@@ -4,7 +4,14 @@ const Core64 = main.Core64;
 const Core64Error = main.Core64Error;
 usingnamespace @import("a64_float_control.zig");
 usingnamespace @import("a64_immediate_vectors.zig");
-usingnamespace @import("a64_vector_complex.zig");
+const a64_float_control = @import("a64_float_control.zig");
+const effectiveFloatControl = a64_float_control.effectiveFloatControl;
+const a64_complex = @import("a64_vector_complex.zig");
+const addComplexFloatVector = a64_complex.addComplexFloatVector;
+const multiplyAddComplexFloatVector = a64_complex.multiplyAddComplexFloatVector;
+const multiplyAddComplexFloatVectorByElement = a64_complex.multiplyAddComplexFloatVectorByElement;
+const a64_memory = @import("a64_memory_bits.zig");
+const vectorRegFromWord = a64_memory.vectorRegFromWord;
 
 fn complexFloatShape(word: u32) Core64Error!struct { full: bool, double: bool } {
     const size = @intCast(u2, (word >> 22) & 3);

@@ -1,6 +1,9 @@
 const a64_state = @import("a64_state.zig");
-usingnamespace @import("a64_immediate_vectors.zig");
-usingnamespace @import("a64_vector_access.zig");
+const a64_vectors = @import("a64_immediate_vectors.zig");
+const signExtendRuntime = a64_vectors.signExtendRuntime;
+const a64_vector_access = @import("a64_vector_access.zig");
+const setVectorElement = a64_vector_access.setVectorElement;
+const vectorElement = a64_vector_access.vectorElement;
 
 fn dotTerm(left: u64, right: u64, signed: bool) u64 {
     if (signed) {
