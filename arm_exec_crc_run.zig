@@ -25,6 +25,8 @@ const ShiftResult = arm_types.ShiftResult;
 const crc = @import("a64_divide_crc.zig");
 usingnamespace @import("arm_exec_types.zig");
 usingnamespace @import("arm_exec_fetch_decode.zig");
+const arm_fetch_decode = @import("arm_exec_fetch_decode.zig");
+const isArmCrcAlt = arm_fetch_decode.isArmCrcAlt;
 
 pub fn runArmCrc(word: u32, state: *arm_state.MachineState, pc: u32) ArmStepError!void {
     const dest = armReg(word >> 12);

@@ -1,6 +1,7 @@
 const arm_state = @import("arm_state.zig");
 const arm_registers = @import("arm_exec_register_memory.zig");
 const armReg = arm_registers.armReg;
+const coprocessorReg = arm_registers.coprocessorReg;
 const loadWritePc = arm_registers.loadWritePc;
 const nextArmReg = arm_registers.nextArmReg;
 const readArmOperand = arm_registers.readArmOperand;
@@ -19,6 +20,7 @@ const MultiplyOp = arm_types.MultiplyOp;
 const SaturatingWordResult = arm_types.SaturatingWordResult;
 const ShiftMode = arm_types.ShiftMode;
 const ShiftResult = arm_types.ShiftResult;
+const external_arm_patterns = arm_types.external_arm_patterns;
 const bits = @import("bits.zig");
 usingnamespace @import("arm_exec_types.zig");
 usingnamespace @import("arm_exec_fetch_decode.zig");

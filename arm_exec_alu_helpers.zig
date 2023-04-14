@@ -4,6 +4,7 @@ const armReg = arm_registers.armReg;
 const loadWritePc = arm_registers.loadWritePc;
 const nextArmReg = arm_registers.nextArmReg;
 const readArmOperand = arm_registers.readArmOperand;
+const writeArmAluPc = arm_registers.writeArmAluPc;
 const arm_types = @import("arm_exec_types.zig");
 const ArmStepError = arm_types.ArmStepError;
 const AddResult = arm_types.AddResult;
@@ -22,6 +23,8 @@ const ShiftResult = arm_types.ShiftResult;
 const bits = @import("bits.zig");
 usingnamespace @import("arm_exec_types.zig");
 usingnamespace @import("arm_exec_fetch_decode.zig");
+const arm_fetch_decode = @import("arm_exec_fetch_decode.zig");
+const expandArmImmediate = arm_fetch_decode.expandArmImmediate;
 usingnamespace @import("arm_exec_dispatch.zig");
 usingnamespace @import("arm_exec_coprocessor.zig");
 usingnamespace @import("arm_exec_float_decode.zig");
@@ -39,6 +42,13 @@ usingnamespace @import("arm_exec_transfer_checks.zig");
 usingnamespace @import("arm_exec_immediate_run.zig");
 usingnamespace @import("arm_exec_register_memory.zig");
 usingnamespace @import("arm_exec_scalar_bits.zig");
+const arm_scalar_bits = @import("arm_exec_scalar_bits.zig");
+const addWithCarry = arm_scalar_bits.addWithCarry;
+const arithmeticRight = arm_scalar_bits.arithmeticRight;
+const logicalLeft = arm_scalar_bits.logicalLeft;
+const logicalRight = arm_scalar_bits.logicalRight;
+const rotateRight = arm_scalar_bits.rotateRight;
+const subWithCarry = arm_scalar_bits.subWithCarry;
 
 pub fn dataOperand(word: u32, state: *const arm_state.MachineState, pc: u32) ShiftResult {
     if (bits.getBit32(word, 25)) {
