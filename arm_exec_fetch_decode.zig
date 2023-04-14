@@ -28,6 +28,9 @@ usingnamespace @import("arm_exec_float_math.zig");
 usingnamespace @import("arm_exec_system_run.zig");
 usingnamespace @import("arm_exec_divide_run.zig");
 usingnamespace @import("arm_exec_status_branch.zig");
+const arm_status_branch = @import("arm_exec_status_branch.zig");
+const dataOp = arm_status_branch.dataOp;
+const multiplyOp = arm_status_branch.multiplyOp;
 usingnamespace @import("arm_exec_data_transfer.zig");
 usingnamespace @import("arm_exec_saturate_scalar.zig");
 usingnamespace @import("arm_exec_parallel_saturate.zig");
@@ -39,6 +42,8 @@ usingnamespace @import("arm_exec_alu_helpers.zig");
 usingnamespace @import("arm_exec_immediate_run.zig");
 usingnamespace @import("arm_exec_register_memory.zig");
 usingnamespace @import("arm_exec_scalar_bits.zig");
+const arm_scalar_bits = @import("arm_exec_scalar_bits.zig");
+const rotateRightWord = arm_scalar_bits.rotateRightWord;
 
 pub fn readArmWord(hooks: arm_state.HostHooks, pc: u32) ArmStepError!u32 {
     const address = pc & 0xfffffffc;
