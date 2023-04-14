@@ -208,3 +208,6 @@ pub fn runFloatNegMul(word: u32, state: *arm_state.MachineState, hooks: arm_stat
 }
 
 pub fn runFloatDiv(word: u32, state: *arm_state.MachineState, hooks: arm_state.HostHooks, pc: u32) ArmStepError!void {
+    _ = hooks;
+    return runFloatBinary(word, state, pc, .div);
+}

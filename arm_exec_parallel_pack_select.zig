@@ -114,3 +114,4 @@ pub fn runHalfwordPack(word: u32, state: *arm_state.MachineState, pc: u32) ArmSt
         (base & 0x0000ffff) | (shifted & 0xffff0000);
     state.write(dest, result);
     state.write(.pc, pc + 4);
+}
