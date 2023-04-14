@@ -10,6 +10,8 @@ const TextError = text_types.TextError;
 const bits = @import("bits.zig");
 const arm_exec = @import("arm_exec.zig");
 const arm_state = @import("arm_state.zig");
+const text_float_decode = @import("arm_text_float_decode.zig");
+const ArmExtendText = text_float_decode.ArmExtendText;
 usingnamespace @import("arm_text_types.zig");
 usingnamespace @import("arm_text_arm_format.zig");
 usingnamespace @import("arm_text_float_format.zig");

@@ -4,6 +4,8 @@ const TextError = text_types.TextError;
 const bits = @import("bits.zig");
 const arm_exec = @import("arm_exec.zig");
 const arm_state = @import("arm_state.zig");
+const text_common = @import("arm_text_common_format.zig");
+const condOrTwo = text_common.condOrTwo;
 usingnamespace @import("arm_text_types.zig");
 usingnamespace @import("arm_text_arm_format.zig");
 usingnamespace @import("arm_text_float_format.zig");
