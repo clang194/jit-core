@@ -33,7 +33,7 @@ pub const Binary16 = struct {
             return zero(negative);
         }
 
-        const highest = @intCast(i32, 15 - @clz(u16, significand));
+        const highest = @intCast(i32, 15 - @clz(significand));
         const offset = @intCast(i32, stored_fraction_bits) - highest;
         const normalized_exponent = exponent - offset + @intCast(i32, stored_fraction_bits);
         if (offset < 0 or normalized_exponent < exponent_min or normalized_exponent > exponent_max) {
@@ -81,7 +81,7 @@ pub const Binary32 = struct {
             return zero(negative);
         }
 
-        const highest = @intCast(i32, 31 - @clz(u32, significand));
+        const highest = @intCast(i32, 31 - @clz(significand));
         const offset = @intCast(i32, stored_fraction_bits) - highest;
         const normalized_exponent = exponent - offset + @intCast(i32, stored_fraction_bits);
         if (offset < 0 or normalized_exponent < exponent_min or normalized_exponent > exponent_max) {
@@ -129,7 +129,7 @@ pub const Binary64 = struct {
             return zero(negative);
         }
 
-        const highest = @intCast(i32, 63 - @clz(u64, significand));
+        const highest = @intCast(i32, 63 - @clz(significand));
         const offset = @intCast(i32, stored_fraction_bits) - highest;
         const normalized_exponent = exponent - offset + @intCast(i32, stored_fraction_bits);
         if (offset < 0 or normalized_exponent < exponent_min or normalized_exponent > exponent_max) {

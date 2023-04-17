@@ -37,11 +37,11 @@ pub fn countLeadingZeroesVectorLanes(value: u64, lane: u8) u64 {
         const amount = @intCast(u6, shift);
         const element = (value >> amount) & mask;
         const count = if (lane == 8)
-            @as(u64, @clz(u8, @intCast(u8, element)))
+            @as(u64, @clz(@intCast(u8, element)))
         else if (lane == 16)
-            @as(u64, @clz(u16, @intCast(u16, element)))
+            @as(u64, @clz(@intCast(u16, element)))
         else
-            @as(u64, @clz(u32, @intCast(u32, element)));
+            @as(u64, @clz(@intCast(u32, element)));
         result |= count << amount;
     }
     return result;
@@ -57,11 +57,11 @@ pub fn countLeadingSignBitsVectorLanes(value: u64, lane: u8) u64 {
         const element = (value >> amount) & mask;
         const folded = if ((element & sign) != 0) (~element) & mask else element;
         const count = if (lane == 8)
-            @as(u64, @clz(u8, @intCast(u8, folded))) - 1
+            @as(u64, @clz(@intCast(u8, folded))) - 1
         else if (lane == 16)
-            @as(u64, @clz(u16, @intCast(u16, folded))) - 1
+            @as(u64, @clz(@intCast(u16, folded))) - 1
         else
-            @as(u64, @clz(u32, @intCast(u32, folded))) - 1;
+            @as(u64, @clz(@intCast(u32, folded))) - 1;
         result |= count << amount;
     }
     return result;

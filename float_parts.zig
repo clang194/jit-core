@@ -49,7 +49,7 @@ pub fn scaledParts(negative: bool, exponent: i32, significand: u64) WideFloatPar
         return emptyParts(negative);
     }
 
-    const highest = @intCast(i32, 63 - @clz(u64, significand));
+    const highest = @intCast(i32, 63 - @clz(significand));
     const offset = normalized_point - highest;
     return WideFloatParts{
         .negative = negative,
@@ -59,7 +59,7 @@ pub fn scaledParts(negative: bool, exponent: i32, significand: u64) WideFloatPar
 }
 
 fn normalizeParts(value: WideFloatParts, comptime fraction_bits: u6, extra_shift: i32) NormalizedParts {
-    const highest = @intCast(i32, 63 - @clz(u64, value.significand));
+    const highest = @intCast(i32, 63 - @clz(value.significand));
     const shift = highest - @intCast(i32, fraction_bits) + extra_shift;
     return NormalizedParts{
         .negative = value.negative,

@@ -285,7 +285,7 @@ fn roundedUnsignedDoublewordToFloat32(control: a64_state.FloatControl, value: u6
         return applyFraction32(@bitCast(u32, @intToFloat(f32, value)), fractional_bits);
     }
 
-    var exponent = @intCast(u8, 63 - @clz(u64, value));
+    var exponent = @intCast(u8, 63 - @clz(value));
     const shift = @intCast(u6, exponent - 23);
     const remainder_mask = (@as(u64, 1) << shift) - 1;
     const remainder = value & remainder_mask;
@@ -334,7 +334,7 @@ pub fn unsignedDoublewordToFloat64(control: a64_state.FloatControl, value: u64, 
         return applyFraction64(@bitCast(u64, @intToFloat(f64, value)), fractional_bits);
     }
 
-    var exponent = @intCast(u11, 63 - @clz(u64, value));
+    var exponent = @intCast(u11, 63 - @clz(value));
     const shift = @intCast(u6, exponent - 52);
     const remainder_mask = (@as(u64, 1) << shift) - 1;
     const remainder = value & remainder_mask;

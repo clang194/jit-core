@@ -21,7 +21,7 @@ fn signLimit(width: usize) u64 {
 }
 
 fn highIndex(value: u64) i32 {
-    return @intCast(i32, 63 - @clz(u64, value));
+    return @intCast(i32, 63 - @clz(value));
 }
 
 fn scaledShift(value: u64, exponent: i32) u64 {

@@ -8,7 +8,7 @@ const float_status = @import("float_status.zig");
 const target_point: i32 = float_parts.normalized_point;
 
 fn highBit64(value: u64) i32 {
-    return @intCast(i32, 63 - @clz(u64, value));
+    return @intCast(i32, 63 - @clz(value));
 }
 
 fn bit128(value: u128, comptime index: usize) bool {
