@@ -1,9 +1,9 @@
 JIT Core
 
-JIT Core is a dynamic recompilation core for ARM-family guest code.
+JIT Core is an embeddable dynamic recompilation core for ARM-family guest code.
 
-The current code focuses on AArch32 ARM and Thumb execution, with AArch64 support for integer, floating-point, vector, memory, and system behavior. It provides guest CPU state, memory hook interfaces, execution control, tracing support, exception callbacks, and helpers for preserving translated execution state.
+The current code targets AArch32 ARM, Thumb, and AArch64 instruction behavior. It provides guest CPU state, instruction decoding and execution paths, trace construction, memory access hooks, exception callbacks, cycle accounting, and helpers for preserving translated execution state.
 
-The library is intended to be embedded by a host program. The host supplies memory access, fallback handling, cycle accounting, and exception callbacks. JIT Core keeps the CPU-facing behavior separate from the host environment so the same core can be used in different runtimes.
+JIT Core is meant to be embedded by a host program. The host supplies memory access, fallback handling, timing control, and system callbacks. The core keeps CPU behavior separate from the host environment so the same library can be used in different runtimes.
 
 The public project name is JIT Core.
